@@ -23,7 +23,15 @@ class Libro_UsuarioController extends Controller
      */
     public function store(Request $request)
     {
-        //
+        $validate = $request->validate([
+            'usuario_id' => 'required|integer',
+            'libro_id' => 'required|integer',
+        ]);
+        $libro_usuario = Libro_Usuario::create($validate);
+        return response()->json([
+            'mensaje' => 'Libro_Usuario Creado Correctamente',
+            'data' => new Libro_UsuarioResource($libro_usuario)
+        ]);
     }
 
     /**
@@ -31,7 +39,13 @@ class Libro_UsuarioController extends Controller
      */
     public function show(string $id)
     {
-        //
+        $libro_usuario = Libro_Usuario::find($id);
+
+        if (!$libro_usuario) {
+            return response()->json(['mensaje' => 'Libro_Usuario no encontrado'], 404);
+        }
+
+        return new Libro_UsuarioResource($libro_usuario);
     }
 
     /**
@@ -39,7 +53,22 @@ class Libro_UsuarioController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        //
+        $libro_usuario = Libro_Usuario::find($id);
+
+        if (!$libro_usuario) {
+            return response()->json(['mensaje' => 'Libro_Usuario no encontrado'], 404);
+        }
+
+        $validate = $request->validate([
+            'usuario_id' => 'sometimes|required|integer',
+            'libro_id' => 'sometimes|required|integer',
+        ]);
+
+        $libro_usuario->update($validate);
+        return response()->json([
+            'mensaje' => 'Libro_Usuario actualizado correctamente',
+            'data' => new Libro_UsuarioResource($libro_usuario)
+        ]);
     }
 
     /**
@@ -47,6 +76,13 @@ class Libro_UsuarioController extends Controller
      */
     public function destroy(string $id)
     {
-        //
+        $libro_usuario = Libro_Usuario::find($id);
+
+        if (!$libro_usuario) {
+            return response()->json(['mensaje' => 'Libro_Usuario no encontrado'], 404);
+        }
+
+        $libro_usuario->delete();
+        return response()->json(['mensaje' => 'Libro_Usuario eliminado correctamente']);    
     }
 }

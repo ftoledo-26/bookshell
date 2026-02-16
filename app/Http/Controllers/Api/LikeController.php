@@ -23,7 +23,15 @@ class LikeController extends Controller
      */
     public function store(Request $request)
     {
-        //
+        $validate = $request->validate([
+            'usuario_id' => 'required|integer',
+            'libro_id' => 'required|integer',
+        ]);
+        $like = Likes::create($validate);
+        return response()->json([
+            'mensaje' => 'Like Creado Correctamente',
+            'data' => new LikeResource($like)
+        ]);
     }
 
     /**
@@ -31,7 +39,13 @@ class LikeController extends Controller
      */
     public function show(string $id)
     {
-        //
+        $like = Likes::find($id);
+
+        if (!$like) {
+            return response()->json(['mensaje' => 'Like no encontrado'], 404);
+        }
+
+        return new LikeResource($like);
     }
 
     /**
@@ -39,7 +53,21 @@ class LikeController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        //
+        $like = Likes::find($id);
+
+        if (!$like){
+            return response()->json(['mensaje' => 'Like no encontrado'], 404);
+        }
+
+        $validate = $request->validate([
+            'usuario_id' => 'sometimes|required|integer',
+            'libro_id' => 'sometimes|required|integer',
+        ]);
+        $like->update($validate);
+        return response()->json([
+            'mensaje' => 'Like actualizado correctamente',
+            'data' => new LikeResource($like)
+        ]);
     }
 
     /**
@@ -47,6 +75,13 @@ class LikeController extends Controller
      */
     public function destroy(string $id)
     {
-        //
+        $like = Likes::find($id);
+
+        if (!$like) {
+            return response()->json(['mensaje' => 'Like no encontrado'], 404);
+        }
+
+        $like->delete();
+        return response()->json(['mensaje' => 'Like eliminado correctamente']);
     }
 }

@@ -1,0 +1,71 @@
+:host {
+  display: block;
+}
+
+.comments-feed {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.empty {
+  margin: 0;
+  padding: 1rem;
+  border-radius: 0.8rem;
+  border: 1px dashed #3f4a43;
+  background: #141816;
+  color: #98a49b;
+}
+
+.comment-card {
+  border-radius: 0.9rem;
+  border: 1px solid #2a312d;
+  background: linear-gradient(180deg, #1a1f1c, #171c19);
+  padding: 0.9rem;
+}
+
+.comment-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.author {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.author img {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid #314037;
+}
+
+.author strong {
+  color: #edf4ee;
+}
+
+.author p {
+  margin: 0.18rem 0 0;
+  color: #97a59c;
+  font-size: 0.82rem;
+}
+
+.likes {
+  align-self: start;
+  border: 1px solid #385744;
+  background: #1f2f26;
+  color: #b8dfc6;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.content {
+  margin: 0.7rem 0 0;
+  color: #dce6df;
+  line-height: 1.4;
+}

@@ -1,0 +1,18 @@
+<section class="comments-feed">
+  <p class="empty" *ngIf="comments.length === 0">Todavia no hay comentarios.</p>
+
+  <article class="comment-card" *ngFor="let comment of comments; trackBy: trackByCommentId">
+    <header class="comment-head">
+      <div class="author">
+        <img [src]="comment.avatarUrl || '/avatar-default.webp'" [alt]="comment.username" />
+        <div>
+          <strong>{{ comment.username }}</strong>
+          <p>{{ comment.movieTitle }} · {{ comment.createdAt }}</p>
+        </div>
+      </div>
+      <span class="likes">{{ comment.likes }} likes</span>
+    </header>
+
+    <p class="content">{{ comment.contenido }}</p>
+  </article>
+</section>

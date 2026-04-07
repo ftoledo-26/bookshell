@@ -1,0 +1,87 @@
+<main class="profile-shell">
+	<section class="profile-hero">
+		<div class="avatar-block" aria-hidden="true">
+			<span class="avatar-icon" aria-hidden="true"></span>
+		</div>
+
+		<div class="hero-copy">
+			<div class="hero-actions">
+				<h1>{{ user.nombre }}</h1>
+				<button type="button" class="primary-action">Editar perfil</button>
+				<button type="button" class="ghost-action" aria-label="Mas opciones">...</button>
+			</div>
+			<p class="hero-subtitle">Perfil de usuario estandar listo para personalizar.</p>
+		</div>
+
+		<div class="metric-strip">
+			<article *ngFor="let metric of metrics" class="metric-card">
+				<strong>{{ metric.value }}</strong>
+				<span>{{ metric.label }}</span>
+			</article>
+		</div>
+	</section>
+
+	<nav class="profile-tabs" aria-label="Secciones del perfil">
+		<button *ngFor="let tab of profileTabs" type="button" class="tab-button" [class.active]="tab === 'Profile'">
+			{{ tab }}
+		</button>
+	</nav>
+
+	<section class="profile-grid">
+		<div class="main-column">
+			<section class="panel">
+				<header class="panel-head">
+					<h2>Favorite books</h2>
+					<span>Selecciona tus lecturas favoritas.</span>
+				</header>
+
+				<div class="book-grid">
+					<article *ngFor="let book of favoriteBooks" class="book-card">
+						<div class="book-cover" aria-hidden="true"></div>
+						<div class="book-info">
+							<strong>{{ book.title }}</strong>
+							<p>{{ book.author }}</p>
+							<div class="book-meta">
+								<span>{{ book.year }}</span>
+								<span>{{ book.rating }}</span>
+							</div>
+						</div>
+					</article>
+				</div>
+			</section>
+
+			<section class="panel">
+				<header class="panel-head">
+					<h2>Recent activity</h2>
+					<span>Resumen de actividad reciente.</span>
+				</header>
+
+				<div class="activity-list">
+					<article *ngFor="let item of activity" class="activity-card">
+						<div>
+							<strong>{{ item.title }}</strong>
+							<p>{{ item.detail }}</p>
+						</div>
+						<span>{{ item.time }}</span>
+					</article>
+				</div>
+			</section>
+		</div>
+
+		<aside class="side-column">
+			<section class="promo-card">
+				<p class="promo-eyebrow">Need an upgrade?</p>
+				<h2>Profile stats, filtering and watchlist alerts.</h2>
+				<p class="promo-copy">Este bloque ocupa el espacio lateral del diseño de referencia mientras el perfil sigue siendo funcional.</p>
+				<a href="#" class="promo-button">Get Pro</a>
+			</section>
+
+			<section class="panel side-panel">
+				<header class="panel-head">
+					<h2>Activity</h2>
+				</header>
+				<p class="empty-state">No recent activity</p>
+			</section>
+		</aside>
+	</section>
+</main>

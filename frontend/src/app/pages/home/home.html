@@ -1,56 +1,59 @@
-<div class="home-shell">
-  <header class="topbar">
-    <div class="brand">
-      <span class="brand-dot"></span>
-      <h1>Bookshell</h1>
-    </div>
-    <nav class="menu">
-      <a href="#">Inicio</a>
-      <a href="#">Diario</a>
-      <a href="#">Listas</a>
-      <a href="#">Resenas</a>
-    </nav>
-    <button class="cta">+ Registrar lectura</button>
-  </header>
+<main class="home-shell">
+  <section class="home-column">
+    <header class="hero-head">
+      <h1>Books para ti</h1>
+      <p>Descubre recomendaciones recientes y reviews destacadas de la comunidad.</p>
+    </header>
 
-  <section class="section-block">
-    <div class="section-head">
-      <h3>Libros desde la API</h3>
-    </div>
+    <p class="status" *ngIf="isLoading">Cargando recomendaciones...</p>
+    <p class="status error" *ngIf="errorMessage">{{ errorMessage }}</p>
 
-    <p *ngIf="isLoading">Cargando libros...</p>
+    <section class="recommended-zone" *ngIf="!isLoading && recommendedBooks.length > 0">
+      <header class="section-head">
+        <h2>New on Bookshell</h2>
+      </header>
 
-<div *ngIf="!isLoading && books.length > 0" class="book-grid">
-  <article class="book-card" *ngFor="let book of books">
-    <img src="/prueba.webp" [alt]="book.titulo" />
-    <div class="book-meta">
-	<h4>{{ book.titulo }}</h4>
-      <p>{{ book.autor }}</p>
-      <span>{{ book.descripcion }}</span>
-    </div>
-  </article>
-</div>
-
-<p *ngIf="!isLoading && books.length === 0">No hay libros</p>
-  </section>
-
-  <section class="split-layout">
-    <article class="panel">
-      <div class="section-head">
-        <h3>Actividad de amigos</h3>
-        <a href="#">Feed completo</a>
-      </div>
-
-      <ul class="activity-list">
-        <li *ngFor="let item of friendActivity">
-          <div>
-            <strong>{{ item.user }}</strong>
-            <p>{{ item.action }} <span>{{ item.book }}</span></p>
+      <div class="recommended-strip">
+        <article class="book-tile" *ngFor="let book of recommendedBooks">
+          <div class="cover-wrap">
+            <img src="/prueba.webp" [alt]="book.title" loading="lazy" />
           </div>
-          <span class="score" *ngIf="item.score !== null">{{ item.score }} ★</span>
-          <span class="score muted" *ngIf="item.score === null">sin nota</span>
-        </li>
-      </ul>
-    </article>
+
+          <footer>
+            <strong>{{ book.username }}</strong>
+            <span>{{ book.day }}</span>
+          </footer>
+        </article>
+      </div>
+    </section>
+
+    <section class="reviews-zone" *ngIf="!isLoading && featuredReviews.length > 0">
+      <header class="section-head">
+        <h2>Popular reviews this week</h2>
+      </header>
+
+      <article class="review-card" *ngFor="let review of featuredReviews">
+        <div class="review-cover">
+          <img [src]="review.cover" [alt]="review.title" loading="lazy" />
+        </div>
+
+        <div class="review-body">
+          <header>
+            <p class="user-row">{{ review.username }}</p>
+            <h3>{{ review.title }} <span>{{ review.year }}</span></h3>
+            <div class="meta-row">
+              <span class="score">{{ review.score }}</span>
+              <span>{{ review.likes }} likes</span>
+            </div>
+          </header>
+
+          <p class="review-copy">{{ review.content }}</p>
+        </div>
+      </article>
+    </section>
+
+    <p class="status" *ngIf="!isLoading && featuredReviews.length === 0">
+      Todavia no hay reviews para mostrar.
+    </p>
   </section>
-</div>
+</main>

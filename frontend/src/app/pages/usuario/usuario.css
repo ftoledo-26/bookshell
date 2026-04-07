@@ -1,0 +1,8 @@
+:host{
+	display:block;
+	min-height:100dvh;
+	background:
+		radial-gradient(circle at top, rgba(32, 48, 68, 0.5), transparent 32%),
+		linear-gradient(180deg, #0b1219 0%, #0e151e 100%);
+	color:#edf3f9;
+}

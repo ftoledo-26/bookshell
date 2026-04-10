@@ -41,12 +41,12 @@ class LibroController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(string $id)
+    public function show(int $id)
     {
         $libro = Libro::find($id);
 
         if (!$libro) {
-            return response()->json(['mensaje' => 'Libro no encontrado'], 404);
+            return response()->json(['mensaje' => 'Libro no encontrado juicio final'], 404);
         }
 
         return new LibroResource($libro);
@@ -55,7 +55,7 @@ class LibroController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, string $id)
+    public function update(Request $request, int $id)
     {
         $libro = Libro::find($id);
 
@@ -80,7 +80,7 @@ class LibroController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(string $id)
+    public function destroy(int $id)
     {
         $libro = Libro::find($id);
 
@@ -90,5 +90,14 @@ class LibroController extends Controller
 
         $libro->delete();
         return response()->json(['mensaje' => 'Libro eliminado correctamente']);
+    }
+
+    public function searchByName(Request $request){
+        $query = $request->input('query');
+        $libros = Libro::where('titulo', 'LIKE', '%' . $query . '%')->get();
+        if ($libros->isEmpty()) {
+            return response()->json(['mensaje' => 'No se encontraron libros con ese título'], 404);
+        }
+        return LibroResource::collection($libros);
     }
 }

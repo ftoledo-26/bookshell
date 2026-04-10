@@ -87,4 +87,27 @@ class ComentarioController extends Controller
         $comentario->delete();
         return response()->json(['mensaje' => 'Comentario eliminado correctamente']);
     }
+
+    public function searchByBook(int $id){
+        $comentarios = Comentario::where('libro_id', $id)->get();
+
+        if ($comentarios->isEmpty()) {
+            return response()->json(['mensaje' => 'No se encontraron comentarios para este libro'], 404);
+        }
+
+        return ComentarioResource::collection($comentarios);
+    }
+    public function searchByUser(int $id){
+        if(is_string($id)){
+            return response()->json(['mensaje' => 'El ID del usuario debe ser un número entero'], 400);
+        }
+        $comentarios = Comentario::where('usuario_id', $id)->get();
+
+        
+        if ($comentarios->isEmpty()) {
+            return response()->json(['mensaje' => 'Este usuario no ha hecho comentarios'], 404);
+        }
+
+        return ComentarioResource::collection($comentarios);
+    }
 }

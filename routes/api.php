@@ -34,3 +34,22 @@ Route::post('libros', [LibroController::class, 'store'])
 Route::post('comentarios', [ComentarioController::class, 'store'])
     ->name('api.comentarios.store');
     
+///////Funciones de libros //////////////////////////
+Route::get('libros/{id}', [LibroController::class, 'show'])
+    ->where('id', '[0-9]+');
+
+Route::get('libros/buscar/{query}', [LibroController::class, 'searchByName'])
+    ->where('query', '[A-Za-z]+');
+
+
+
+
+
+
+////////Rutas Comentarios//////////////////////////
+Route::get('comentarios/{id}', [ComentarioController::class, 'show'])
+    ->where('id', '[0-9]+');
+Route::get('comentarios/libro/{id}', [ComentarioController::class, 'searchByBook'])
+    ->where('id', '[0-9]+');
+Route::get('comentarios/usuario/{id}', [ComentarioController::class, 'searchByUser'])
+    ->where('id', '[0-9]+');

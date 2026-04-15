@@ -37,7 +37,7 @@ export class UsuarioPage {
 		foto: ''
 	};
 
-	readonly profileTabs = ['Profile', 'Activity', 'Books', 'Diary', 'Reviews', 'Watchlist', 'Lists', 'Likes', 'Tags', 'Network'];
+	readonly profileTabs = ['Profile','Books', 'Reviews', 'Lists', 'Likes'];
 	readonly metrics: ProfileMetric[] = [
 		{ value: '0', label: 'Books' },
 		{ value: '0', label: 'Following' },

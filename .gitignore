@@ -6,6 +6,8 @@
 /e2e/test-output/
 /.angular/
 .angular/
+vendor/
+storage/
 /node_modules/.bin/architect
 frontend/node_modules/
 # Node modules and dependency files

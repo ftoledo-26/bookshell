@@ -1,0 +1,19 @@
+<div class="home-shell">
+  <div class="home-column">
+    <div class="hero-head">
+      <h2>Login</h2>
+    </div>
+
+    <div class="recommended-zone login-card">
+      <form (ngSubmit)="onSubmit()">
+        <label for="username">Username:</label>
+        <input type="text" id="username" [(ngModel)]="username" name="username" required>
+
+        <label for="password">Password:</label>
+        <input type="password" id="password" [(ngModel)]="password" name="password" required>
+
+        <button type="submit">Login</button>
+      </form>
+    </div>
+  </div>
+</div>

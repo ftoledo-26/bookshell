@@ -16,9 +16,9 @@
 	background-image: var(--book-bg-image);
 	background-size: cover;
 	background-position: center;
-	transform: scale(1.45);
-	filter: blur(24px) saturate(1.15);
-	opacity: 0.55;
+	transform: scale(1.2);
+	filter: blur(12px) saturate(1.08);
+	opacity: 0.42;
 }
 
 .comment-view::after {
@@ -62,7 +62,6 @@
 	padding: 1rem;
 	background: rgba(10, 16, 24, 0.76);
 	border: 1px solid rgba(152, 190, 226, 0.26);
-	backdrop-filter: blur(5px);
 }
 
 .cover-column {
@@ -139,16 +138,138 @@
 	color: #ffd2dc;
 }
 
+.related-section {
+	display: grid;
+	gap: 0.9rem;
+	padding: 1rem;
+	border-radius: 1rem;
+	background: rgba(10, 16, 24, 0.72);
+	border: 1px solid rgba(152, 190, 226, 0.2);
+}
+
+.related-loading {
+	margin: 0;
+	padding: 0.85rem 0.95rem;
+	border-radius: 0.75rem;
+	border: 1px solid rgba(152, 190, 226, 0.2);
+	background: rgba(13, 20, 29, 0.6);
+	color: #c4d7e8;
+}
+
+.related-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 0.75rem;
+	padding-bottom: 0.8rem;
+	border-bottom: 1px solid rgba(152, 190, 226, 0.18);
+	color: #d8e7f7;
+}
+
+.related-head h2 {
+	margin: 0;
+	font-size: 1.1rem;
+	letter-spacing: -0.02em;
+}
+
+.related-head span {
+	font-size: 0.9rem;
+	color: #9fb8cf;
+}
+
+.related-list {
+	display: grid;
+	gap: 0.8rem;
+}
+
+.related-card {
+	padding: 0.9rem 1rem;
+	border-radius: 0.85rem;
+	border: 1px solid rgba(152, 190, 226, 0.16);
+	background: rgba(13, 20, 29, 0.82);
+	color: #edf5ff;
+}
+
+.related-card-head {
+	display: flex;
+	justify-content: space-between;
+	gap: 0.8rem;
+	align-items: center;
+	margin-bottom: 0.45rem;
+}
+
+.related-card-head strong {
+	font-size: 0.98rem;
+}
+
+.related-card-head span {
+	white-space: nowrap;
+	font-size: 0.82rem;
+	color: #c4d7e8;
+	border: 1px solid rgba(78, 220, 143, 0.38);
+	background: rgba(40, 150, 89, 0.22);
+	padding: 0.22rem 0.6rem;
+	border-radius: 999px;
+}
+
+.related-card p {
+	margin: 0;
+	line-height: 1.55;
+	color: #dbe7f2;
+}
+
+.related-empty {
+	margin: 0;
+	padding: 0.95rem 1rem;
+	border-radius: 0.8rem;
+	border: 1px dashed rgba(152, 190, 226, 0.24);
+	color: #aabed0;
+	background: rgba(10, 16, 24, 0.58);
+}
+
 @media (max-width: 760px) {
 	.comment-view {
-		padding: 0.75rem;
+		padding: 0.8rem;
+	}
+
+	.comment-shell {
+		gap: 0.85rem;
 	}
 
 	.comment-card {
 		grid-template-columns: 1fr;
+		gap: 1rem;
+		padding: 0.9rem;
 	}
 
 	.cover-column {
 		max-width: 210px;
+		width: 100%;
+	}
+
+	.content-column h1 {
+		font-size: clamp(1.55rem, 8vw, 2.1rem);
+	}
+
+	.comment-copy {
+		font-size: 1rem;
+		line-height: 1.6;
+	}
+
+	.meta {
+		font-size: 0.95rem;
+	}
+
+	.related-section {
+		padding: 0.9rem;
+	}
+
+	.related-head {
+		align-items: flex-start;
+		flex-direction: column;
+	}
+
+	.related-card {
+		padding: 0.85rem;
 	}
 }

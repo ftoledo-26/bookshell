@@ -14,9 +14,9 @@
       </header>
 
       <div class="recommended-strip">
-        <article class="book-tile" *ngFor="let book of recommendedBooks">
+        <article class="book-tile" *ngFor="let book of recommendedBooks; trackBy: trackByBookId">
           <div class="cover-wrap">
-            <img src="/prueba.webp" [alt]="book.title" loading="lazy" />
+            <img src="/prueba.webp" [alt]="book.title" loading="eager" />
           </div>
 
           <footer>
@@ -35,7 +35,7 @@
       <div class="reviews-scroll">
         <article
           class="review-card"
-          *ngFor="let review of displayedReviews"
+          *ngFor="let review of displayedReviews; trackBy: trackByReviewId"
           role="button"
           tabindex="0"
           (click)="openReviewDetail(review.id)"
@@ -43,9 +43,9 @@
         >
           <div class="review-cover">
             @if(!review.cover) {
-              <img src="/prueba.webp" alt="Portada no disponible" loading="lazy" />
+              <img src="/prueba.webp" alt="Portada no disponible" loading="eager" />
             } @else {
-            <img [src]="review.cover" [alt]="review.titulo" loading="lazy" />
+            <img [src]="review.cover" [alt]="review.titulo" loading="eager" />
             }
           </div>
 

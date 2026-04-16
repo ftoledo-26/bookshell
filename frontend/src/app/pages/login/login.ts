@@ -1,6 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
+import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { LoginService } from '../../services/Login.service';
+
 
 @Component({
   selector: 'app-login',
@@ -9,14 +12,38 @@ import { FormsModule } from '@angular/forms';
   templateUrl: './login.html',
   styleUrls: ['./login.css']
 })
-export class LoginComponent {
-  username: string = '';
-  password: string = '';
 
+
+
+export class LoginComponent {
+  private loginService = inject(LoginService);
+  private router = inject(Router);
+
+  email: string = '';
+  password: string = '';
+  errorMessage: string = '';
+  
   onSubmit() {
-    // Implement your login logic here
-    console.log('Username:', this.username);
-    console.log('Password:', this.password);
-    // Add authentication logic and navigate to the next page upon successful login
+    this.errorMessage = '';
+
+    if (!this.email || !this.password) {
+      this.errorMessage = 'Completa el email y la contraseña.';
+      return;
+    }
+
+    this.loginService.login(this.email, this.password).subscribe({
+      next: (response) => {
+        if (response.token) {
+          localStorage.setItem('token', response.token);
+          this.router.navigate(['/']);
+          return;
+        }
+
+        this.errorMessage = 'El servidor respondió sin token.';
+      },
+      error: () => {
+        this.errorMessage = 'Usuario o contraseña incorrectos.';
+      }
+    });
   }
 }

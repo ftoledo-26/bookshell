@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": ["src/app/pages/usuario/usuario.css"],
-  "sourcesContent": [":host{\r\n\tdisplay:block;\r\n\tmin-height:100dvh;\r\n\tbackground:\r\n\t\tradial-gradient(circle at top, rgba(32, 48, 68, 0.5), transparent 32%),\r\n\t\tlinear-gradient(180deg, #0b1219 0%, #0e151e 100%);\r\n\tcolor:#edf3f9;\r\n}"],
-  "mappings": ";AAAA;AACC,WAAA;AACA,cAAA;AACA;;;;;;;;;AAGA,SAAA;AACD;",
-  "names": []
-}

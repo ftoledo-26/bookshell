@@ -10,7 +10,7 @@
 
 		<article class="comment-card" *ngIf="!isLoading && detail">
 			<div class="cover-column">
-                @if(!detail.coverUrl) {
+                @if(!detail.coverUrl ) {
                     <img src="/prueba.webp" alt="Portada no disponible" loading="lazy" />
                 } @else {
                     <img [src]="detail.coverUrl" [alt]="detail.bookTitle" loading="lazy" />
@@ -32,5 +32,29 @@
 				</footer>
 			</div>
 		</article>
+
+		<section class="related-section" *ngIf="!isLoading && detail">
+			<header class="related-head">
+				<h2>Comentarios de este libro</h2>
+				<span>{{ relatedComments.length }} comentarios</span>
+			</header>
+
+			<p class="related-loading" *ngIf="isLoadingRelated">Cargando más comentarios...</p>
+
+			<div class="related-list" *ngIf="!isLoadingRelated && relatedComments.length > 0; else noRelatedComments">
+				<article class="related-card" *ngFor="let comment of relatedComments; trackBy: trackByRelatedCommentId">
+					<div class="related-card-head">
+						<strong>{{ comment.username }}</strong>
+						<span>{{ comment.likes }} likes</span>
+					</div>
+
+					<p>{{ comment.content }}</p>
+				</article>
+			</div>
+
+			<ng-template #noRelatedComments>
+				<p class="related-empty" *ngIf="!isLoadingRelated">Todavía no hay más comentarios para este libro.</p>
+			</ng-template>
+		</section>
 	</section>
 </main>

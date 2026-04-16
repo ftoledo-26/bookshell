@@ -22,15 +22,14 @@
 }
 
 .home-column {
-	width: 100%;
-	max-width: 420px;
+	width: min(100%, 440px);
 	margin: 0 auto;
 	display: grid;
-	gap: 1.2rem;
+	gap: 1rem;
 }
 
 .hero-head {
-	padding: 0.8rem 0.2rem;
+	padding: 0.25rem 0 1rem;
 	border-bottom: 1px solid var(--line);
 	text-align: center;
 }
@@ -72,9 +71,8 @@
 }
 
 .login-card {
-	max-width: 420px;
-	margin: 0 auto;
-	padding: 1.8rem;
+	width: 100%;
+	padding: 1.5rem;
 	border: 1px solid rgba(255, 255, 255, 0.16);
 	border-radius: 1.25rem;
 	background: rgba(255, 255, 255, 0.06);
@@ -83,7 +81,7 @@
 
 .login-card form {
 	display: grid;
-	gap: 1rem;
+	gap: 0.9rem;
 }
 
 .login-card label {
@@ -94,7 +92,7 @@
 
 .login-card input {
 	width: 100%;
-	padding: 0.95rem 1rem;
+	padding: 1rem 1rem;
 	border-radius: 0.85rem;
 	border: 1px solid #394d62;
 	background: #0f1720;
@@ -271,15 +269,27 @@
 
 @media (max-width: 640px) {
 	.home-shell {
-		padding: 0.6rem;
+		padding: 0.8rem;
+		align-items: center;
+	}
+
+	.hero-head h1 {
+		font-size: clamp(1.8rem, 10vw, 2.3rem);
+	}
+
+	.login-card {
+		padding: 1.2rem;
+		border-radius: 1rem;
 	}
 
 	.recommended-strip {
-		grid-auto-columns: 130px;
+		grid-auto-columns: minmax(120px, 42vw);
 	}
 
 	.review-card {
 		grid-template-columns: 1fr;
+		gap: 0.9rem;
+		padding: 0.9rem;
 	}
 
 	.review-cover {
@@ -287,6 +297,11 @@
 	}
 
 	.review-body h3 {
-		font-size: 1.55rem;
+		font-size: 1.45rem;
+	}
+
+	.review-copy {
+		font-size: 1rem;
+		line-height: 1.55;
 	}
 }

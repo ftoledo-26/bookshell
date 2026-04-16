@@ -237,15 +237,36 @@
 
 @media (max-width: 640px) {
 	.home-shell {
-		padding: 0.6rem;
+		padding: 0.75rem;
+	}
+
+	.hero-head h1 {
+		font-size: clamp(1.8rem, 10vw, 2.3rem);
+	}
+
+	.hero-head p,
+	.user-row,
+	.book-tile span {
+		font-size: 0.96rem;
+	}
+
+	.section-head h2 {
+		font-size: 1.1rem;
+	}
+
+	.recommended-zone,
+	.reviews-zone {
+		padding: 0.8rem;
 	}
 
 	.recommended-strip {
-		grid-auto-columns: 130px;
+		grid-auto-columns: minmax(120px, 42vw);
 	}
 
 	.review-card {
 		grid-template-columns: 1fr;
+		gap: 0.9rem;
+		padding: 0.9rem;
 	}
 
 	.review-cover {
@@ -253,6 +274,11 @@
 	}
 
 	.review-body h3 {
-		font-size: 1.55rem;
+		font-size: 1.45rem;
+	}
+
+	.review-copy {
+		font-size: 1rem;
+		line-height: 1.55;
 	}
 }

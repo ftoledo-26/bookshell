@@ -1,4 +1,8 @@
-import { Component, OnInit, inject, ChangeDetectorRef, HostListener } from '@angular/core';
+import {
+  Component, OnInit, OnDestroy, inject,
+  ChangeDetectorRef, HostListener,
+  ChangeDetectionStrategy  // ← añadir
+} from '@angular/core';
 import { Book } from '../../models/Book';
 import { BookService } from '../../services/Book.service';
 import { CommonModule } from '@angular/common';
@@ -6,7 +10,7 @@ import { Comentario } from '../../models/Comentario';
 import { ComentarioService } from '../../services/Comentario.service';
 import { Usuario } from '../../models/Usuario';
 import { UsuarioService } from '../../services/Usuario.service';
-import { forkJoin } from 'rxjs';
+import { catchError, forkJoin, of, timeout } from 'rxjs';
 import { Router } from '@angular/router';
 
 type TimelineComment = Comentario & {
@@ -40,8 +44,9 @@ type FeaturedReview = {
   imports: [CommonModule],
   templateUrl: './home.html',
   styleUrls: ['./home.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush  // ← clave
 })
-export class Home implements OnInit {
+export class Home implements OnInit, OnDestroy {
   books: Book[] = [];
   comments: Comentario[] = [];
   timelineComments: TimelineComment[] = [];
@@ -70,22 +75,33 @@ export class Home implements OnInit {
     this.errorMessage = '';
 
     forkJoin({
-      books: this.bookService.getBooks(),
-      comments: this.comentarioService.getComentarios(),
-      users: this.usuarioService.getUsuarios()
+      books: this.bookService.getBooks().pipe(
+        timeout(10000),
+        catchError(() => of([] as Book[]))
+      ),
+      comments: this.comentarioService.getComentarios().pipe(
+        timeout(10000),
+        catchError(() => of([] as Comentario[]))
+      ),
+      users: this.usuarioService.getUsuarios().pipe(
+        timeout(10000),
+        catchError(() => of([] as Usuario[]))
+      )
     }).subscribe({
       next: ({ books, comments, users }) => {
         this.books = books;
         this.comments = comments;
-        console.log('Comentarios recibidos:', comments);
         this.timelineComments = this.mapTimelineComments(comments, books, users);
-        console.log('Timeline comments mapeados:', this.timelineComments);
         this.recommendedBooks = this.mapRecommendedBooks(books, comments, users);
         this.featuredReviews = this.mapFeaturedReviews(this.timelineComments);
         this.visibleReviewCount = this.reviewBatchSize;
         this.updateVisibleReviews();
         this.ensureViewportHasScrollableContent();
         this.isLoading = false;
+        this.cdr.markForCheck(); // Marcar para verificación de cambios
+        if (books.length === 0 && comments.length === 0) {
+          this.errorMessage = 'No se pudieron cargar datos ahora. Intenta de nuevo en unos segundos.';
+        }
         this.cdr.detectChanges();
       },
       error: (error) => {
@@ -93,6 +109,7 @@ export class Home implements OnInit {
         this.errorMessage = 'Error al cargar comentarios y libros';
         this.isLoading = false;
         this.cdr.detectChanges();
+        this.cdr.markForCheck(); // Marcar para verificación de cambios en caso de error
       }
     });
   }
@@ -155,6 +172,7 @@ export class Home implements OnInit {
 
   private mapFeaturedReviews(items: TimelineComment[]): FeaturedReview[] {
     const shuffledItems = this.shuffleArray(items);
+    const coverByBookId = new Map<number, string>(this.books.map((book) => [book.id, book.portada]));
 
     return shuffledItems.map((item, index) => ({
       id: item.id,
@@ -164,15 +182,24 @@ export class Home implements OnInit {
       likes: item.likes,
       score: this.getScore(item.likes, index),
       content: item.contenido,
-      cover: this.books.find((book) => book.id === item.BookId)?.portada ?? ''
+      cover: coverByBookId.get(item.BookId) ?? ''
     }));
   }
 
+private scrollTimeout: ReturnType<typeof setTimeout> | null = null; // ← para throttle
+
+  // Throttle del scroll: en vez de dispararse 60 veces/seg, espera 80ms
   @HostListener('window:scroll')
   onWindowScroll(): void {
-    this.loadMoreReviewsIfNeeded();
+    if (this.scrollTimeout) return;
+    this.scrollTimeout = setTimeout(() => {
+      this.loadMoreReviewsIfNeeded();
+      this.scrollTimeout = null;
+    }, 80);
   }
-
+  ngOnDestroy(): void {
+    if (this.scrollTimeout) clearTimeout(this.scrollTimeout);
+  }
   private loadMoreReviewsIfNeeded(): void {
     if (this.isLoading || this.isLoadingMoreReviews) {
       return;
@@ -198,17 +225,13 @@ export class Home implements OnInit {
   }
 
   private ensureViewportHasScrollableContent(): void {
-    setTimeout(() => {
-      const canScroll = document.documentElement.scrollHeight > window.innerHeight + 8;
-      const hasMoreReviews = this.displayedReviews.length < this.featuredReviews.length;
-
-      if (!canScroll && hasMoreReviews) {
-        this.visibleReviewCount += this.reviewBatchSize;
-        this.updateVisibleReviews();
-        this.ensureViewportHasScrollableContent();
-        this.cdr.detectChanges();
-      }
-    }, 0);
+    const canScroll = document.documentElement.scrollHeight > window.innerHeight + 8;
+    const hasMore = this.displayedReviews.length < this.featuredReviews.length;
+    if (!canScroll && hasMore) {
+      this.visibleReviewCount += this.reviewBatchSize;
+      this.updateVisibleReviews();
+      this.cdr.markForCheck(); // ← markForCheck en vez de detectChanges
+    }
   }
 
   private updateVisibleReviews(): void {
@@ -233,5 +256,13 @@ export class Home implements OnInit {
 
   openReviewDetail(reviewId: number): void {
     this.router.navigate(['/comentarios', reviewId]);
+  }
+
+  trackByBookId(index: number, book: RecommendedBook): number {
+    return book.id;
+  }
+
+  trackByReviewId(index: number, review: FeaturedReview): number {
+    return review.id;
   }
 }

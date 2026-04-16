@@ -12,12 +12,20 @@ import { UsuarioService } from '../../services/Usuario.service';
 
 type CommentDetailView = {
 	id: number;
+	bookId: number | null;
 	username: string;
 	bookTitle: string;
 	author: string;
 	content: string;
 	likes: number;
 	coverUrl: string;
+};
+
+type RelatedCommentView = {
+	id: number;
+	username: string;
+	content: string;
+	likes: number;
 };
 
 @Component({
@@ -30,7 +38,9 @@ type CommentDetailView = {
 export class ComentarioPage implements OnInit {
      private readonly cdr = inject(ChangeDetectorRef);
 	detail: CommentDetailView | null = null;
+	relatedComments: RelatedCommentView[] = [];
 	isLoading = true;
+	isLoadingRelated = false;
 	errorMessage = '';
 
 	private readonly route = inject(ActivatedRoute);
@@ -40,6 +50,8 @@ export class ComentarioPage implements OnInit {
 	private readonly usuarioService = inject(UsuarioService);
 
 	ngOnInit(): void {
+		window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+
 		const rawId = this.route.snapshot.paramMap.get('id');
 		const commentId = Number(rawId);
 
@@ -54,8 +66,10 @@ export class ComentarioPage implements OnInit {
 
 	private loadCommentDetail(commentId: number): void {
 		this.isLoading = true;
+		this.isLoadingRelated = true;
 		this.errorMessage = '';
 		this.detail = null;
+		this.relatedComments = [];
 
 		this.comentarioService
 			.getComentario(commentId)
@@ -94,31 +108,66 @@ export class ComentarioPage implements OnInit {
 								: of([] as Usuario[])
 					});
 				}),
-				catchError(() =>
-					of({
-						comment: null,
-						book: null,
-						users: [] as Usuario[]
-					})
-				),
+					catchError(() =>
+						of({
+							comment: null,
+							book: null,
+							users: [] as Usuario[]
+						})
+					),
 				finalize(() => {
 					this.isLoading = false;
+					this.cdr.markForCheck();
 				})
 			)
 			.subscribe({
 				next: ({ comment, book, users }) => {
                     if (!comment) {
                         this.errorMessage = 'No se encontró ese comentario...';
-                        this.cdr.markForCheck(); // 👈 añadir
+                        this.isLoadingRelated = false;
+                        this.cdr.markForCheck();
                         return;
                     }
                     this.detail = this.mapCommentDetail(comment, book, users);
-                    this.cdr.markForCheck(); // 👈 añadir
+					this.loadRelatedComments(this.detail.bookId, comment.id, users);
+					this.cdr.markForCheck();
                     },
                     error: () => {
                     this.errorMessage = 'No se pudo cargar el detalle.';
-                    this.cdr.markForCheck(); // 👈 añadir
+                    this.isLoadingRelated = false;
+                    this.cdr.markForCheck();
                     }
+			});
+	}
+
+	private loadRelatedComments(bookId: number | null, currentCommentId: number, users: Usuario[]): void {
+		if (bookId == null) {
+			this.relatedComments = [];
+			this.isLoadingRelated = false;
+			this.cdr.markForCheck();
+			return;
+		}
+
+		this.isLoadingRelated = true;
+
+		forkJoin({
+			relatedComments: this.comentarioService.getComentariosByBookId(bookId, currentCommentId).pipe(
+				timeout(8000),
+				catchError(() => of([] as Comentario[]))
+			),
+			users: users.length > 0
+				? of(users)
+				: this.usuarioService.getUsuarios().pipe(timeout(6000), catchError(() => of([] as Usuario[])))
+		})
+			.pipe(
+				finalize(() => {
+					this.isLoadingRelated = false;
+					this.cdr.markForCheck();
+				})
+			)
+			.subscribe(({ relatedComments, users: relatedUsers }) => {
+				this.relatedComments = this.mapRelatedComments(relatedComments, relatedUsers);
+				this.cdr.markForCheck();
 			});
 	}
 
@@ -126,9 +175,11 @@ export class ComentarioPage implements OnInit {
 		const c = comment as any;
 		const userId = c.UsuarioId ?? c.usuario_id;
 		const user = users.find((item) => item.id === Number(userId));
+		const bookId = c.BookId ?? c.libro_id;
 
 		return {
 			id: comment.id,
+			bookId: bookId != null ? Number(bookId) : null,
 			username: c.usuario?.nombre || c.usuarioNombre || c.username || user?.nombre || 'Usuario desconocido',
 			bookTitle: c.libro?.titulo || c.libroTitulo || c.title || c.titulo || book?.titulo || 'Libro sin titulo',
 			author: book?.autor || 'Autor no disponible',
@@ -136,6 +187,25 @@ export class ComentarioPage implements OnInit {
 			likes: comment.likes,
 			coverUrl: book?.portada || '/prueba.webp'
 		};
+	}
+
+	private mapRelatedComments(comments: Comentario[], users: Usuario[]): RelatedCommentView[] {
+		return comments.map((comment) => {
+			const c = comment as any;
+			const userId = c.UsuarioId ?? c.usuario_id;
+			const user = users.find((item) => item.id === Number(userId));
+
+			return {
+				id: comment.id,
+				username: c.usuario?.nombre || c.usuarioNombre || c.username || user?.nombre || 'Usuario desconocido',
+				content: comment.contenido,
+				likes: comment.likes
+			};
+		});
+	}
+
+	trackByRelatedCommentId(index: number, comment: RelatedCommentView): number {
+		return comment.id;
 	}
 
 	goHome(): void {

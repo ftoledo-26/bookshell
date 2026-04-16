@@ -1,3 +1,5 @@
-<app-site-header />
+@if (showHeader()) {
+	<app-site-header />
+}
 
 <router-outlet />

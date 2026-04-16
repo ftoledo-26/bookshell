@@ -29,25 +29,6 @@
 	gap: 1.2rem;
 }
 
-.login-layout {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 1.5rem;
-	width: 100%;
-	max-width: 1080px;
-	margin: 0 auto;
-}
-
-.auth-card {
-	width: 100%;
-}
-
-@media (max-width: 960px) {
-	.login-layout {
-		grid-template-columns: 1fr;
-	}
-}
-
 .hero-head {
 	padding: 0.8rem 0.2rem;
 	border-bottom: 1px solid var(--line);

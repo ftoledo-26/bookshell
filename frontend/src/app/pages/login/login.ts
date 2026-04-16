@@ -13,10 +13,30 @@ export class LoginComponent {
   username: string = '';
   password: string = '';
 
-  onSubmit() {
-    // Implement your login logic here
-    console.log('Username:', this.username);
-    console.log('Password:', this.password);
-    // Add authentication logic and navigate to the next page upon successful login
+  registerUsername: string = '';
+  registerEmail: string = '';
+  registerPassword: string = '';
+  registerTelefono: string = '';
+  registerLocalidad: string = '';
+
+  loginMessage: string = '';
+  registerMessage: string = '';
+
+  onLogin() {
+    this.loginMessage = `Intentando login con ${this.username}`;
+    this.registerMessage = '';
+    console.log('Login:', { username: this.username, password: this.password });
+  }
+
+  onRegister() {
+    this.registerMessage = `Registro de ${this.registerUsername} enviado`;
+    this.loginMessage = '';
+    console.log('Register:', {
+      username: this.registerUsername,
+      email: this.registerEmail,
+      password: this.registerPassword,
+      telefono: this.registerTelefono,
+      localidad: this.registerLocalidad
+    });
   }
 }

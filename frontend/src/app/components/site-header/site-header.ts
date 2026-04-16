@@ -13,6 +13,6 @@ export class SiteHeaderComponent {
 	readonly navItems = [
 		{ label: 'Books', path: '/' },
 		{ label: 'Profile', path: '/usuario' },
-		{ label: 'Login', path: '/login' },
+		{ label: 'Mi libreria', path: '/mi_libreria' },
 	];
 }

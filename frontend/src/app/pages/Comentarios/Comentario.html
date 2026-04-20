@@ -1,3 +1,60 @@
-<section class="container">
-    
-</section>
+<main
+	class="comment-view"
+	[style.--book-bg-image]="'url(' + (detail?.coverUrl || '/prueba.webp') + ')'"
+>
+	<section class="comment-shell">
+		<button class="back-link" type="button" (click)="goHome()">Volver a Home</button>
+
+		<p class="status" *ngIf="isLoading">Cargando comentario...</p>
+		<p class="status error" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+		<article class="comment-card" *ngIf="!isLoading && detail">
+			<div class="cover-column">
+                @if(!detail.coverUrl ) {
+                    <img src="/prueba.webp" alt="Portada no disponible" loading="lazy" />
+                } @else {
+                    <img [src]="detail.coverUrl" [alt]="detail.bookTitle" loading="lazy" />
+                }
+				
+			</div>
+
+			<div class="content-column">
+				<header>
+					<p class="eyebrow">Comentario destacado</p>
+					<h1>{{ detail.bookTitle }}</h1>
+					<p class="meta">{{ detail.author }} · {{ detail.username }}</p>
+				</header>
+
+				<p class="comment-copy">{{ detail.content }}</p>
+
+				<footer>
+					<span class="likes">{{ detail.likes }} likes</span>
+				</footer>
+			</div>
+		</article>
+
+		<section class="related-section" *ngIf="!isLoading && detail">
+			<header class="related-head">
+				<h2>Comentarios de este libro</h2>
+				<span>{{ relatedComments.length }} comentarios</span>
+			</header>
+
+			<p class="related-loading" *ngIf="isLoadingRelated">Cargando más comentarios...</p>
+
+			<div class="related-list" *ngIf="!isLoadingRelated && relatedComments.length > 0; else noRelatedComments">
+				<article class="related-card" *ngFor="let comment of relatedComments; trackBy: trackByRelatedCommentId">
+					<div class="related-card-head">
+						<strong>{{ comment.username }}</strong>
+						<span>{{ comment.likes }} likes</span>
+					</div>
+
+					<p>{{ comment.content }}</p>
+				</article>
+			</div>
+
+			<ng-template #noRelatedComments>
+				<p class="related-empty" *ngIf="!isLoadingRelated">Todavía no hay más comentarios para este libro.</p>
+			</ng-template>
+		</section>
+	</section>
+</main>

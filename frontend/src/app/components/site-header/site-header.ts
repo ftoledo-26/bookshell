@@ -12,6 +12,6 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
 export class SiteHeaderComponent {
 	readonly navItems = [
 		{ label: 'Books', path: '/' },
-		{ label: 'Profile', path: '/usuario' }
+		{ label: 'Profile', path: '/usuario' },
 	];
 }

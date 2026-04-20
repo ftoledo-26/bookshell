@@ -1,25 +1,12 @@
 
 services:
-  app:
-    build:
-      context: .
-      dockerfile: .devcontainer/Dockerfile
-    volumes:
-      - .:/workspace
-      - node_modules:/workspace/node_modules
-    ports:
-      - "4200:4200"
-    command: sleep infinity
-
   laravel:
-    build:
-      context: ./prueba
-      dockerfile: Dockerfile
+    build: .
     container_name: laravel12_app
     ports:
       - "8080:80"             # Laravel accesible en http://localhost:8080
     volumes:
-      - ./prueba:/var/www/html   # BIND VOLUME: código en tu PC
+      - ./src:/var/www/html   # BIND VOLUME: código en tu PC
     depends_on:
       - db
 
@@ -51,5 +38,4 @@ services:
       - db
 
 volumes:
-  node_modules:
   db_data:

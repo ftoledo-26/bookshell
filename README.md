@@ -1,3 +1,50 @@
+<<<<<<< HEAD
+# bookshell
+
+``` bash
+frontend/
+├── src/
+│   ├── app/
+│   │   ├── components/        # Componentes reutilizables
+│   │   │   ├── book-card/
+│   │   │   ├── review-card/
+│   │   │   ├── navbar/
+│   │   │   └── rating/
+│   │   │
+│   │   ├── pages/             # Páginas principales
+│   │   │   ├── home/
+│   │   │   ├── books/
+│   │   │   ├── book-detail/
+│   │   │   ├── profile/
+│   │   │   └── auth/
+│   │   │
+│   │   ├── services/          # Servicios para consumir API
+│   │   │   ├── book.service.ts
+│   │   │   ├── review.service.ts
+│   │   │   └── auth.service.ts
+│   │   │
+│   │   ├── guards/            # Guards de rutas (login, roles, etc.)
+│   │   ├── interceptors/      # Interceptores HTTP (token JWT)
+│   │   ├── models/            # Interfaces y modelos TS
+│   │   │   ├── book.model.ts
+│   │   │   ├── review.model.ts
+│   │   │   └── user.model.ts
+│   │   └── app-routing.module.ts
+│   │
+│   ├── assets/                # Imágenes, fuentes y recursos estáticos
+│   └── styles/                # CSS global / Tailwind / variables
+│
+├── angular.json               # Configuración Angular CLI
+├── package.json               # Dependencias y scripts npm
+├── tsconfig.json              # Configuración TypeScript
+└── README.md
+
+
+
+
+ng serve --host 0.0.0.0
+```
+=======
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
 <p align="center">
@@ -57,3 +104,4 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+>>>>>>> 384a96518823ea7ec00162070e0dd0b99a4e44be

@@ -44,11 +44,12 @@ export class UsuarioPage implements OnInit {
 		email: '',
 		password: '',
 		rol: 'usuario',
-		foto: ''
+		foto: '',
+		phone: ''
 	};
 	editDraft = {
 		nombre: '',
-		email: ''
+		email: '',
 	};
 	isEditing = false;
 	isLoading = true;

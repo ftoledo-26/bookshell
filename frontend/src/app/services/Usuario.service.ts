@@ -63,4 +63,16 @@ export class UsuarioService {
         })
       );
   }
+
+  createUsuario(payload: Pick<Usuario, 'nombre' | 'email' | 'password' | 'phone'>): Observable<Usuario> {
+    return this.http
+      .post<ApiResponse<Usuario> | { data?: Usuario }>(this.apiUrl, payload)
+      .pipe(
+        map((response: any) => response?.data ?? response),
+        map((response) => {
+          this.users$ = undefined;
+          return response;
+        })
+      );
+  }
 }

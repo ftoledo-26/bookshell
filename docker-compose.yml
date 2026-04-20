@@ -1,3 +1,19 @@
+<<<<<<< HEAD
+services:
+  app:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - .:/workspace
+      - node_modules:/workspace/node_modules
+    ports:
+      - "4200:4200"
+    command: sleep infinity
+
+volumes:
+  node_modules:
+=======
 
 services:
   laravel:
@@ -39,3 +55,4 @@ services:
 
 volumes:
   db_data:
+>>>>>>> 384a96518823ea7ec00162070e0dd0b99a4e44be

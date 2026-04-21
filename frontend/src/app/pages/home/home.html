@@ -13,21 +13,32 @@
         <h2>New on Bookshell</h2>
       </header>
 
-      <div class="recommended-strip">
+      <div
+        #recommendedStrip
+        class="recommended-strip"
+        (touchstart)="onRecommendedTouchStart($event)"
+        (touchmove)="onRecommendedTouchMove($event)"
+        (touchend)="onRecommendedTouchEnd()"
+        (touchcancel)="onRecommendedTouchEnd()"
+      >
         <article class="book-tile" *ngFor="let book of recommendedBooks; trackBy: trackByBookId">
           <div class="cover-wrap">
-            <img src="/prueba.webp" [alt]="book.title" loading="eager" />
+            @if(!book.cover) {
+              <img src="/prueba.webp" [alt]="book.title" loading="eager" />
+            } @else {
+              
+              <img [src]="book.cover" [alt]="book.title" loading="eager" />
+            }
           </div>
 
           <footer>
-            <strong>{{ book.username }}</strong>
-            <span>{{ book.day }}</span>
+            <strong>{{ book.title }}</strong>
           </footer>
         </article>
       </div>
     </section>
 
-    <section class="reviews-zone" *ngIf="!isLoading && featuredReviews.length > 0">
+    <section class="reviews-zone" *ngIf="!isLoading && reviews.length > 0">
       <header class="section-head">
         <h2>Popular reviews this week</h2>
       </header>
@@ -35,7 +46,7 @@
       <div class="reviews-scroll">
         <article
           class="review-card"
-          *ngFor="let review of displayedReviews; trackBy: trackByReviewId"
+          *ngFor="let review of reviews; trackBy: trackByReviewId"
           role="button"
           tabindex="0"
           (click)="openReviewDetail(review.id)"
@@ -58,7 +69,11 @@
               </h3>
               <div class="meta-row">
                 <span class="score">{{ review.score }}</span>
-                <span>{{ review.likes }} likes</span>
+                @if(review.hasRating) {
+                  <span>{{ review.likes }} likes</span>
+                } @else {
+                  <span>sin likes</span>
+                }
               </div>
             </header>
 
@@ -68,7 +83,7 @@
       </div>
     </section>
 
-    <p class="status" *ngIf="!isLoading && featuredReviews.length === 0">
+    <p class="status" *ngIf="!isLoading && reviews.length === 0">
       Todavia no hay reviews para mostrar.
     </p>
   </section>

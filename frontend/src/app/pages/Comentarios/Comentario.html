@@ -45,7 +45,11 @@
 				<article class="related-card" *ngFor="let comment of relatedComments; trackBy: trackByRelatedCommentId">
 					<div class="related-card-head">
 						<strong>{{ comment.username }}</strong>
-						<span>{{ comment.likes }} likes</span>
+						@if(comment.hasRating) {
+							<span>{{ comment.likes }} / 5</span>
+						} @else {
+							<span>comentario</span>
+						}
 					</div>
 
 					<p>{{ comment.content }}</p>

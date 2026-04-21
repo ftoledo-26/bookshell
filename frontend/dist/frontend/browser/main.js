@@ -970,6 +970,111 @@ var OperatorSubscriber = class extends Subscriber {
   }
 };
 
+// node_modules/rxjs/dist/esm/internal/operators/refCount.js
+function refCount() {
+  return operate((source, subscriber) => {
+    let connection = null;
+    source._refCount++;
+    const refCounter = createOperatorSubscriber(subscriber, void 0, void 0, void 0, () => {
+      if (!source || source._refCount <= 0 || 0 < --source._refCount) {
+        connection = null;
+        return;
+      }
+      const sharedConnection = source._connection;
+      const conn = connection;
+      connection = null;
+      if (sharedConnection && (!conn || sharedConnection === conn)) {
+        sharedConnection.unsubscribe();
+      }
+      subscriber.unsubscribe();
+    });
+    source.subscribe(refCounter);
+    if (!refCounter.closed) {
+      connection = source.connect();
+    }
+  });
+}
+
+// node_modules/rxjs/dist/esm/internal/observable/ConnectableObservable.js
+var ConnectableObservable = class extends Observable {
+  constructor(source, subjectFactory) {
+    super();
+    this.source = source;
+    this.subjectFactory = subjectFactory;
+    this._subject = null;
+    this._refCount = 0;
+    this._connection = null;
+    if (hasLift(source)) {
+      this.lift = source.lift;
+    }
+  }
+  _subscribe(subscriber) {
+    return this.getSubject().subscribe(subscriber);
+  }
+  getSubject() {
+    const subject = this._subject;
+    if (!subject || subject.isStopped) {
+      this._subject = this.subjectFactory();
+    }
+    return this._subject;
+  }
+  _teardown() {
+    this._refCount = 0;
+    const { _connection } = this;
+    this._subject = this._connection = null;
+    _connection === null || _connection === void 0 ? void 0 : _connection.unsubscribe();
+  }
+  connect() {
+    let connection = this._connection;
+    if (!connection) {
+      connection = this._connection = new Subscription();
+      const subject = this.getSubject();
+      connection.add(this.source.subscribe(createOperatorSubscriber(subject, void 0, () => {
+        this._teardown();
+        subject.complete();
+      }, (err) => {
+        this._teardown();
+        subject.error(err);
+      }, () => this._teardown())));
+      if (connection.closed) {
+        this._connection = null;
+        connection = Subscription.EMPTY;
+      }
+    }
+    return connection;
+  }
+  refCount() {
+    return refCount()(this);
+  }
+};
+
+// node_modules/rxjs/dist/esm/internal/scheduler/animationFrameProvider.js
+var animationFrameProvider = {
+  schedule(callback) {
+    let request = requestAnimationFrame;
+    let cancel = cancelAnimationFrame;
+    const { delegate } = animationFrameProvider;
+    if (delegate) {
+      request = delegate.requestAnimationFrame;
+      cancel = delegate.cancelAnimationFrame;
+    }
+    const handle = request((timestamp) => {
+      cancel = void 0;
+      callback(timestamp);
+    });
+    return new Subscription(() => cancel === null || cancel === void 0 ? void 0 : cancel(handle));
+  },
+  requestAnimationFrame(...args) {
+    const { delegate } = animationFrameProvider;
+    return ((delegate === null || delegate === void 0 ? void 0 : delegate.requestAnimationFrame) || requestAnimationFrame)(...args);
+  },
+  cancelAnimationFrame(...args) {
+    const { delegate } = animationFrameProvider;
+    return ((delegate === null || delegate === void 0 ? void 0 : delegate.cancelAnimationFrame) || cancelAnimationFrame)(...args);
+  },
+  delegate: void 0
+};
+
 // node_modules/rxjs/dist/esm/internal/util/ObjectUnsubscribedError.js
 var ObjectUnsubscribedError = createErrorClass((_super) => function ObjectUnsubscribedErrorImpl() {
   _super(this);
@@ -1294,6 +1399,76 @@ var AsyncAction = class extends Action {
   }
 };
 
+// node_modules/rxjs/dist/esm/internal/util/Immediate.js
+var nextHandle = 1;
+var resolved;
+var activeHandles = {};
+function findAndClearHandle(handle) {
+  if (handle in activeHandles) {
+    delete activeHandles[handle];
+    return true;
+  }
+  return false;
+}
+var Immediate = {
+  setImmediate(cb) {
+    const handle = nextHandle++;
+    activeHandles[handle] = true;
+    if (!resolved) {
+      resolved = Promise.resolve();
+    }
+    resolved.then(() => findAndClearHandle(handle) && cb());
+    return handle;
+  },
+  clearImmediate(handle) {
+    findAndClearHandle(handle);
+  }
+};
+
+// node_modules/rxjs/dist/esm/internal/scheduler/immediateProvider.js
+var { setImmediate, clearImmediate } = Immediate;
+var immediateProvider = {
+  setImmediate(...args) {
+    const { delegate } = immediateProvider;
+    return ((delegate === null || delegate === void 0 ? void 0 : delegate.setImmediate) || setImmediate)(...args);
+  },
+  clearImmediate(handle) {
+    const { delegate } = immediateProvider;
+    return ((delegate === null || delegate === void 0 ? void 0 : delegate.clearImmediate) || clearImmediate)(handle);
+  },
+  delegate: void 0
+};
+
+// node_modules/rxjs/dist/esm/internal/scheduler/AsapAction.js
+var AsapAction = class extends AsyncAction {
+  constructor(scheduler, work) {
+    super(scheduler, work);
+    this.scheduler = scheduler;
+    this.work = work;
+  }
+  requestAsyncId(scheduler, id, delay = 0) {
+    if (delay !== null && delay > 0) {
+      return super.requestAsyncId(scheduler, id, delay);
+    }
+    scheduler.actions.push(this);
+    return scheduler._scheduled || (scheduler._scheduled = immediateProvider.setImmediate(scheduler.flush.bind(scheduler, void 0)));
+  }
+  recycleAsyncId(scheduler, id, delay = 0) {
+    var _a;
+    if (delay != null ? delay > 0 : this.delay > 0) {
+      return super.recycleAsyncId(scheduler, id, delay);
+    }
+    const { actions } = scheduler;
+    if (id != null && ((_a = actions[actions.length - 1]) === null || _a === void 0 ? void 0 : _a.id) !== id) {
+      immediateProvider.clearImmediate(id);
+      if (scheduler._scheduled === id) {
+        scheduler._scheduled = void 0;
+      }
+    }
+    return void 0;
+  }
+};
+
 // node_modules/rxjs/dist/esm/internal/Scheduler.js
 var Scheduler = class _Scheduler {
   constructor(schedulerActionCtor, now = _Scheduler.now) {
@@ -1336,8 +1511,96 @@ var AsyncScheduler = class extends Scheduler {
   }
 };
 
+// node_modules/rxjs/dist/esm/internal/scheduler/AsapScheduler.js
+var AsapScheduler = class extends AsyncScheduler {
+  flush(action) {
+    this._active = true;
+    const flushId = this._scheduled;
+    this._scheduled = void 0;
+    const { actions } = this;
+    let error;
+    action = action || actions.shift();
+    do {
+      if (error = action.execute(action.state, action.delay)) {
+        break;
+      }
+    } while ((action = actions[0]) && action.id === flushId && actions.shift());
+    this._active = false;
+    if (error) {
+      while ((action = actions[0]) && action.id === flushId && actions.shift()) {
+        action.unsubscribe();
+      }
+      throw error;
+    }
+  }
+};
+
+// node_modules/rxjs/dist/esm/internal/scheduler/asap.js
+var asapScheduler = new AsapScheduler(AsapAction);
+
 // node_modules/rxjs/dist/esm/internal/scheduler/async.js
 var asyncScheduler = new AsyncScheduler(AsyncAction);
+var async = asyncScheduler;
+
+// node_modules/rxjs/dist/esm/internal/scheduler/AnimationFrameAction.js
+var AnimationFrameAction = class extends AsyncAction {
+  constructor(scheduler, work) {
+    super(scheduler, work);
+    this.scheduler = scheduler;
+    this.work = work;
+  }
+  requestAsyncId(scheduler, id, delay = 0) {
+    if (delay !== null && delay > 0) {
+      return super.requestAsyncId(scheduler, id, delay);
+    }
+    scheduler.actions.push(this);
+    return scheduler._scheduled || (scheduler._scheduled = animationFrameProvider.requestAnimationFrame(() => scheduler.flush(void 0)));
+  }
+  recycleAsyncId(scheduler, id, delay = 0) {
+    var _a;
+    if (delay != null ? delay > 0 : this.delay > 0) {
+      return super.recycleAsyncId(scheduler, id, delay);
+    }
+    const { actions } = scheduler;
+    if (id != null && id === scheduler._scheduled && ((_a = actions[actions.length - 1]) === null || _a === void 0 ? void 0 : _a.id) !== id) {
+      animationFrameProvider.cancelAnimationFrame(id);
+      scheduler._scheduled = void 0;
+    }
+    return void 0;
+  }
+};
+
+// node_modules/rxjs/dist/esm/internal/scheduler/AnimationFrameScheduler.js
+var AnimationFrameScheduler = class extends AsyncScheduler {
+  flush(action) {
+    this._active = true;
+    let flushId;
+    if (action) {
+      flushId = action.id;
+    } else {
+      flushId = this._scheduled;
+      this._scheduled = void 0;
+    }
+    const { actions } = this;
+    let error;
+    action = action || actions.shift();
+    do {
+      if (error = action.execute(action.state, action.delay)) {
+        break;
+      }
+    } while ((action = actions[0]) && action.id === flushId && actions.shift());
+    this._active = false;
+    if (error) {
+      while ((action = actions[0]) && action.id === flushId && actions.shift()) {
+        action.unsubscribe();
+      }
+      throw error;
+    }
+  }
+};
+
+// node_modules/rxjs/dist/esm/internal/scheduler/animationFrame.js
+var animationFrameScheduler = new AnimationFrameScheduler(AnimationFrameAction);
 
 // node_modules/rxjs/dist/esm/internal/observable/empty.js
 var EMPTY = new Observable((subscriber) => subscriber.complete());
@@ -2050,12 +2313,81 @@ function forkJoin(...args) {
   return resultSelector ? result.pipe(mapOneOrManyArgs(resultSelector)) : result;
 }
 
+// node_modules/rxjs/dist/esm/internal/observable/timer.js
+function timer(dueTime = 0, intervalOrScheduler, scheduler = async) {
+  let intervalDuration = -1;
+  if (intervalOrScheduler != null) {
+    if (isScheduler(intervalOrScheduler)) {
+      scheduler = intervalOrScheduler;
+    } else {
+      intervalDuration = intervalOrScheduler;
+    }
+  }
+  return new Observable((subscriber) => {
+    let due = isValidDate(dueTime) ? +dueTime - scheduler.now() : dueTime;
+    if (due < 0) {
+      due = 0;
+    }
+    let n = 0;
+    return scheduler.schedule(function() {
+      if (!subscriber.closed) {
+        subscriber.next(n++);
+        if (0 <= intervalDuration) {
+          this.schedule(void 0, intervalDuration);
+        } else {
+          subscriber.complete();
+        }
+      }
+    }, due);
+  });
+}
+
 // node_modules/rxjs/dist/esm/internal/operators/filter.js
 function filter(predicate, thisArg) {
   return operate((source, subscriber) => {
     let index = 0;
     source.subscribe(createOperatorSubscriber(subscriber, (value) => predicate.call(thisArg, value, index++) && subscriber.next(value)));
   });
+}
+
+// node_modules/rxjs/dist/esm/internal/operators/audit.js
+function audit(durationSelector) {
+  return operate((source, subscriber) => {
+    let hasValue = false;
+    let lastValue = null;
+    let durationSubscriber = null;
+    let isComplete = false;
+    const endDuration = () => {
+      durationSubscriber === null || durationSubscriber === void 0 ? void 0 : durationSubscriber.unsubscribe();
+      durationSubscriber = null;
+      if (hasValue) {
+        hasValue = false;
+        const value = lastValue;
+        lastValue = null;
+        subscriber.next(value);
+      }
+      isComplete && subscriber.complete();
+    };
+    const cleanupDuration = () => {
+      durationSubscriber = null;
+      isComplete && subscriber.complete();
+    };
+    source.subscribe(createOperatorSubscriber(subscriber, (value) => {
+      hasValue = true;
+      lastValue = value;
+      if (!durationSubscriber) {
+        innerFrom(durationSelector(value)).subscribe(durationSubscriber = createOperatorSubscriber(subscriber, endDuration, cleanupDuration));
+      }
+    }, () => {
+      isComplete = true;
+      (!hasValue || !durationSubscriber || durationSubscriber.closed) && subscriber.complete();
+    }));
+  });
+}
+
+// node_modules/rxjs/dist/esm/internal/operators/auditTime.js
+function auditTime(duration, scheduler = asyncScheduler) {
+  return audit(() => timer(duration, scheduler));
 }
 
 // node_modules/rxjs/dist/esm/internal/operators/catchError.js
@@ -2118,6 +2450,26 @@ function take(count) {
   });
 }
 
+// node_modules/rxjs/dist/esm/internal/operators/distinctUntilChanged.js
+function distinctUntilChanged(comparator, keySelector = identity) {
+  comparator = comparator !== null && comparator !== void 0 ? comparator : defaultCompare;
+  return operate((source, subscriber) => {
+    let previousKey;
+    let first2 = true;
+    source.subscribe(createOperatorSubscriber(subscriber, (value) => {
+      const currentKey = keySelector(value);
+      if (first2 || !comparator(previousKey, currentKey)) {
+        first2 = false;
+        previousKey = currentKey;
+        subscriber.next(value);
+      }
+    }));
+  });
+}
+function defaultCompare(a, b) {
+  return a === b;
+}
+
 // node_modules/rxjs/dist/esm/internal/operators/throwIfEmpty.js
 function throwIfEmpty(errorFactory = defaultErrorFactory) {
   return operate((source, subscriber) => {
@@ -2167,6 +2519,20 @@ function takeLast(count) {
   });
 }
 
+// node_modules/rxjs/dist/esm/internal/operators/pairwise.js
+function pairwise() {
+  return operate((source, subscriber) => {
+    let prev;
+    let hasPrev = false;
+    source.subscribe(createOperatorSubscriber(subscriber, (value) => {
+      const p = prev;
+      prev = value;
+      hasPrev && subscriber.next([p, value]);
+      hasPrev = true;
+    }));
+  });
+}
+
 // node_modules/rxjs/dist/esm/internal/operators/share.js
 function share(options = {}) {
   const { connector = () => new Subject(), resetOnError = true, resetOnComplete = true, resetOnRefCountZero = true } = options;
@@ -2174,7 +2540,7 @@ function share(options = {}) {
     let connection;
     let resetConnection;
     let subject;
-    let refCount = 0;
+    let refCount2 = 0;
     let hasCompleted = false;
     let hasErrored = false;
     const cancelReset = () => {
@@ -2192,19 +2558,19 @@ function share(options = {}) {
       conn === null || conn === void 0 ? void 0 : conn.unsubscribe();
     };
     return operate((source, subscriber) => {
-      refCount++;
+      refCount2++;
       if (!hasErrored && !hasCompleted) {
         cancelReset();
       }
       const dest = subject = subject !== null && subject !== void 0 ? subject : connector();
       subscriber.add(() => {
-        refCount--;
-        if (refCount === 0 && !hasErrored && !hasCompleted) {
+        refCount2--;
+        if (refCount2 === 0 && !hasErrored && !hasCompleted) {
           resetConnection = handleReset(resetAndUnsubscribe, resetOnRefCountZero);
         }
       });
       dest.subscribe(subscriber);
-      if (!connection && refCount > 0) {
+      if (!connection && refCount2 > 0) {
         connection = new SafeSubscriber({
           next: (value) => dest.next(value),
           error: (err) => {
@@ -2245,9 +2611,9 @@ function handleReset(reset, on, ...args) {
 // node_modules/rxjs/dist/esm/internal/operators/shareReplay.js
 function shareReplay(configOrBufferSize, windowTime, scheduler) {
   let bufferSize;
-  let refCount = false;
+  let refCount2 = false;
   if (configOrBufferSize && typeof configOrBufferSize === "object") {
-    ({ bufferSize = Infinity, windowTime = Infinity, refCount = false, scheduler } = configOrBufferSize);
+    ({ bufferSize = Infinity, windowTime = Infinity, refCount: refCount2 = false, scheduler } = configOrBufferSize);
   } else {
     bufferSize = configOrBufferSize !== null && configOrBufferSize !== void 0 ? configOrBufferSize : Infinity;
   }
@@ -2255,7 +2621,7 @@ function shareReplay(configOrBufferSize, windowTime, scheduler) {
     connector: () => new ReplaySubject(bufferSize, windowTime, scheduler),
     resetOnError: true,
     resetOnComplete: false,
-    resetOnRefCountZero: refCount
+    resetOnRefCountZero: refCount2
   });
 }
 
@@ -13761,8 +14127,8 @@ function findHostDirectiveDefs(currentDef, matchedDefs, hostDirectiveDefs) {
   if (currentDef.hostDirectives !== null) {
     for (const configOrFn of currentDef.hostDirectives) {
       if (typeof configOrFn === "function") {
-        const resolved = configOrFn();
-        for (const config2 of resolved) {
+        const resolved2 = configOrFn();
+        for (const config2 of resolved2) {
           trackHostDirectiveDef(createHostDirectiveDef(config2), matchedDefs, hostDirectiveDefs);
         }
       } else {
@@ -26234,8 +26600,8 @@ function warnIfSignal(pipeName, value) {
   }
 }
 var SubscribableStrategy = class {
-  createSubscription(async, updateLatestValue, onError) {
-    return untracked2(() => async.subscribe({
+  createSubscription(async2, updateLatestValue, onError) {
+    return untracked2(() => async2.subscribe({
       next: updateLatestValue,
       error: onError
     }));
@@ -26245,8 +26611,8 @@ var SubscribableStrategy = class {
   }
 };
 var PromiseStrategy = class {
-  createSubscription(async, updateLatestValue, onError) {
-    async.then((v) => updateLatestValue?.(v), (e) => onError?.(e));
+  createSubscription(async2, updateLatestValue, onError) {
+    async2.then((v) => updateLatestValue?.(v), (e) => onError?.(e));
     return {
       unsubscribe: () => {
         updateLatestValue = null;
@@ -26315,8 +26681,8 @@ var AsyncPipe = class _AsyncPipe {
     this._subscription = null;
     this._obj = null;
   }
-  _updateLatestValue(async, value) {
-    if (async === this._obj) {
+  _updateLatestValue(async2, value) {
+    if (async2 === this._obj) {
       this._latestValue = value;
       if (this.markForCheckOnValueUpdate) {
         this._ref?.markForCheck();
@@ -26940,6 +27306,9 @@ var NavigationAdapterForLocation = class _NavigationAdapterForLocation extends L
   }], () => [], null);
 })();
 var PLATFORM_BROWSER_ID = "browser";
+function isPlatformBrowser(platformId) {
+  return platformId === PLATFORM_BROWSER_ID;
+}
 var ViewportScroller = class _ViewportScroller {
   static \u0275prov = /* @__PURE__ */ \u0275\u0275defineInjectable({
     token: _ViewportScroller,
@@ -31031,6 +31400,15 @@ function provideHttpClient(...features) {
     providers.push(...feature.\u0275providers);
   }
   return makeEnvironmentProviders(providers);
+}
+function withInterceptors(interceptorFns) {
+  return makeHttpFeature(HttpFeatureKind.Interceptors, interceptorFns.map((interceptorFn) => {
+    return {
+      provide: HTTP_INTERCEPTOR_FNS,
+      useValue: interceptorFn,
+      multi: true
+    };
+  }));
 }
 var LEGACY_INTERCEPTOR_FN = new InjectionToken(typeof ngDevMode !== "undefined" && ngDevMode ? "LEGACY_INTERCEPTOR_FN" : "");
 function withInterceptorsFromDi() {
@@ -37648,9 +38026,28 @@ var BookService = class _BookService {
   constructor(http) {
     this.http = http;
   }
+  normalizeCoverPath(portada) {
+    const raw = String(portada ?? "").trim();
+    if (!raw) {
+      return "/prueba.webp";
+    }
+    const lowered = raw.toLowerCase();
+    if (lowered === "default.png" || lowered === "default.jpg" || lowered === "/default.jpg" || lowered === "/default.png") {
+      return "/default.png";
+    }
+    if (/^https?:\/\//i.test(raw) || raw.startsWith("/")) {
+      return raw;
+    }
+    return `/${raw}`;
+  }
+  normalizeBook(book) {
+    return __spreadProps(__spreadValues({}, book), {
+      portada: this.normalizeCoverPath(book.portada)
+    });
+  }
   getBooks(forceRefresh = false) {
     if (!this.books$ || forceRefresh) {
-      this.books$ = this.http.get(this.apiUrl).pipe(map((response) => response.data ?? []), shareReplay(1));
+      this.books$ = this.http.get(this.apiUrl).pipe(map((response) => (response.data ?? []).map((book) => this.normalizeBook(book))), shareReplay(1));
     }
     return this.books$;
   }
@@ -37661,7 +38058,7 @@ var BookService = class _BookService {
         return cached;
       }
     }
-    const request$ = this.http.get(`${this.apiUrl}/${id}`).pipe(map((response) => response.data), shareReplay(1));
+    const request$ = this.http.get(`${this.apiUrl}/${id}`).pipe(map((response) => this.normalizeBook(response.data)), shareReplay(1));
     this.bookByIdCache.set(id, request$);
     return request$;
   }
@@ -37685,18 +38082,1627 @@ var BookService = class _BookService {
   }], () => [{ type: HttpClient }], null);
 })();
 
+// node_modules/@angular/cdk/fesm2022/_platform-chunk.mjs
+var hasV8BreakIterator;
+try {
+  hasV8BreakIterator = typeof Intl !== "undefined" && Intl.v8BreakIterator;
+} catch {
+  hasV8BreakIterator = false;
+}
+var Platform = class _Platform {
+  _platformId = inject2(PLATFORM_ID);
+  isBrowser = this._platformId ? isPlatformBrowser(this._platformId) : typeof document === "object" && !!document;
+  EDGE = this.isBrowser && /(edge)/i.test(navigator.userAgent);
+  TRIDENT = this.isBrowser && /(msie|trident)/i.test(navigator.userAgent);
+  BLINK = this.isBrowser && !!(window.chrome || hasV8BreakIterator) && typeof CSS !== "undefined" && !this.EDGE && !this.TRIDENT;
+  WEBKIT = this.isBrowser && /AppleWebKit/i.test(navigator.userAgent) && !this.BLINK && !this.EDGE && !this.TRIDENT;
+  IOS = this.isBrowser && /iPad|iPhone|iPod/.test(navigator.userAgent) && !("MSStream" in window);
+  FIREFOX = this.isBrowser && /(firefox|minefield)/i.test(navigator.userAgent);
+  ANDROID = this.isBrowser && /android/i.test(navigator.userAgent) && !this.TRIDENT;
+  SAFARI = this.isBrowser && /safari/i.test(navigator.userAgent) && this.WEBKIT;
+  constructor() {
+  }
+  static \u0275fac = function Platform_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _Platform)();
+  };
+  static \u0275prov = /* @__PURE__ */ \u0275\u0275defineInjectable({
+    token: _Platform,
+    factory: _Platform.\u0275fac,
+    providedIn: "root"
+  });
+};
+(() => {
+  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(Platform, [{
+    type: Injectable,
+    args: [{
+      providedIn: "root"
+    }]
+  }], () => [], null);
+})();
+
+// node_modules/@angular/cdk/fesm2022/_element-chunk.mjs
+function coerceNumberProperty(value, fallbackValue = 0) {
+  if (_isNumberValue(value)) {
+    return Number(value);
+  }
+  return arguments.length === 2 ? fallbackValue : 0;
+}
+function _isNumberValue(value) {
+  return !isNaN(parseFloat(value)) && !isNaN(Number(value));
+}
+function coerceElement(elementOrRef) {
+  return elementOrRef instanceof ElementRef ? elementOrRef.nativeElement : elementOrRef;
+}
+
+// node_modules/@angular/cdk/fesm2022/_directionality-chunk.mjs
+var DIR_DOCUMENT = new InjectionToken("cdk-dir-doc", {
+  providedIn: "root",
+  factory: () => inject2(DOCUMENT)
+});
+var RTL_LOCALE_PATTERN = /^(ar|ckb|dv|he|iw|fa|nqo|ps|sd|ug|ur|yi|.*[-_](Adlm|Arab|Hebr|Nkoo|Rohg|Thaa))(?!.*[-_](Latn|Cyrl)($|-|_))($|-|_)/i;
+function _resolveDirectionality(rawValue) {
+  const value = rawValue?.toLowerCase() || "";
+  if (value === "auto" && typeof navigator !== "undefined" && navigator?.language) {
+    return RTL_LOCALE_PATTERN.test(navigator.language) ? "rtl" : "ltr";
+  }
+  return value === "rtl" ? "rtl" : "ltr";
+}
+var Directionality = class _Directionality {
+  get value() {
+    return this.valueSignal();
+  }
+  valueSignal = signal("ltr", ...ngDevMode ? [{
+    debugName: "valueSignal"
+  }] : []);
+  change = new EventEmitter();
+  constructor() {
+    const _document2 = inject2(DIR_DOCUMENT, {
+      optional: true
+    });
+    if (_document2) {
+      const bodyDir = _document2.body ? _document2.body.dir : null;
+      const htmlDir = _document2.documentElement ? _document2.documentElement.dir : null;
+      this.valueSignal.set(_resolveDirectionality(bodyDir || htmlDir || "ltr"));
+    }
+  }
+  ngOnDestroy() {
+    this.change.complete();
+  }
+  static \u0275fac = function Directionality_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _Directionality)();
+  };
+  static \u0275prov = /* @__PURE__ */ \u0275\u0275defineInjectable({
+    token: _Directionality,
+    factory: _Directionality.\u0275fac,
+    providedIn: "root"
+  });
+};
+(() => {
+  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(Directionality, [{
+    type: Injectable,
+    args: [{
+      providedIn: "root"
+    }]
+  }], () => [], null);
+})();
+
+// node_modules/@angular/cdk/fesm2022/_scrolling-chunk.mjs
+var RtlScrollAxisType;
+(function(RtlScrollAxisType2) {
+  RtlScrollAxisType2[RtlScrollAxisType2["NORMAL"] = 0] = "NORMAL";
+  RtlScrollAxisType2[RtlScrollAxisType2["NEGATED"] = 1] = "NEGATED";
+  RtlScrollAxisType2[RtlScrollAxisType2["INVERTED"] = 2] = "INVERTED";
+})(RtlScrollAxisType || (RtlScrollAxisType = {}));
+var rtlScrollAxisType;
+var scrollBehaviorSupported;
+function supportsScrollBehavior() {
+  if (scrollBehaviorSupported == null) {
+    if (typeof document !== "object" || !document || typeof Element !== "function" || !Element) {
+      scrollBehaviorSupported = false;
+      return scrollBehaviorSupported;
+    }
+    if (document.documentElement?.style && "scrollBehavior" in document.documentElement.style) {
+      scrollBehaviorSupported = true;
+    } else {
+      const scrollToFunction = Element.prototype.scrollTo;
+      if (scrollToFunction) {
+        scrollBehaviorSupported = !/\{\s*\[native code\]\s*\}/.test(scrollToFunction.toString());
+      } else {
+        scrollBehaviorSupported = false;
+      }
+    }
+  }
+  return scrollBehaviorSupported;
+}
+function getRtlScrollAxisType() {
+  if (typeof document !== "object" || !document) {
+    return RtlScrollAxisType.NORMAL;
+  }
+  if (rtlScrollAxisType == null) {
+    const scrollContainer = document.createElement("div");
+    const containerStyle = scrollContainer.style;
+    scrollContainer.dir = "rtl";
+    containerStyle.width = "1px";
+    containerStyle.overflow = "auto";
+    containerStyle.visibility = "hidden";
+    containerStyle.pointerEvents = "none";
+    containerStyle.position = "absolute";
+    const content = document.createElement("div");
+    const contentStyle = content.style;
+    contentStyle.width = "2px";
+    contentStyle.height = "1px";
+    scrollContainer.appendChild(content);
+    document.body.appendChild(scrollContainer);
+    rtlScrollAxisType = RtlScrollAxisType.NORMAL;
+    if (scrollContainer.scrollLeft === 0) {
+      scrollContainer.scrollLeft = 1;
+      rtlScrollAxisType = scrollContainer.scrollLeft === 0 ? RtlScrollAxisType.NEGATED : RtlScrollAxisType.INVERTED;
+    }
+    scrollContainer.remove();
+  }
+  return rtlScrollAxisType;
+}
+
+// node_modules/@angular/cdk/fesm2022/_data-source-chunk.mjs
+var DataSource = class {
+};
+function isDataSource(value) {
+  return value && typeof value.connect === "function" && !(value instanceof ConnectableObservable);
+}
+
+// node_modules/@angular/cdk/fesm2022/_recycle-view-repeater-strategy-chunk.mjs
+var ArrayDataSource = class extends DataSource {
+  _data;
+  constructor(_data) {
+    super();
+    this._data = _data;
+  }
+  connect() {
+    return isObservable(this._data) ? this._data : of(this._data);
+  }
+  disconnect() {
+  }
+};
+var _ViewRepeaterOperation;
+(function(_ViewRepeaterOperation2) {
+  _ViewRepeaterOperation2[_ViewRepeaterOperation2["REPLACED"] = 0] = "REPLACED";
+  _ViewRepeaterOperation2[_ViewRepeaterOperation2["INSERTED"] = 1] = "INSERTED";
+  _ViewRepeaterOperation2[_ViewRepeaterOperation2["MOVED"] = 2] = "MOVED";
+  _ViewRepeaterOperation2[_ViewRepeaterOperation2["REMOVED"] = 3] = "REMOVED";
+})(_ViewRepeaterOperation || (_ViewRepeaterOperation = {}));
+var _RecycleViewRepeaterStrategy = class {
+  viewCacheSize = 20;
+  _viewCache = [];
+  applyChanges(changes, viewContainerRef, itemContextFactory, itemValueResolver, itemViewChanged) {
+    changes.forEachOperation((record, adjustedPreviousIndex, currentIndex) => {
+      let view;
+      let operation;
+      if (record.previousIndex == null) {
+        const viewArgsFactory = () => itemContextFactory(record, adjustedPreviousIndex, currentIndex);
+        view = this._insertView(viewArgsFactory, currentIndex, viewContainerRef, itemValueResolver(record));
+        operation = view ? _ViewRepeaterOperation.INSERTED : _ViewRepeaterOperation.REPLACED;
+      } else if (currentIndex == null) {
+        this._detachAndCacheView(adjustedPreviousIndex, viewContainerRef);
+        operation = _ViewRepeaterOperation.REMOVED;
+      } else {
+        view = this._moveView(adjustedPreviousIndex, currentIndex, viewContainerRef, itemValueResolver(record));
+        operation = _ViewRepeaterOperation.MOVED;
+      }
+      if (itemViewChanged) {
+        itemViewChanged({
+          context: view?.context,
+          operation,
+          record
+        });
+      }
+    });
+  }
+  detach() {
+    for (const view of this._viewCache) {
+      view.destroy();
+    }
+    this._viewCache = [];
+  }
+  _insertView(viewArgsFactory, currentIndex, viewContainerRef, value) {
+    const cachedView = this._insertViewFromCache(currentIndex, viewContainerRef);
+    if (cachedView) {
+      cachedView.context.$implicit = value;
+      return void 0;
+    }
+    const viewArgs = viewArgsFactory();
+    return viewContainerRef.createEmbeddedView(viewArgs.templateRef, viewArgs.context, viewArgs.index);
+  }
+  _detachAndCacheView(index, viewContainerRef) {
+    const detachedView = viewContainerRef.detach(index);
+    this._maybeCacheView(detachedView, viewContainerRef);
+  }
+  _moveView(adjustedPreviousIndex, currentIndex, viewContainerRef, value) {
+    const view = viewContainerRef.get(adjustedPreviousIndex);
+    viewContainerRef.move(view, currentIndex);
+    view.context.$implicit = value;
+    return view;
+  }
+  _maybeCacheView(view, viewContainerRef) {
+    if (this._viewCache.length < this.viewCacheSize) {
+      this._viewCache.push(view);
+    } else {
+      const index = viewContainerRef.indexOf(view);
+      if (index === -1) {
+        view.destroy();
+      } else {
+        viewContainerRef.remove(index);
+      }
+    }
+  }
+  _insertViewFromCache(index, viewContainerRef) {
+    const cachedView = this._viewCache.pop();
+    if (cachedView) {
+      viewContainerRef.insert(cachedView, index);
+    }
+    return cachedView || null;
+  }
+};
+
+// node_modules/@angular/cdk/fesm2022/bidi.mjs
+var Dir = class _Dir {
+  _isInitialized = false;
+  _rawDir = "";
+  change = new EventEmitter();
+  get dir() {
+    return this.valueSignal();
+  }
+  set dir(value) {
+    const previousValue = this.valueSignal();
+    this.valueSignal.set(_resolveDirectionality(value));
+    this._rawDir = value;
+    if (previousValue !== this.valueSignal() && this._isInitialized) {
+      this.change.emit(this.valueSignal());
+    }
+  }
+  get value() {
+    return this.dir;
+  }
+  valueSignal = signal("ltr", ...ngDevMode ? [{
+    debugName: "valueSignal"
+  }] : []);
+  ngAfterContentInit() {
+    this._isInitialized = true;
+  }
+  ngOnDestroy() {
+    this.change.complete();
+  }
+  static \u0275fac = function Dir_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _Dir)();
+  };
+  static \u0275dir = /* @__PURE__ */ \u0275\u0275defineDirective({
+    type: _Dir,
+    selectors: [["", "dir", ""]],
+    hostVars: 1,
+    hostBindings: function Dir_HostBindings(rf, ctx) {
+      if (rf & 2) {
+        \u0275\u0275attribute("dir", ctx._rawDir);
+      }
+    },
+    inputs: {
+      dir: "dir"
+    },
+    outputs: {
+      change: "dirChange"
+    },
+    exportAs: ["dir"],
+    features: [\u0275\u0275ProvidersFeature([{
+      provide: Directionality,
+      useExisting: _Dir
+    }])]
+  });
+};
+(() => {
+  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(Dir, [{
+    type: Directive,
+    args: [{
+      selector: "[dir]",
+      providers: [{
+        provide: Directionality,
+        useExisting: Dir
+      }],
+      host: {
+        "[attr.dir]": "_rawDir"
+      },
+      exportAs: "dir"
+    }]
+  }], null, {
+    change: [{
+      type: Output,
+      args: ["dirChange"]
+    }],
+    dir: [{
+      type: Input
+    }]
+  });
+})();
+var BidiModule = class _BidiModule {
+  static \u0275fac = function BidiModule_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _BidiModule)();
+  };
+  static \u0275mod = /* @__PURE__ */ \u0275\u0275defineNgModule({
+    type: _BidiModule,
+    imports: [Dir],
+    exports: [Dir]
+  });
+  static \u0275inj = /* @__PURE__ */ \u0275\u0275defineInjector({});
+};
+(() => {
+  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(BidiModule, [{
+    type: NgModule,
+    args: [{
+      imports: [Dir],
+      exports: [Dir]
+    }]
+  }], null, null);
+})();
+
+// node_modules/@angular/cdk/fesm2022/scrolling.mjs
+var _c0 = ["contentWrapper"];
+var _c1 = ["*"];
+var VIRTUAL_SCROLL_STRATEGY = new InjectionToken("VIRTUAL_SCROLL_STRATEGY");
+var FixedSizeVirtualScrollStrategy = class {
+  _scrolledIndexChange = new Subject();
+  scrolledIndexChange = this._scrolledIndexChange.pipe(distinctUntilChanged());
+  _viewport = null;
+  _itemSize;
+  _minBufferPx;
+  _maxBufferPx;
+  constructor(itemSize, minBufferPx, maxBufferPx) {
+    this._itemSize = itemSize;
+    this._minBufferPx = minBufferPx;
+    this._maxBufferPx = maxBufferPx;
+  }
+  attach(viewport) {
+    this._viewport = viewport;
+    this._updateTotalContentSize();
+    this._updateRenderedRange();
+  }
+  detach() {
+    this._scrolledIndexChange.complete();
+    this._viewport = null;
+  }
+  updateItemAndBufferSize(itemSize, minBufferPx, maxBufferPx) {
+    if (maxBufferPx < minBufferPx && (typeof ngDevMode === "undefined" || ngDevMode)) {
+      throw Error("CDK virtual scroll: maxBufferPx must be greater than or equal to minBufferPx");
+    }
+    this._itemSize = itemSize;
+    this._minBufferPx = minBufferPx;
+    this._maxBufferPx = maxBufferPx;
+    this._updateTotalContentSize();
+    this._updateRenderedRange();
+  }
+  onContentScrolled() {
+    this._updateRenderedRange();
+  }
+  onDataLengthChanged() {
+    this._updateTotalContentSize();
+    this._updateRenderedRange();
+  }
+  onContentRendered() {
+  }
+  onRenderedOffsetChanged() {
+  }
+  scrollToIndex(index, behavior) {
+    if (this._viewport) {
+      this._viewport.scrollToOffset(index * this._itemSize, behavior);
+    }
+  }
+  _updateTotalContentSize() {
+    if (!this._viewport) {
+      return;
+    }
+    this._viewport.setTotalContentSize(this._viewport.getDataLength() * this._itemSize);
+  }
+  _updateRenderedRange() {
+    if (!this._viewport) {
+      return;
+    }
+    const renderedRange = this._viewport.getRenderedRange();
+    const newRange = {
+      start: renderedRange.start,
+      end: renderedRange.end
+    };
+    const viewportSize = this._viewport.getViewportSize();
+    const dataLength = this._viewport.getDataLength();
+    let scrollOffset = this._viewport.measureScrollOffset();
+    let firstVisibleIndex = this._itemSize > 0 ? scrollOffset / this._itemSize : 0;
+    if (newRange.end > dataLength) {
+      const maxVisibleItems = Math.ceil(viewportSize / this._itemSize);
+      const newVisibleIndex = Math.max(0, Math.min(firstVisibleIndex, dataLength - maxVisibleItems));
+      if (firstVisibleIndex != newVisibleIndex) {
+        firstVisibleIndex = newVisibleIndex;
+        scrollOffset = newVisibleIndex * this._itemSize;
+        newRange.start = Math.floor(firstVisibleIndex);
+      }
+      newRange.end = Math.max(0, Math.min(dataLength, newRange.start + maxVisibleItems));
+    }
+    const startBuffer = scrollOffset - newRange.start * this._itemSize;
+    if (startBuffer < this._minBufferPx && newRange.start != 0) {
+      const expandStart = Math.ceil((this._maxBufferPx - startBuffer) / this._itemSize);
+      newRange.start = Math.max(0, newRange.start - expandStart);
+      newRange.end = Math.min(dataLength, Math.ceil(firstVisibleIndex + (viewportSize + this._minBufferPx) / this._itemSize));
+    } else {
+      const endBuffer = newRange.end * this._itemSize - (scrollOffset + viewportSize);
+      if (endBuffer < this._minBufferPx && newRange.end != dataLength) {
+        const expandEnd = Math.ceil((this._maxBufferPx - endBuffer) / this._itemSize);
+        if (expandEnd > 0) {
+          newRange.end = Math.min(dataLength, newRange.end + expandEnd);
+          newRange.start = Math.max(0, Math.floor(firstVisibleIndex - this._minBufferPx / this._itemSize));
+        }
+      }
+    }
+    this._viewport.setRenderedRange(newRange);
+    this._viewport.setRenderedContentOffset(Math.round(this._itemSize * newRange.start));
+    this._scrolledIndexChange.next(Math.floor(firstVisibleIndex));
+  }
+};
+function _fixedSizeVirtualScrollStrategyFactory(fixedSizeDir) {
+  return fixedSizeDir._scrollStrategy;
+}
+var CdkFixedSizeVirtualScroll = class _CdkFixedSizeVirtualScroll {
+  get itemSize() {
+    return this._itemSize;
+  }
+  set itemSize(value) {
+    this._itemSize = coerceNumberProperty(value);
+  }
+  _itemSize = 20;
+  get minBufferPx() {
+    return this._minBufferPx;
+  }
+  set minBufferPx(value) {
+    this._minBufferPx = coerceNumberProperty(value);
+  }
+  _minBufferPx = 100;
+  get maxBufferPx() {
+    return this._maxBufferPx;
+  }
+  set maxBufferPx(value) {
+    this._maxBufferPx = coerceNumberProperty(value);
+  }
+  _maxBufferPx = 200;
+  _scrollStrategy = new FixedSizeVirtualScrollStrategy(this.itemSize, this.minBufferPx, this.maxBufferPx);
+  ngOnChanges() {
+    this._scrollStrategy.updateItemAndBufferSize(this.itemSize, this.minBufferPx, this.maxBufferPx);
+  }
+  static \u0275fac = function CdkFixedSizeVirtualScroll_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _CdkFixedSizeVirtualScroll)();
+  };
+  static \u0275dir = /* @__PURE__ */ \u0275\u0275defineDirective({
+    type: _CdkFixedSizeVirtualScroll,
+    selectors: [["cdk-virtual-scroll-viewport", "itemSize", ""]],
+    inputs: {
+      itemSize: "itemSize",
+      minBufferPx: "minBufferPx",
+      maxBufferPx: "maxBufferPx"
+    },
+    features: [\u0275\u0275ProvidersFeature([{
+      provide: VIRTUAL_SCROLL_STRATEGY,
+      useFactory: _fixedSizeVirtualScrollStrategyFactory,
+      deps: [forwardRef(() => _CdkFixedSizeVirtualScroll)]
+    }]), \u0275\u0275NgOnChangesFeature]
+  });
+};
+(() => {
+  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(CdkFixedSizeVirtualScroll, [{
+    type: Directive,
+    args: [{
+      selector: "cdk-virtual-scroll-viewport[itemSize]",
+      providers: [{
+        provide: VIRTUAL_SCROLL_STRATEGY,
+        useFactory: _fixedSizeVirtualScrollStrategyFactory,
+        deps: [forwardRef(() => CdkFixedSizeVirtualScroll)]
+      }]
+    }]
+  }], null, {
+    itemSize: [{
+      type: Input
+    }],
+    minBufferPx: [{
+      type: Input
+    }],
+    maxBufferPx: [{
+      type: Input
+    }]
+  });
+})();
+var DEFAULT_SCROLL_TIME = 20;
+var ScrollDispatcher = class _ScrollDispatcher {
+  _ngZone = inject2(NgZone);
+  _platform = inject2(Platform);
+  _renderer = inject2(RendererFactory2).createRenderer(null, null);
+  _cleanupGlobalListener;
+  constructor() {
+  }
+  _scrolled = new Subject();
+  _scrolledCount = 0;
+  scrollContainers = /* @__PURE__ */ new Map();
+  register(scrollable) {
+    if (!this.scrollContainers.has(scrollable)) {
+      this.scrollContainers.set(scrollable, scrollable.elementScrolled().subscribe(() => this._scrolled.next(scrollable)));
+    }
+  }
+  deregister(scrollable) {
+    const scrollableReference = this.scrollContainers.get(scrollable);
+    if (scrollableReference) {
+      scrollableReference.unsubscribe();
+      this.scrollContainers.delete(scrollable);
+    }
+  }
+  scrolled(auditTimeInMs = DEFAULT_SCROLL_TIME) {
+    if (!this._platform.isBrowser) {
+      return of();
+    }
+    return new Observable((observer) => {
+      if (!this._cleanupGlobalListener) {
+        this._cleanupGlobalListener = this._ngZone.runOutsideAngular(() => this._renderer.listen("document", "scroll", () => this._scrolled.next()));
+      }
+      const subscription = auditTimeInMs > 0 ? this._scrolled.pipe(auditTime(auditTimeInMs)).subscribe(observer) : this._scrolled.subscribe(observer);
+      this._scrolledCount++;
+      return () => {
+        subscription.unsubscribe();
+        this._scrolledCount--;
+        if (!this._scrolledCount) {
+          this._cleanupGlobalListener?.();
+          this._cleanupGlobalListener = void 0;
+        }
+      };
+    });
+  }
+  ngOnDestroy() {
+    this._cleanupGlobalListener?.();
+    this._cleanupGlobalListener = void 0;
+    this.scrollContainers.forEach((_, container) => this.deregister(container));
+    this._scrolled.complete();
+  }
+  ancestorScrolled(elementOrElementRef, auditTimeInMs) {
+    const ancestors = this.getAncestorScrollContainers(elementOrElementRef);
+    return this.scrolled(auditTimeInMs).pipe(filter((target) => !target || ancestors.indexOf(target) > -1));
+  }
+  getAncestorScrollContainers(elementOrElementRef) {
+    const scrollingContainers = [];
+    this.scrollContainers.forEach((_subscription, scrollable) => {
+      if (this._scrollableContainsElement(scrollable, elementOrElementRef)) {
+        scrollingContainers.push(scrollable);
+      }
+    });
+    return scrollingContainers;
+  }
+  _scrollableContainsElement(scrollable, elementOrElementRef) {
+    let element = coerceElement(elementOrElementRef);
+    let scrollableElement = scrollable.getElementRef().nativeElement;
+    do {
+      if (element == scrollableElement) {
+        return true;
+      }
+    } while (element = element.parentElement);
+    return false;
+  }
+  static \u0275fac = function ScrollDispatcher_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _ScrollDispatcher)();
+  };
+  static \u0275prov = /* @__PURE__ */ \u0275\u0275defineInjectable({
+    token: _ScrollDispatcher,
+    factory: _ScrollDispatcher.\u0275fac,
+    providedIn: "root"
+  });
+};
+(() => {
+  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(ScrollDispatcher, [{
+    type: Injectable,
+    args: [{
+      providedIn: "root"
+    }]
+  }], () => [], null);
+})();
+var CdkScrollable = class _CdkScrollable {
+  elementRef = inject2(ElementRef);
+  scrollDispatcher = inject2(ScrollDispatcher);
+  ngZone = inject2(NgZone);
+  dir = inject2(Directionality, {
+    optional: true
+  });
+  _scrollElement = this.elementRef.nativeElement;
+  _destroyed = new Subject();
+  _renderer = inject2(Renderer2);
+  _cleanupScroll;
+  _elementScrolled = new Subject();
+  constructor() {
+  }
+  ngOnInit() {
+    this._cleanupScroll = this.ngZone.runOutsideAngular(() => this._renderer.listen(this._scrollElement, "scroll", (event) => this._elementScrolled.next(event)));
+    this.scrollDispatcher.register(this);
+  }
+  ngOnDestroy() {
+    this._cleanupScroll?.();
+    this._elementScrolled.complete();
+    this.scrollDispatcher.deregister(this);
+    this._destroyed.next();
+    this._destroyed.complete();
+  }
+  elementScrolled() {
+    return this._elementScrolled;
+  }
+  getElementRef() {
+    return this.elementRef;
+  }
+  scrollTo(options) {
+    const el = this.elementRef.nativeElement;
+    const isRtl = this.dir && this.dir.value == "rtl";
+    if (options.left == null) {
+      options.left = isRtl ? options.end : options.start;
+    }
+    if (options.right == null) {
+      options.right = isRtl ? options.start : options.end;
+    }
+    if (options.bottom != null) {
+      options.top = el.scrollHeight - el.clientHeight - options.bottom;
+    }
+    if (isRtl && getRtlScrollAxisType() != RtlScrollAxisType.NORMAL) {
+      if (options.left != null) {
+        options.right = el.scrollWidth - el.clientWidth - options.left;
+      }
+      if (getRtlScrollAxisType() == RtlScrollAxisType.INVERTED) {
+        options.left = options.right;
+      } else if (getRtlScrollAxisType() == RtlScrollAxisType.NEGATED) {
+        options.left = options.right ? -options.right : options.right;
+      }
+    } else {
+      if (options.right != null) {
+        options.left = el.scrollWidth - el.clientWidth - options.right;
+      }
+    }
+    this._applyScrollToOptions(options);
+  }
+  _applyScrollToOptions(options) {
+    const el = this.elementRef.nativeElement;
+    if (supportsScrollBehavior()) {
+      el.scrollTo(options);
+    } else {
+      if (options.top != null) {
+        el.scrollTop = options.top;
+      }
+      if (options.left != null) {
+        el.scrollLeft = options.left;
+      }
+    }
+  }
+  measureScrollOffset(from2) {
+    const LEFT = "left";
+    const RIGHT = "right";
+    const el = this.elementRef.nativeElement;
+    if (from2 == "top") {
+      return el.scrollTop;
+    }
+    if (from2 == "bottom") {
+      return el.scrollHeight - el.clientHeight - el.scrollTop;
+    }
+    const isRtl = this.dir && this.dir.value == "rtl";
+    if (from2 == "start") {
+      from2 = isRtl ? RIGHT : LEFT;
+    } else if (from2 == "end") {
+      from2 = isRtl ? LEFT : RIGHT;
+    }
+    if (isRtl && getRtlScrollAxisType() == RtlScrollAxisType.INVERTED) {
+      if (from2 == LEFT) {
+        return el.scrollWidth - el.clientWidth - el.scrollLeft;
+      } else {
+        return el.scrollLeft;
+      }
+    } else if (isRtl && getRtlScrollAxisType() == RtlScrollAxisType.NEGATED) {
+      if (from2 == LEFT) {
+        return el.scrollLeft + el.scrollWidth - el.clientWidth;
+      } else {
+        return -el.scrollLeft;
+      }
+    } else {
+      if (from2 == LEFT) {
+        return el.scrollLeft;
+      } else {
+        return el.scrollWidth - el.clientWidth - el.scrollLeft;
+      }
+    }
+  }
+  static \u0275fac = function CdkScrollable_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _CdkScrollable)();
+  };
+  static \u0275dir = /* @__PURE__ */ \u0275\u0275defineDirective({
+    type: _CdkScrollable,
+    selectors: [["", "cdk-scrollable", ""], ["", "cdkScrollable", ""]]
+  });
+};
+(() => {
+  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(CdkScrollable, [{
+    type: Directive,
+    args: [{
+      selector: "[cdk-scrollable], [cdkScrollable]"
+    }]
+  }], () => [], null);
+})();
+var DEFAULT_RESIZE_TIME = 20;
+var ViewportRuler = class _ViewportRuler {
+  _platform = inject2(Platform);
+  _listeners;
+  _viewportSize = null;
+  _change = new Subject();
+  _document = inject2(DOCUMENT);
+  constructor() {
+    const ngZone = inject2(NgZone);
+    const renderer = inject2(RendererFactory2).createRenderer(null, null);
+    ngZone.runOutsideAngular(() => {
+      if (this._platform.isBrowser) {
+        const changeListener = (event) => this._change.next(event);
+        this._listeners = [renderer.listen("window", "resize", changeListener), renderer.listen("window", "orientationchange", changeListener)];
+      }
+      this.change().subscribe(() => this._viewportSize = null);
+    });
+  }
+  ngOnDestroy() {
+    this._listeners?.forEach((cleanup) => cleanup());
+    this._change.complete();
+  }
+  getViewportSize() {
+    if (!this._viewportSize) {
+      this._updateViewportSize();
+    }
+    const output = {
+      width: this._viewportSize.width,
+      height: this._viewportSize.height
+    };
+    if (!this._platform.isBrowser) {
+      this._viewportSize = null;
+    }
+    return output;
+  }
+  getViewportRect() {
+    const scrollPosition = this.getViewportScrollPosition();
+    const {
+      width,
+      height
+    } = this.getViewportSize();
+    return {
+      top: scrollPosition.top,
+      left: scrollPosition.left,
+      bottom: scrollPosition.top + height,
+      right: scrollPosition.left + width,
+      height,
+      width
+    };
+  }
+  getViewportScrollPosition() {
+    if (!this._platform.isBrowser) {
+      return {
+        top: 0,
+        left: 0
+      };
+    }
+    const document2 = this._document;
+    const window2 = this._getWindow();
+    const documentElement = document2.documentElement;
+    const documentRect = documentElement.getBoundingClientRect();
+    const top = -documentRect.top || document2.body?.scrollTop || window2.scrollY || documentElement.scrollTop || 0;
+    const left = -documentRect.left || document2.body?.scrollLeft || window2.scrollX || documentElement.scrollLeft || 0;
+    return {
+      top,
+      left
+    };
+  }
+  change(throttleTime = DEFAULT_RESIZE_TIME) {
+    return throttleTime > 0 ? this._change.pipe(auditTime(throttleTime)) : this._change;
+  }
+  _getWindow() {
+    return this._document.defaultView || window;
+  }
+  _updateViewportSize() {
+    const window2 = this._getWindow();
+    this._viewportSize = this._platform.isBrowser ? {
+      width: window2.innerWidth,
+      height: window2.innerHeight
+    } : {
+      width: 0,
+      height: 0
+    };
+  }
+  static \u0275fac = function ViewportRuler_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _ViewportRuler)();
+  };
+  static \u0275prov = /* @__PURE__ */ \u0275\u0275defineInjectable({
+    token: _ViewportRuler,
+    factory: _ViewportRuler.\u0275fac,
+    providedIn: "root"
+  });
+};
+(() => {
+  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(ViewportRuler, [{
+    type: Injectable,
+    args: [{
+      providedIn: "root"
+    }]
+  }], () => [], null);
+})();
+var VIRTUAL_SCROLLABLE = new InjectionToken("VIRTUAL_SCROLLABLE");
+var CdkVirtualScrollable = class _CdkVirtualScrollable extends CdkScrollable {
+  constructor() {
+    super();
+  }
+  measureViewportSize(orientation) {
+    const viewportEl = this.elementRef.nativeElement;
+    return orientation === "horizontal" ? viewportEl.clientWidth : viewportEl.clientHeight;
+  }
+  static \u0275fac = function CdkVirtualScrollable_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _CdkVirtualScrollable)();
+  };
+  static \u0275dir = /* @__PURE__ */ \u0275\u0275defineDirective({
+    type: _CdkVirtualScrollable,
+    features: [\u0275\u0275InheritDefinitionFeature]
+  });
+};
+(() => {
+  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(CdkVirtualScrollable, [{
+    type: Directive
+  }], () => [], null);
+})();
+function rangesEqual(r1, r2) {
+  return r1.start == r2.start && r1.end == r2.end;
+}
+var SCROLL_SCHEDULER = typeof requestAnimationFrame !== "undefined" ? animationFrameScheduler : asapScheduler;
+var CDK_VIRTUAL_SCROLL_VIEWPORT = new InjectionToken("CDK_VIRTUAL_SCROLL_VIEWPORT");
+var CdkVirtualScrollViewport = class _CdkVirtualScrollViewport extends CdkVirtualScrollable {
+  elementRef = inject2(ElementRef);
+  _changeDetectorRef = inject2(ChangeDetectorRef);
+  _scrollStrategy = inject2(VIRTUAL_SCROLL_STRATEGY, {
+    optional: true
+  });
+  scrollable = inject2(VIRTUAL_SCROLLABLE, {
+    optional: true
+  });
+  _platform = inject2(Platform);
+  _detachedSubject = new Subject();
+  _renderedRangeSubject = new Subject();
+  _renderedContentOffsetSubject = new Subject();
+  get orientation() {
+    return this._orientation;
+  }
+  set orientation(orientation) {
+    if (this._orientation !== orientation) {
+      this._orientation = orientation;
+      this._calculateSpacerSize();
+    }
+  }
+  _orientation = "vertical";
+  appendOnly = false;
+  scrolledIndexChange = new Observable((observer) => this._scrollStrategy.scrolledIndexChange.subscribe((index) => Promise.resolve().then(() => this.ngZone.run(() => observer.next(index)))));
+  _contentWrapper;
+  renderedRangeStream = this._renderedRangeSubject;
+  renderedContentOffset = this._renderedContentOffsetSubject.pipe(filter((offset) => offset !== null), distinctUntilChanged());
+  _totalContentSize = 0;
+  _totalContentWidth = signal("", ...ngDevMode ? [{
+    debugName: "_totalContentWidth"
+  }] : []);
+  _totalContentHeight = signal("", ...ngDevMode ? [{
+    debugName: "_totalContentHeight"
+  }] : []);
+  _renderedContentTransform;
+  _renderedRange = {
+    start: 0,
+    end: 0
+  };
+  _dataLength = 0;
+  _viewportSize = 0;
+  _forOf = null;
+  _renderedContentOffset = 0;
+  _renderedContentOffsetNeedsRewrite = false;
+  _changeDetectionNeeded = signal(false, ...ngDevMode ? [{
+    debugName: "_changeDetectionNeeded"
+  }] : []);
+  _runAfterChangeDetection = [];
+  _viewportChanges = Subscription.EMPTY;
+  _injector = inject2(Injector);
+  _isDestroyed = false;
+  constructor() {
+    super();
+    const viewportRuler = inject2(ViewportRuler);
+    if (!this._scrollStrategy && (typeof ngDevMode === "undefined" || ngDevMode)) {
+      throw Error('Error: cdk-virtual-scroll-viewport requires the "itemSize" property to be set.');
+    }
+    this._viewportChanges = viewportRuler.change().subscribe(() => {
+      this.checkViewportSize();
+    });
+    if (!this.scrollable) {
+      this.elementRef.nativeElement.classList.add("cdk-virtual-scrollable");
+      this.scrollable = this;
+    }
+    const ref = effect(() => {
+      if (this._changeDetectionNeeded()) {
+        this._doChangeDetection();
+      }
+    }, __spreadProps(__spreadValues({}, ngDevMode ? {
+      debugName: "ref"
+    } : {}), {
+      injector: inject2(ApplicationRef).injector
+    }));
+    inject2(DestroyRef).onDestroy(() => void ref.destroy());
+  }
+  ngOnInit() {
+    if (!this._platform.isBrowser) {
+      return;
+    }
+    if (this.scrollable === this) {
+      super.ngOnInit();
+    }
+    this.ngZone.runOutsideAngular(() => Promise.resolve().then(() => {
+      this._measureViewportSize();
+      this._scrollStrategy.attach(this);
+      this.scrollable.elementScrolled().pipe(startWith(null), auditTime(0, SCROLL_SCHEDULER), takeUntil(this._destroyed)).subscribe(() => this._scrollStrategy.onContentScrolled());
+      this._markChangeDetectionNeeded();
+    }));
+  }
+  ngOnDestroy() {
+    this.detach();
+    this._scrollStrategy.detach();
+    this._renderedRangeSubject.complete();
+    this._detachedSubject.complete();
+    this._viewportChanges.unsubscribe();
+    this._isDestroyed = true;
+    super.ngOnDestroy();
+  }
+  attach(forOf) {
+    if (this._forOf && (typeof ngDevMode === "undefined" || ngDevMode)) {
+      throw Error("CdkVirtualScrollViewport is already attached.");
+    }
+    this.ngZone.runOutsideAngular(() => {
+      this._forOf = forOf;
+      this._forOf.dataStream.pipe(takeUntil(this._detachedSubject)).subscribe((data) => {
+        const newLength = data.length;
+        if (newLength !== this._dataLength) {
+          this._dataLength = newLength;
+          this._scrollStrategy.onDataLengthChanged();
+        }
+        this._doChangeDetection();
+      });
+    });
+  }
+  detach() {
+    this._forOf = null;
+    this._detachedSubject.next();
+  }
+  getDataLength() {
+    return this._dataLength;
+  }
+  getViewportSize() {
+    return this._viewportSize;
+  }
+  getRenderedRange() {
+    return this._renderedRange;
+  }
+  measureBoundingClientRectWithScrollOffset(from2) {
+    return this.getElementRef().nativeElement.getBoundingClientRect()[from2];
+  }
+  setTotalContentSize(size) {
+    if (this._totalContentSize !== size) {
+      this._totalContentSize = size;
+      this._calculateSpacerSize();
+      this._markChangeDetectionNeeded();
+    }
+  }
+  setRenderedRange(range) {
+    if (!rangesEqual(this._renderedRange, range)) {
+      if (this.appendOnly) {
+        range = {
+          start: 0,
+          end: Math.max(this._renderedRange.end, range.end)
+        };
+      }
+      this._renderedRangeSubject.next(this._renderedRange = range);
+      this._markChangeDetectionNeeded(() => this._scrollStrategy.onContentRendered());
+    }
+  }
+  getOffsetToRenderedContentStart() {
+    return this._renderedContentOffsetNeedsRewrite ? null : this._renderedContentOffset;
+  }
+  setRenderedContentOffset(offset, to = "to-start") {
+    offset = this.appendOnly && to === "to-start" ? 0 : offset;
+    const isRtl = this.dir && this.dir.value == "rtl";
+    const isHorizontal = this.orientation == "horizontal";
+    const axis = isHorizontal ? "X" : "Y";
+    const axisDirection = isHorizontal && isRtl ? -1 : 1;
+    let transform = `translate${axis}(${Number(axisDirection * offset)}px)`;
+    this._renderedContentOffset = offset;
+    if (to === "to-end") {
+      transform += ` translate${axis}(-100%)`;
+      this._renderedContentOffsetNeedsRewrite = true;
+    }
+    if (this._renderedContentTransform != transform) {
+      this._renderedContentTransform = transform;
+      this._markChangeDetectionNeeded(() => {
+        if (this._renderedContentOffsetNeedsRewrite) {
+          this._renderedContentOffset -= this.measureRenderedContentSize();
+          this._renderedContentOffsetNeedsRewrite = false;
+          this.setRenderedContentOffset(this._renderedContentOffset);
+        } else {
+          this._scrollStrategy.onRenderedOffsetChanged();
+        }
+      });
+    }
+  }
+  scrollToOffset(offset, behavior = "auto") {
+    const options = {
+      behavior
+    };
+    if (this.orientation === "horizontal") {
+      options.start = offset;
+    } else {
+      options.top = offset;
+    }
+    this.scrollable.scrollTo(options);
+  }
+  scrollToIndex(index, behavior = "auto") {
+    this._scrollStrategy.scrollToIndex(index, behavior);
+  }
+  measureScrollOffset(from2) {
+    let measureScrollOffset;
+    if (this.scrollable == this) {
+      measureScrollOffset = (_from) => super.measureScrollOffset(_from);
+    } else {
+      measureScrollOffset = (_from) => this.scrollable.measureScrollOffset(_from);
+    }
+    return Math.max(0, measureScrollOffset(from2 ?? (this.orientation === "horizontal" ? "start" : "top")) - this.measureViewportOffset());
+  }
+  measureViewportOffset(from2) {
+    let fromRect;
+    const LEFT = "left";
+    const RIGHT = "right";
+    const isRtl = this.dir?.value == "rtl";
+    if (from2 == "start") {
+      fromRect = isRtl ? RIGHT : LEFT;
+    } else if (from2 == "end") {
+      fromRect = isRtl ? LEFT : RIGHT;
+    } else if (from2) {
+      fromRect = from2;
+    } else {
+      fromRect = this.orientation === "horizontal" ? "left" : "top";
+    }
+    const scrollerClientRect = this.scrollable.measureBoundingClientRectWithScrollOffset(fromRect);
+    const viewportClientRect = this.elementRef.nativeElement.getBoundingClientRect()[fromRect];
+    return viewportClientRect - scrollerClientRect;
+  }
+  measureRenderedContentSize() {
+    const contentEl = this._contentWrapper.nativeElement;
+    return this.orientation === "horizontal" ? contentEl.offsetWidth : contentEl.offsetHeight;
+  }
+  measureRangeSize(range) {
+    if (!this._forOf) {
+      return 0;
+    }
+    return this._forOf.measureRangeSize(range, this.orientation);
+  }
+  checkViewportSize() {
+    this._measureViewportSize();
+    this._scrollStrategy.onDataLengthChanged();
+  }
+  _measureViewportSize() {
+    this._viewportSize = this.scrollable.measureViewportSize(this.orientation);
+  }
+  _markChangeDetectionNeeded(runAfter) {
+    if (runAfter) {
+      this._runAfterChangeDetection.push(runAfter);
+    }
+    if (untracked2(this._changeDetectionNeeded)) {
+      return;
+    }
+    this.ngZone.runOutsideAngular(() => {
+      Promise.resolve().then(() => {
+        this.ngZone.run(() => {
+          this._changeDetectionNeeded.set(true);
+        });
+      });
+    });
+  }
+  _doChangeDetection() {
+    if (this._isDestroyed) {
+      return;
+    }
+    this.ngZone.run(() => {
+      this._changeDetectorRef.markForCheck();
+      this._contentWrapper.nativeElement.style.transform = this._renderedContentTransform;
+      this._renderedContentOffsetSubject.next(this.getOffsetToRenderedContentStart());
+      afterNextRender(() => {
+        this._changeDetectionNeeded.set(false);
+        const runAfterChangeDetection = this._runAfterChangeDetection;
+        this._runAfterChangeDetection = [];
+        for (const fn of runAfterChangeDetection) {
+          fn();
+        }
+      }, {
+        injector: this._injector
+      });
+    });
+  }
+  _calculateSpacerSize() {
+    this._totalContentHeight.set(this.orientation === "horizontal" ? "" : `${this._totalContentSize}px`);
+    this._totalContentWidth.set(this.orientation === "horizontal" ? `${this._totalContentSize}px` : "");
+  }
+  static \u0275fac = function CdkVirtualScrollViewport_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _CdkVirtualScrollViewport)();
+  };
+  static \u0275cmp = /* @__PURE__ */ \u0275\u0275defineComponent({
+    type: _CdkVirtualScrollViewport,
+    selectors: [["cdk-virtual-scroll-viewport"]],
+    viewQuery: function CdkVirtualScrollViewport_Query(rf, ctx) {
+      if (rf & 1) {
+        \u0275\u0275viewQuery(_c0, 7);
+      }
+      if (rf & 2) {
+        let _t;
+        \u0275\u0275queryRefresh(_t = \u0275\u0275loadQuery()) && (ctx._contentWrapper = _t.first);
+      }
+    },
+    hostAttrs: [1, "cdk-virtual-scroll-viewport"],
+    hostVars: 4,
+    hostBindings: function CdkVirtualScrollViewport_HostBindings(rf, ctx) {
+      if (rf & 2) {
+        \u0275\u0275classProp("cdk-virtual-scroll-orientation-horizontal", ctx.orientation === "horizontal")("cdk-virtual-scroll-orientation-vertical", ctx.orientation !== "horizontal");
+      }
+    },
+    inputs: {
+      orientation: "orientation",
+      appendOnly: [2, "appendOnly", "appendOnly", booleanAttribute]
+    },
+    outputs: {
+      scrolledIndexChange: "scrolledIndexChange"
+    },
+    features: [\u0275\u0275ProvidersFeature([{
+      provide: CdkScrollable,
+      useFactory: () => inject2(VIRTUAL_SCROLLABLE, {
+        optional: true
+      }) || inject2(_CdkVirtualScrollViewport)
+    }, {
+      provide: CDK_VIRTUAL_SCROLL_VIEWPORT,
+      useExisting: _CdkVirtualScrollViewport
+    }]), \u0275\u0275InheritDefinitionFeature],
+    ngContentSelectors: _c1,
+    decls: 4,
+    vars: 4,
+    consts: [["contentWrapper", ""], [1, "cdk-virtual-scroll-content-wrapper"], [1, "cdk-virtual-scroll-spacer"]],
+    template: function CdkVirtualScrollViewport_Template(rf, ctx) {
+      if (rf & 1) {
+        \u0275\u0275projectionDef();
+        \u0275\u0275domElementStart(0, "div", 1, 0);
+        \u0275\u0275projection(2);
+        \u0275\u0275domElementEnd();
+        \u0275\u0275domElement(3, "div", 2);
+      }
+      if (rf & 2) {
+        \u0275\u0275advance(3);
+        \u0275\u0275styleProp("width", ctx._totalContentWidth())("height", ctx._totalContentHeight());
+      }
+    },
+    styles: ["cdk-virtual-scroll-viewport {\n  display: block;\n  position: relative;\n  transform: translateZ(0);\n}\n\n.cdk-virtual-scrollable {\n  overflow: auto;\n  will-change: scroll-position;\n  contain: strict;\n}\n\n.cdk-virtual-scroll-content-wrapper {\n  position: absolute;\n  top: 0;\n  left: 0;\n  contain: content;\n}\n[dir=rtl] .cdk-virtual-scroll-content-wrapper {\n  right: 0;\n  left: auto;\n}\n\n.cdk-virtual-scroll-orientation-horizontal .cdk-virtual-scroll-content-wrapper {\n  min-height: 100%;\n}\n.cdk-virtual-scroll-orientation-horizontal .cdk-virtual-scroll-content-wrapper > dl:not([cdkVirtualFor]), .cdk-virtual-scroll-orientation-horizontal .cdk-virtual-scroll-content-wrapper > ol:not([cdkVirtualFor]), .cdk-virtual-scroll-orientation-horizontal .cdk-virtual-scroll-content-wrapper > table:not([cdkVirtualFor]), .cdk-virtual-scroll-orientation-horizontal .cdk-virtual-scroll-content-wrapper > ul:not([cdkVirtualFor]) {\n  padding-left: 0;\n  padding-right: 0;\n  margin-left: 0;\n  margin-right: 0;\n  border-left-width: 0;\n  border-right-width: 0;\n  outline: none;\n}\n\n.cdk-virtual-scroll-orientation-vertical .cdk-virtual-scroll-content-wrapper {\n  min-width: 100%;\n}\n.cdk-virtual-scroll-orientation-vertical .cdk-virtual-scroll-content-wrapper > dl:not([cdkVirtualFor]), .cdk-virtual-scroll-orientation-vertical .cdk-virtual-scroll-content-wrapper > ol:not([cdkVirtualFor]), .cdk-virtual-scroll-orientation-vertical .cdk-virtual-scroll-content-wrapper > table:not([cdkVirtualFor]), .cdk-virtual-scroll-orientation-vertical .cdk-virtual-scroll-content-wrapper > ul:not([cdkVirtualFor]) {\n  padding-top: 0;\n  padding-bottom: 0;\n  margin-top: 0;\n  margin-bottom: 0;\n  border-top-width: 0;\n  border-bottom-width: 0;\n  outline: none;\n}\n\n.cdk-virtual-scroll-spacer {\n  height: 1px;\n  transform-origin: 0 0;\n  flex: 0 0 auto;\n}\n[dir=rtl] .cdk-virtual-scroll-spacer {\n  transform-origin: 100% 0;\n}\n"],
+    encapsulation: 2,
+    changeDetection: 0
+  });
+};
+(() => {
+  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(CdkVirtualScrollViewport, [{
+    type: Component,
+    args: [{
+      selector: "cdk-virtual-scroll-viewport",
+      host: {
+        "class": "cdk-virtual-scroll-viewport",
+        "[class.cdk-virtual-scroll-orientation-horizontal]": 'orientation === "horizontal"',
+        "[class.cdk-virtual-scroll-orientation-vertical]": 'orientation !== "horizontal"'
+      },
+      encapsulation: ViewEncapsulation.None,
+      changeDetection: ChangeDetectionStrategy.OnPush,
+      providers: [{
+        provide: CdkScrollable,
+        useFactory: () => inject2(VIRTUAL_SCROLLABLE, {
+          optional: true
+        }) || inject2(CdkVirtualScrollViewport)
+      }, {
+        provide: CDK_VIRTUAL_SCROLL_VIEWPORT,
+        useExisting: CdkVirtualScrollViewport
+      }],
+      template: '<!--\n  Wrap the rendered content in an element that will be used to offset it based on the scroll\n  position.\n-->\n<div #contentWrapper class="cdk-virtual-scroll-content-wrapper">\n  <ng-content></ng-content>\n</div>\n<!--\n  Spacer used to force the scrolling container to the correct size for the *total* number of items\n  so that the scrollbar captures the size of the entire data set.\n-->\n<div class="cdk-virtual-scroll-spacer"\n     [style.width]="_totalContentWidth()" [style.height]="_totalContentHeight()"></div>\n',
+      styles: ["cdk-virtual-scroll-viewport {\n  display: block;\n  position: relative;\n  transform: translateZ(0);\n}\n\n.cdk-virtual-scrollable {\n  overflow: auto;\n  will-change: scroll-position;\n  contain: strict;\n}\n\n.cdk-virtual-scroll-content-wrapper {\n  position: absolute;\n  top: 0;\n  left: 0;\n  contain: content;\n}\n[dir=rtl] .cdk-virtual-scroll-content-wrapper {\n  right: 0;\n  left: auto;\n}\n\n.cdk-virtual-scroll-orientation-horizontal .cdk-virtual-scroll-content-wrapper {\n  min-height: 100%;\n}\n.cdk-virtual-scroll-orientation-horizontal .cdk-virtual-scroll-content-wrapper > dl:not([cdkVirtualFor]), .cdk-virtual-scroll-orientation-horizontal .cdk-virtual-scroll-content-wrapper > ol:not([cdkVirtualFor]), .cdk-virtual-scroll-orientation-horizontal .cdk-virtual-scroll-content-wrapper > table:not([cdkVirtualFor]), .cdk-virtual-scroll-orientation-horizontal .cdk-virtual-scroll-content-wrapper > ul:not([cdkVirtualFor]) {\n  padding-left: 0;\n  padding-right: 0;\n  margin-left: 0;\n  margin-right: 0;\n  border-left-width: 0;\n  border-right-width: 0;\n  outline: none;\n}\n\n.cdk-virtual-scroll-orientation-vertical .cdk-virtual-scroll-content-wrapper {\n  min-width: 100%;\n}\n.cdk-virtual-scroll-orientation-vertical .cdk-virtual-scroll-content-wrapper > dl:not([cdkVirtualFor]), .cdk-virtual-scroll-orientation-vertical .cdk-virtual-scroll-content-wrapper > ol:not([cdkVirtualFor]), .cdk-virtual-scroll-orientation-vertical .cdk-virtual-scroll-content-wrapper > table:not([cdkVirtualFor]), .cdk-virtual-scroll-orientation-vertical .cdk-virtual-scroll-content-wrapper > ul:not([cdkVirtualFor]) {\n  padding-top: 0;\n  padding-bottom: 0;\n  margin-top: 0;\n  margin-bottom: 0;\n  border-top-width: 0;\n  border-bottom-width: 0;\n  outline: none;\n}\n\n.cdk-virtual-scroll-spacer {\n  height: 1px;\n  transform-origin: 0 0;\n  flex: 0 0 auto;\n}\n[dir=rtl] .cdk-virtual-scroll-spacer {\n  transform-origin: 100% 0;\n}\n"]
+    }]
+  }], () => [], {
+    orientation: [{
+      type: Input
+    }],
+    appendOnly: [{
+      type: Input,
+      args: [{
+        transform: booleanAttribute
+      }]
+    }],
+    scrolledIndexChange: [{
+      type: Output
+    }],
+    _contentWrapper: [{
+      type: ViewChild,
+      args: ["contentWrapper", {
+        static: true
+      }]
+    }]
+  });
+})();
+function getOffset(orientation, direction, node) {
+  const el = node;
+  if (!el.getBoundingClientRect) {
+    return 0;
+  }
+  const rect = el.getBoundingClientRect();
+  if (orientation === "horizontal") {
+    return direction === "start" ? rect.left : rect.right;
+  }
+  return direction === "start" ? rect.top : rect.bottom;
+}
+var CdkVirtualForOf = class _CdkVirtualForOf {
+  _viewContainerRef = inject2(ViewContainerRef);
+  _template = inject2(TemplateRef);
+  _differs = inject2(IterableDiffers);
+  _viewRepeater = new _RecycleViewRepeaterStrategy();
+  _viewport = inject2(CDK_VIRTUAL_SCROLL_VIEWPORT, {
+    skipSelf: true
+  });
+  viewChange = new Subject();
+  _dataSourceChanges = new Subject();
+  get cdkVirtualForOf() {
+    return this._cdkVirtualForOf;
+  }
+  set cdkVirtualForOf(value) {
+    this._cdkVirtualForOf = value;
+    if (isDataSource(value)) {
+      this._dataSourceChanges.next(value);
+    } else {
+      this._dataSourceChanges.next(new ArrayDataSource(isObservable(value) ? value : Array.from(value || [])));
+    }
+  }
+  _cdkVirtualForOf;
+  get cdkVirtualForTrackBy() {
+    return this._cdkVirtualForTrackBy;
+  }
+  set cdkVirtualForTrackBy(fn) {
+    this._needsUpdate = true;
+    this._cdkVirtualForTrackBy = fn ? (index, item) => fn(index + (this._renderedRange ? this._renderedRange.start : 0), item) : void 0;
+  }
+  _cdkVirtualForTrackBy;
+  set cdkVirtualForTemplate(value) {
+    if (value) {
+      this._needsUpdate = true;
+      this._template = value;
+    }
+  }
+  get cdkVirtualForTemplateCacheSize() {
+    return this._viewRepeater.viewCacheSize;
+  }
+  set cdkVirtualForTemplateCacheSize(size) {
+    this._viewRepeater.viewCacheSize = coerceNumberProperty(size);
+  }
+  dataStream = this._dataSourceChanges.pipe(startWith(null), pairwise(), switchMap(([prev, cur]) => this._changeDataSource(prev, cur)), shareReplay(1));
+  _differ = null;
+  _data = [];
+  _renderedItems = [];
+  _renderedRange = {
+    start: 0,
+    end: 0
+  };
+  _needsUpdate = false;
+  _destroyed = new Subject();
+  constructor() {
+    const ngZone = inject2(NgZone);
+    this.dataStream.subscribe((data) => {
+      this._data = data;
+      this._onRenderedDataChange();
+    });
+    this._viewport.renderedRangeStream.pipe(takeUntil(this._destroyed)).subscribe((range) => {
+      this._renderedRange = range;
+      if (this.viewChange.observers.length) {
+        ngZone.run(() => this.viewChange.next(this._renderedRange));
+      }
+      this._onRenderedDataChange();
+    });
+    this._viewport.attach(this);
+  }
+  measureRangeSize(range, orientation) {
+    if (range.start >= range.end) {
+      return 0;
+    }
+    if ((range.start < this._renderedRange.start || range.end > this._renderedRange.end) && (typeof ngDevMode === "undefined" || ngDevMode)) {
+      throw Error(`Error: attempted to measure an item that isn't rendered.`);
+    }
+    const renderedStartIndex = range.start - this._renderedRange.start;
+    const rangeLen = range.end - range.start;
+    let firstNode;
+    let lastNode;
+    for (let i = 0; i < rangeLen; i++) {
+      const view = this._viewContainerRef.get(i + renderedStartIndex);
+      if (view && view.rootNodes.length) {
+        firstNode = lastNode = view.rootNodes[0];
+        break;
+      }
+    }
+    for (let i = rangeLen - 1; i > -1; i--) {
+      const view = this._viewContainerRef.get(i + renderedStartIndex);
+      if (view && view.rootNodes.length) {
+        lastNode = view.rootNodes[view.rootNodes.length - 1];
+        break;
+      }
+    }
+    return firstNode && lastNode ? getOffset(orientation, "end", lastNode) - getOffset(orientation, "start", firstNode) : 0;
+  }
+  ngDoCheck() {
+    if (this._differ && this._needsUpdate) {
+      const changes = this._differ.diff(this._renderedItems);
+      if (!changes) {
+        this._updateContext();
+      } else {
+        this._applyChanges(changes);
+      }
+      this._needsUpdate = false;
+    }
+  }
+  ngOnDestroy() {
+    this._viewport.detach();
+    this._dataSourceChanges.next(void 0);
+    this._dataSourceChanges.complete();
+    this.viewChange.complete();
+    this._destroyed.next();
+    this._destroyed.complete();
+    this._viewRepeater.detach();
+  }
+  _onRenderedDataChange() {
+    if (!this._renderedRange) {
+      return;
+    }
+    this._renderedItems = this._data.slice(this._renderedRange.start, this._renderedRange.end);
+    if (!this._differ) {
+      this._differ = this._differs.find(this._renderedItems).create((index, item) => {
+        return this.cdkVirtualForTrackBy ? this.cdkVirtualForTrackBy(index, item) : item;
+      });
+    }
+    this._needsUpdate = true;
+  }
+  _changeDataSource(oldDs, newDs) {
+    if (oldDs) {
+      oldDs.disconnect(this);
+    }
+    this._needsUpdate = true;
+    return newDs ? newDs.connect(this) : of();
+  }
+  _updateContext() {
+    const count = this._data.length;
+    let i = this._viewContainerRef.length;
+    while (i--) {
+      const view = this._viewContainerRef.get(i);
+      view.context.index = this._renderedRange.start + i;
+      view.context.count = count;
+      this._updateComputedContextProperties(view.context);
+      view.detectChanges();
+    }
+  }
+  _applyChanges(changes) {
+    this._viewRepeater.applyChanges(changes, this._viewContainerRef, (record, _adjustedPreviousIndex, currentIndex) => this._getEmbeddedViewArgs(record, currentIndex), (record) => record.item);
+    changes.forEachIdentityChange((record) => {
+      const view = this._viewContainerRef.get(record.currentIndex);
+      view.context.$implicit = record.item;
+    });
+    const count = this._data.length;
+    let i = this._viewContainerRef.length;
+    while (i--) {
+      const view = this._viewContainerRef.get(i);
+      view.context.index = this._renderedRange.start + i;
+      view.context.count = count;
+      this._updateComputedContextProperties(view.context);
+    }
+  }
+  _updateComputedContextProperties(context2) {
+    context2.first = context2.index === 0;
+    context2.last = context2.index === context2.count - 1;
+    context2.even = context2.index % 2 === 0;
+    context2.odd = !context2.even;
+  }
+  _getEmbeddedViewArgs(record, index) {
+    return {
+      templateRef: this._template,
+      context: {
+        $implicit: record.item,
+        cdkVirtualForOf: this._cdkVirtualForOf,
+        index: -1,
+        count: -1,
+        first: false,
+        last: false,
+        odd: false,
+        even: false
+      },
+      index
+    };
+  }
+  static ngTemplateContextGuard(directive, context2) {
+    return true;
+  }
+  static \u0275fac = function CdkVirtualForOf_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _CdkVirtualForOf)();
+  };
+  static \u0275dir = /* @__PURE__ */ \u0275\u0275defineDirective({
+    type: _CdkVirtualForOf,
+    selectors: [["", "cdkVirtualFor", "", "cdkVirtualForOf", ""]],
+    inputs: {
+      cdkVirtualForOf: "cdkVirtualForOf",
+      cdkVirtualForTrackBy: "cdkVirtualForTrackBy",
+      cdkVirtualForTemplate: "cdkVirtualForTemplate",
+      cdkVirtualForTemplateCacheSize: "cdkVirtualForTemplateCacheSize"
+    }
+  });
+};
+(() => {
+  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(CdkVirtualForOf, [{
+    type: Directive,
+    args: [{
+      selector: "[cdkVirtualFor][cdkVirtualForOf]"
+    }]
+  }], () => [], {
+    cdkVirtualForOf: [{
+      type: Input
+    }],
+    cdkVirtualForTrackBy: [{
+      type: Input
+    }],
+    cdkVirtualForTemplate: [{
+      type: Input
+    }],
+    cdkVirtualForTemplateCacheSize: [{
+      type: Input
+    }]
+  });
+})();
+var CdkVirtualScrollableElement = class _CdkVirtualScrollableElement extends CdkVirtualScrollable {
+  constructor() {
+    super();
+  }
+  measureBoundingClientRectWithScrollOffset(from2) {
+    return this.getElementRef().nativeElement.getBoundingClientRect()[from2] - this.measureScrollOffset(from2);
+  }
+  static \u0275fac = function CdkVirtualScrollableElement_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _CdkVirtualScrollableElement)();
+  };
+  static \u0275dir = /* @__PURE__ */ \u0275\u0275defineDirective({
+    type: _CdkVirtualScrollableElement,
+    selectors: [["", "cdkVirtualScrollingElement", ""]],
+    hostAttrs: [1, "cdk-virtual-scrollable"],
+    features: [\u0275\u0275ProvidersFeature([{
+      provide: VIRTUAL_SCROLLABLE,
+      useExisting: _CdkVirtualScrollableElement
+    }]), \u0275\u0275InheritDefinitionFeature]
+  });
+};
+(() => {
+  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(CdkVirtualScrollableElement, [{
+    type: Directive,
+    args: [{
+      selector: "[cdkVirtualScrollingElement]",
+      providers: [{
+        provide: VIRTUAL_SCROLLABLE,
+        useExisting: CdkVirtualScrollableElement
+      }],
+      host: {
+        "class": "cdk-virtual-scrollable"
+      }
+    }]
+  }], () => [], null);
+})();
+var CdkVirtualScrollableWindow = class _CdkVirtualScrollableWindow extends CdkVirtualScrollable {
+  constructor() {
+    super();
+    const document2 = inject2(DOCUMENT);
+    this.elementRef = new ElementRef(document2.documentElement);
+    this._scrollElement = document2;
+  }
+  measureBoundingClientRectWithScrollOffset(from2) {
+    return this.getElementRef().nativeElement.getBoundingClientRect()[from2];
+  }
+  static \u0275fac = function CdkVirtualScrollableWindow_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _CdkVirtualScrollableWindow)();
+  };
+  static \u0275dir = /* @__PURE__ */ \u0275\u0275defineDirective({
+    type: _CdkVirtualScrollableWindow,
+    selectors: [["cdk-virtual-scroll-viewport", "scrollWindow", ""]],
+    features: [\u0275\u0275ProvidersFeature([{
+      provide: VIRTUAL_SCROLLABLE,
+      useExisting: _CdkVirtualScrollableWindow
+    }]), \u0275\u0275InheritDefinitionFeature]
+  });
+};
+(() => {
+  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(CdkVirtualScrollableWindow, [{
+    type: Directive,
+    args: [{
+      selector: "cdk-virtual-scroll-viewport[scrollWindow]",
+      providers: [{
+        provide: VIRTUAL_SCROLLABLE,
+        useExisting: CdkVirtualScrollableWindow
+      }]
+    }]
+  }], () => [], null);
+})();
+var CdkScrollableModule = class _CdkScrollableModule {
+  static \u0275fac = function CdkScrollableModule_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _CdkScrollableModule)();
+  };
+  static \u0275mod = /* @__PURE__ */ \u0275\u0275defineNgModule({
+    type: _CdkScrollableModule,
+    imports: [CdkScrollable],
+    exports: [CdkScrollable]
+  });
+  static \u0275inj = /* @__PURE__ */ \u0275\u0275defineInjector({});
+};
+(() => {
+  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(CdkScrollableModule, [{
+    type: NgModule,
+    args: [{
+      exports: [CdkScrollable],
+      imports: [CdkScrollable]
+    }]
+  }], null, null);
+})();
+var ScrollingModule = class _ScrollingModule {
+  static \u0275fac = function ScrollingModule_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _ScrollingModule)();
+  };
+  static \u0275mod = /* @__PURE__ */ \u0275\u0275defineNgModule({
+    type: _ScrollingModule,
+    imports: [BidiModule, CdkScrollableModule, CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf, CdkVirtualScrollableWindow, CdkVirtualScrollableElement],
+    exports: [BidiModule, CdkScrollableModule, CdkFixedSizeVirtualScroll, CdkVirtualForOf, CdkVirtualScrollViewport, CdkVirtualScrollableWindow, CdkVirtualScrollableElement]
+  });
+  static \u0275inj = /* @__PURE__ */ \u0275\u0275defineInjector({
+    imports: [BidiModule, CdkScrollableModule, BidiModule, CdkScrollableModule]
+  });
+};
+(() => {
+  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(ScrollingModule, [{
+    type: NgModule,
+    args: [{
+      imports: [BidiModule, CdkScrollableModule, CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf, CdkVirtualScrollableWindow, CdkVirtualScrollableElement],
+      exports: [BidiModule, CdkScrollableModule, CdkFixedSizeVirtualScroll, CdkVirtualForOf, CdkVirtualScrollViewport, CdkVirtualScrollableWindow, CdkVirtualScrollableElement]
+    }]
+  }], null, null);
+})();
+
 // src/app/services/Comentario.service.ts
 var ComentarioService = class _ComentarioService {
   http;
-  apiUrl = environment.API_URL + "comentarios";
+  apiUrl = environment.API_URL + "reviews";
   comments$;
   commentByIdCache = /* @__PURE__ */ new Map();
   constructor(http) {
     this.http = http;
   }
+  normalizeComment(input2) {
+    const normalizedLikes = input2.likes ?? (input2.rating != null ? Number(input2.rating) : 0);
+    const normalizedContent = input2.contenido ?? input2.comentario ?? input2.comment ?? "";
+    return {
+      id: input2.id,
+      UsuarioId: input2.UsuarioId ?? input2.usuario_id,
+      BookId: input2.BookId ?? input2.libro_id,
+      contenido: normalizedContent,
+      comentario: normalizedContent,
+      likes: Number.isFinite(normalizedLikes) ? Number(normalizedLikes) : 0,
+      user: input2.user ?? input2.usuario?.nombre,
+      libro: input2.libro ?? input2.libroData?.titulo,
+      portada: input2.portada ?? input2.libroData?.portada,
+      rating: input2.rating ?? null,
+      comment: input2.comment ?? null
+    };
+  }
   getComentarios(forceRefresh = false) {
     if (!this.comments$ || forceRefresh) {
-      this.comments$ = this.http.get(this.apiUrl).pipe(map((response) => response.data ?? []), shareReplay(1));
+      this.comments$ = this.http.get(this.apiUrl).pipe(map((response) => (response.data ?? []).map((item) => this.normalizeComment(item))), shareReplay(1));
     }
     return this.comments$;
   }
@@ -37707,14 +39713,18 @@ var ComentarioService = class _ComentarioService {
         return cached;
       }
     }
-    const request$ = this.http.get(`${this.apiUrl}/${id}`).pipe(map((response) => response.data), shareReplay(1));
+    const request$ = this.http.get(`${this.apiUrl}/${id}`).pipe(map((response) => this.normalizeComment(response.data)), shareReplay(1));
     this.commentByIdCache.set(id, request$);
     return request$;
   }
-  getComentariosByBookId(bookId, excludeCommentId) {
+  getComentariosByBookId(bookId, excludeCommentId, bookTitle) {
+    const normalizedTitle = (bookTitle ?? "").trim().toLowerCase();
     return this.getComentarios().pipe(map((comments) => comments.filter((item) => {
       const currentBookId = Number(item.BookId ?? item.libro_id);
-      if (currentBookId !== Number(bookId)) {
+      const currentBookTitle = String(item.libro ?? item.libroData?.titulo ?? "").trim().toLowerCase();
+      const sameBookById = Number.isFinite(currentBookId) && currentBookId === Number(bookId);
+      const sameBookByTitle = normalizedTitle.length > 0 && currentBookTitle === normalizedTitle;
+      if (!sameBookById && !sameBookByTitle) {
         return false;
       }
       if (excludeCommentId == null) {
@@ -37743,15 +39753,32 @@ var ComentarioService = class _ComentarioService {
 // src/app/services/Usuario.service.ts
 var UsuarioService = class _UsuarioService {
   http;
-  apiUrl = environment.API_URL + "usuarios";
+  apiUrlGet = environment.API_URL + "usuarios";
+  apiUrlUpdate = environment.API_URL + "users";
+  apiUrlCreate = environment.API_URL + "register";
   users$;
   userByIdCache = /* @__PURE__ */ new Map();
   constructor(http) {
     this.http = http;
   }
+  normalizeUsuario(input2) {
+    const raw = input2 ?? {};
+    return {
+      id: Number(raw.id ?? 0),
+      nombre: String(raw.nombre ?? raw.name ?? ""),
+      email: String(raw.email ?? ""),
+      password: String(raw.password ?? ""),
+      rol: String(raw.rol ?? "usuario"),
+      foto: String(raw.foto ?? ""),
+      phone: String(raw.phone ?? "")
+    };
+  }
   getUsuarios(forceRefresh = false) {
     if (!this.users$ || forceRefresh) {
-      this.users$ = this.http.get(this.apiUrl).pipe(map((response) => response.data ?? []), shareReplay(1));
+      this.users$ = this.http.get(this.apiUrlGet).pipe(map((response) => {
+        const rawUsers = response?.data ?? response ?? [];
+        return Array.isArray(rawUsers) ? rawUsers.map((item) => this.normalizeUsuario(item)) : [];
+      }), shareReplay(1));
     }
     return this.users$;
   }
@@ -37762,19 +39789,41 @@ var UsuarioService = class _UsuarioService {
         return cached;
       }
     }
-    const request$ = this.http.get(`${this.apiUrl}/${id}`).pipe(map((response) => response?.data ?? response), shareReplay(1));
+    const request$ = this.http.get(`${this.apiUrlGet}/${id}`).pipe(map((response) => this.normalizeUsuario(response?.data ?? response)), shareReplay(1));
     this.userByIdCache.set(id, request$);
     return request$;
   }
   updateUsuario(id, payload) {
-    return this.http.put(`${this.apiUrl}/${id}`, payload).pipe(map((response) => response?.data ?? response), map((response) => {
+    const apiPayload = {};
+    if (payload.nombre != null) {
+      apiPayload["name"] = payload.nombre;
+    }
+    if (payload.email != null) {
+      apiPayload["email"] = payload.email;
+    }
+    if (payload.password != null) {
+      apiPayload["password"] = payload.password;
+    }
+    if (payload.foto != null) {
+      apiPayload["foto"] = payload.foto;
+    }
+    if (payload.rol != null) {
+      apiPayload["rol"] = payload.rol;
+    }
+    return this.http.put(`${this.apiUrlUpdate}/${id}`, apiPayload).pipe(map((response) => this.normalizeUsuario(response?.data ?? response)), map((response) => {
       this.userByIdCache.delete(id);
       this.users$ = void 0;
       return response;
     }));
   }
   createUsuario(payload) {
-    return this.http.post(this.apiUrl, payload).pipe(map((response) => response?.data ?? response), map((response) => {
+    const apiPayload = {
+      name: payload.nombre,
+      email: payload.email,
+      password: payload.password,
+      phone: payload.phone
+    };
+    return this.http.post(this.apiUrlCreate, apiPayload).pipe(map((response) => this.normalizeUsuario(response?.data ?? response)), map((response) => {
       this.users$ = void 0;
       return response;
     }));
@@ -37813,23 +39862,41 @@ function Home_p_8_Template(rf, ctx) {
     \u0275\u0275textInterpolate(ctx_r0.errorMessage);
   }
 }
+function Home_section_9_article_5_Conditional_2_Template(rf, ctx) {
+  if (rf & 1) {
+    \u0275\u0275element(0, "img", 15);
+  }
+  if (rf & 2) {
+    const book_r2 = \u0275\u0275nextContext().$implicit;
+    \u0275\u0275property("alt", book_r2.title);
+  }
+}
+function Home_section_9_article_5_Conditional_3_Template(rf, ctx) {
+  if (rf & 1) {
+    \u0275\u0275element(0, "img", 16);
+  }
+  if (rf & 2) {
+    const book_r2 = \u0275\u0275nextContext().$implicit;
+    \u0275\u0275property("src", book_r2.cover, \u0275\u0275sanitizeUrl)("alt", book_r2.title);
+  }
+}
 function Home_section_9_article_5_Template(rf, ctx) {
   if (rf & 1) {
     \u0275\u0275elementStart(0, "article", 13)(1, "div", 14);
-    \u0275\u0275element(2, "img", 15);
+    \u0275\u0275conditionalCreate(2, Home_section_9_article_5_Conditional_2_Template, 1, 1, "img", 15)(3, Home_section_9_article_5_Conditional_3_Template, 1, 2, "img", 16);
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(3, "footer")(4, "strong");
-    \u0275\u0275text(5);
+    \u0275\u0275elementStart(4, "footer")(5, "strong");
+    \u0275\u0275text(6);
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(6, "span");
-    \u0275\u0275text(7);
+    \u0275\u0275elementStart(7, "span");
+    \u0275\u0275text(8);
     \u0275\u0275elementEnd()()();
   }
   if (rf & 2) {
     const book_r2 = ctx.$implicit;
     \u0275\u0275advance(2);
-    \u0275\u0275property("alt", book_r2.title);
-    \u0275\u0275advance(3);
+    \u0275\u0275conditional(!book_r2.cover ? 2 : 3);
+    \u0275\u0275advance(4);
     \u0275\u0275textInterpolate(book_r2.username);
     \u0275\u0275advance(2);
     \u0275\u0275textInterpolate(book_r2.day);
@@ -37841,7 +39908,7 @@ function Home_section_9_Template(rf, ctx) {
     \u0275\u0275text(3, "New on Bookshell");
     \u0275\u0275elementEnd()();
     \u0275\u0275elementStart(4, "div", 11);
-    \u0275\u0275template(5, Home_section_9_article_5_Template, 8, 3, "article", 12);
+    \u0275\u0275template(5, Home_section_9_article_5_Template, 9, 3, "article", 12);
     \u0275\u0275elementEnd()();
   }
   if (rf & 2) {
@@ -37852,22 +39919,41 @@ function Home_section_9_Template(rf, ctx) {
 }
 function Home_section_10_article_5_Conditional_2_Template(rf, ctx) {
   if (rf & 1) {
-    \u0275\u0275element(0, "img", 21);
+    \u0275\u0275element(0, "img", 22);
   }
 }
 function Home_section_10_article_5_Conditional_3_Template(rf, ctx) {
   if (rf & 1) {
-    \u0275\u0275element(0, "img", 22);
+    \u0275\u0275element(0, "img", 16);
   }
   if (rf & 2) {
     const review_r4 = \u0275\u0275nextContext().$implicit;
     \u0275\u0275property("src", review_r4.cover, \u0275\u0275sanitizeUrl)("alt", review_r4.titulo);
   }
 }
+function Home_section_10_article_5_Conditional_15_Template(rf, ctx) {
+  if (rf & 1) {
+    \u0275\u0275elementStart(0, "span");
+    \u0275\u0275text(1);
+    \u0275\u0275elementEnd();
+  }
+  if (rf & 2) {
+    const review_r4 = \u0275\u0275nextContext().$implicit;
+    \u0275\u0275advance();
+    \u0275\u0275textInterpolate1("", review_r4.likes, " likes");
+  }
+}
+function Home_section_10_article_5_Conditional_16_Template(rf, ctx) {
+  if (rf & 1) {
+    \u0275\u0275elementStart(0, "span");
+    \u0275\u0275text(1, "sin likes");
+    \u0275\u0275elementEnd();
+  }
+}
 function Home_section_10_article_5_Template(rf, ctx) {
   if (rf & 1) {
     const _r3 = \u0275\u0275getCurrentView();
-    \u0275\u0275elementStart(0, "article", 19);
+    \u0275\u0275elementStart(0, "article", 20);
     \u0275\u0275listener("click", function Home_section_10_article_5_Template_article_click_0_listener() {
       const review_r4 = \u0275\u0275restoreView(_r3).$implicit;
       const ctx_r0 = \u0275\u0275nextContext(2);
@@ -37877,8 +39963,8 @@ function Home_section_10_article_5_Template(rf, ctx) {
       const ctx_r0 = \u0275\u0275nextContext(2);
       return \u0275\u0275resetView(ctx_r0.openReviewDetail(review_r4.id));
     });
-    \u0275\u0275elementStart(1, "div", 20);
-    \u0275\u0275conditionalCreate(2, Home_section_10_article_5_Conditional_2_Template, 1, 0, "img", 21)(3, Home_section_10_article_5_Conditional_3_Template, 1, 2, "img", 22);
+    \u0275\u0275elementStart(1, "div", 21);
+    \u0275\u0275conditionalCreate(2, Home_section_10_article_5_Conditional_2_Template, 1, 0, "img", 22)(3, Home_section_10_article_5_Conditional_3_Template, 1, 2, "img", 16);
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(4, "div", 23)(5, "header")(6, "p", 24);
     \u0275\u0275text(7);
@@ -37891,9 +39977,8 @@ function Home_section_10_article_5_Template(rf, ctx) {
     \u0275\u0275elementStart(12, "div", 25)(13, "span", 26);
     \u0275\u0275text(14);
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(15, "span");
-    \u0275\u0275text(16);
-    \u0275\u0275elementEnd()()();
+    \u0275\u0275conditionalCreate(15, Home_section_10_article_5_Conditional_15_Template, 2, 1, "span")(16, Home_section_10_article_5_Conditional_16_Template, 2, 0, "span");
+    \u0275\u0275elementEnd()();
     \u0275\u0275elementStart(17, "p", 27);
     \u0275\u0275text(18);
     \u0275\u0275elementEnd()()();
@@ -37910,25 +39995,25 @@ function Home_section_10_article_5_Template(rf, ctx) {
     \u0275\u0275textInterpolate(review_r4.year);
     \u0275\u0275advance(3);
     \u0275\u0275textInterpolate(review_r4.score);
-    \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate1("", review_r4.likes, " likes");
-    \u0275\u0275advance(2);
+    \u0275\u0275advance();
+    \u0275\u0275conditional(review_r4.hasRating ? 15 : 16);
+    \u0275\u0275advance(3);
     \u0275\u0275textInterpolate(review_r4.content);
   }
 }
 function Home_section_10_Template(rf, ctx) {
   if (rf & 1) {
-    \u0275\u0275elementStart(0, "section", 16)(1, "header", 10)(2, "h2");
+    \u0275\u0275elementStart(0, "section", 17)(1, "header", 10)(2, "h2");
     \u0275\u0275text(3, "Popular reviews this week");
     \u0275\u0275elementEnd()();
-    \u0275\u0275elementStart(4, "div", 17);
-    \u0275\u0275template(5, Home_section_10_article_5_Template, 19, 7, "article", 18);
+    \u0275\u0275elementStart(4, "cdk-virtual-scroll-viewport", 18);
+    \u0275\u0275template(5, Home_section_10_article_5_Template, 19, 7, "article", 19);
     \u0275\u0275elementEnd()();
   }
   if (rf & 2) {
     const ctx_r0 = \u0275\u0275nextContext();
     \u0275\u0275advance(5);
-    \u0275\u0275property("ngForOf", ctx_r0.displayedReviews)("ngForTrackBy", ctx_r0.trackByReviewId);
+    \u0275\u0275property("cdkVirtualForOf", ctx_r0.reviews)("cdkVirtualForTrackBy", ctx_r0.trackByReviewId);
   }
 }
 function Home_p_11_Template(rf, ctx) {
@@ -37943,13 +40028,7 @@ var Home = class _Home {
   comments = [];
   timelineComments = [];
   recommendedBooks = [];
-  featuredReviews = [];
-  //Comentarios
-  displayedReviews = [];
-  reviewBatchSize = 3;
-  scrollThresholdPx = 320;
-  visibleReviewCount = 0;
-  isLoadingMoreReviews = false;
+  reviews = [];
   isLoading = true;
   errorMessage = "";
   bookService = inject2(BookService);
@@ -37968,27 +40047,23 @@ var Home = class _Home {
       comments: this.comentarioService.getComentarios().pipe(timeout(1e4), catchError(() => of([]))),
       users: this.usuarioService.getUsuarios().pipe(timeout(1e4), catchError(() => of([])))
     }).subscribe({
-      next: ({ books, comments, users }) => {
+      next: (result) => {
+        const { books, comments, users } = result;
         this.books = books;
         this.comments = comments;
         this.timelineComments = this.mapTimelineComments(comments, books, users);
         this.recommendedBooks = this.mapRecommendedBooks(books, comments, users);
-        this.featuredReviews = this.mapFeaturedReviews(this.timelineComments);
-        this.visibleReviewCount = this.reviewBatchSize;
-        this.updateVisibleReviews();
-        this.ensureViewportHasScrollableContent();
+        this.reviews = this.mapFeaturedReviews(this.timelineComments);
         this.isLoading = false;
-        this.cdr.markForCheck();
         if (books.length === 0 && comments.length === 0) {
           this.errorMessage = "No se pudieron cargar datos ahora. Intenta de nuevo en unos segundos.";
         }
-        this.cdr.detectChanges();
+        this.cdr.markForCheck();
       },
       error: (error) => {
         console.error("Error al cargar inicio:", error);
         this.errorMessage = "Error al cargar comentarios y libros";
         this.isLoading = false;
-        this.cdr.detectChanges();
         this.cdr.markForCheck();
       }
     });
@@ -38001,12 +40076,18 @@ var Home = class _Home {
       const c = comment;
       const userId = c.UsuarioId ?? c.usuario_id;
       const bookId = c.BookId ?? c.libro_id;
-      const userName = c.usuario?.nombre || c.usuarioNombre || c.username || (userId != null ? userById.get(Number(userId)) : void 0) || (userId != null ? String(userId) : "Sin usuario");
-      const bookTitle = c.libro?.titulo || c.libroTitulo || c.title || c.titulo || (bookId != null ? bookById.get(Number(bookId)) : void 0) || (bookId != null ? String(bookId) : "Sin titulo");
+      const userName = c.user || c.nombre || c.usuario?.nombre || c.usuarioNombre || c.username || (userId != null ? userById.get(Number(userId)) : void 0) || (userId != null ? String(userId) : "Sin usuario");
+      const bookTitle = c.libro?.titulo || c.libro || c.libroData?.titulo || c.libroTitulo || c.title || c.titulo || (bookId != null ? bookById.get(Number(bookId)) : void 0) || (bookId != null ? String(bookId) : "Sin titulo");
+      const commentText = c.contenido ?? c.comentario ?? c.comment ?? "";
+      const likes = Number(c.likes ?? c.rating ?? 0);
+      const cover = c.portada || c.libro?.portada || "";
       return __spreadProps(__spreadValues({}, comment), {
+        contenido: commentText,
+        likes: Number.isFinite(likes) ? likes : 0,
         username: userName || (userId != null ? String(userId) : "Sin usuario"),
         bookTitle: bookTitle || (bookId != null ? String(bookId) : "Sin titulo"),
-        createdAt: timeLabels[index % timeLabels.length]
+        createdAt: timeLabels[index % timeLabels.length],
+        cover
       });
     });
   }
@@ -38014,10 +40095,15 @@ var Home = class _Home {
     const dayLabels = ["Apr 07", "Apr 06", "Apr 05", "Apr 04"];
     const userById = new Map(users.map((user) => [user.id, user.nombre]));
     return books.slice(0, 8).map((book, index) => {
-      const relatedComment = comments.find((comment) => comment.BookId === book.id);
+      const relatedComment = comments.find((comment) => {
+        const c = comment;
+        const commentBookId = Number(c.BookId ?? c.libro_id);
+        const commentBookTitle = String(c.libro ?? c.libroData?.titulo ?? c.libroTitulo ?? c.titulo ?? "").trim().toLowerCase();
+        return commentBookId === book.id || commentBookTitle === book.titulo.trim().toLowerCase();
+      });
       const rc = relatedComment;
       const relatedUserId = rc?.UsuarioId ?? rc?.usuario_id;
-      const userName = rc?.usuario?.nombre || rc?.usuarioNombre || rc?.username || (relatedUserId != null ? userById.get(Number(relatedUserId)) : void 0) || (relatedUserId != null ? String(relatedUserId) : "Sin usuario");
+      const userName = rc?.user || rc?.nombre || rc?.usuario?.nombre || rc?.usuarioNombre || rc?.username || (relatedUserId != null ? userById.get(Number(relatedUserId)) : void 0) || (relatedUserId != null ? String(relatedUserId) : "Sin usuario");
       return {
         id: book.id,
         title: book.titulo,
@@ -38030,62 +40116,21 @@ var Home = class _Home {
   mapFeaturedReviews(items) {
     const shuffledItems = this.shuffleArray(items);
     const coverByBookId = new Map(this.books.map((book) => [book.id, book.portada]));
-    return shuffledItems.map((item, index) => ({
-      id: item.id,
-      titulo: item.bookTitle,
-      year: "2026",
-      username: item.username,
-      likes: item.likes,
-      score: this.getScore(item.likes, index),
-      content: item.contenido,
-      cover: coverByBookId.get(item.BookId) ?? ""
-    }));
-  }
-  scrollTimeout = null;
-  // ← para throttle
-  // Throttle del scroll: en vez de dispararse 60 veces/seg, espera 80ms
-  onWindowScroll() {
-    if (this.scrollTimeout)
-      return;
-    this.scrollTimeout = setTimeout(() => {
-      this.loadMoreReviewsIfNeeded();
-      this.scrollTimeout = null;
-    }, 80);
-  }
-  ngOnDestroy() {
-    if (this.scrollTimeout)
-      clearTimeout(this.scrollTimeout);
-  }
-  loadMoreReviewsIfNeeded() {
-    if (this.isLoading || this.isLoadingMoreReviews) {
-      return;
-    }
-    if (this.displayedReviews.length >= this.featuredReviews.length) {
-      return;
-    }
-    const pageBottom = window.scrollY + window.innerHeight;
-    const pageHeight = document.documentElement.scrollHeight;
-    const reachedBottom = pageBottom >= pageHeight - this.scrollThresholdPx;
-    if (!reachedBottom) {
-      return;
-    }
-    this.isLoadingMoreReviews = true;
-    this.visibleReviewCount += this.reviewBatchSize;
-    this.updateVisibleReviews();
-    this.isLoadingMoreReviews = false;
-    this.ensureViewportHasScrollableContent();
-  }
-  ensureViewportHasScrollableContent() {
-    const canScroll = document.documentElement.scrollHeight > window.innerHeight + 8;
-    const hasMore = this.displayedReviews.length < this.featuredReviews.length;
-    if (!canScroll && hasMore) {
-      this.visibleReviewCount += this.reviewBatchSize;
-      this.updateVisibleReviews();
-      this.cdr.markForCheck();
-    }
-  }
-  updateVisibleReviews() {
-    this.displayedReviews = this.featuredReviews.slice(0, this.visibleReviewCount);
+    return shuffledItems.map((item) => {
+      const rawLikes = Number(item.likes ?? 0);
+      const hasRating = item.rating != null || rawLikes > 0;
+      return {
+        id: item.id,
+        titulo: item.bookTitle,
+        year: "2026",
+        username: item.username,
+        likes: Number.isFinite(rawLikes) ? rawLikes : 0,
+        score: hasRating ? `${rawLikes.toFixed(1)} / 5` : "Sin rating",
+        hasRating,
+        content: item.contenido ?? item.comentario ?? item.comment ?? "",
+        cover: coverByBookId.get(Number(item.BookId)) ?? item.cover ?? ""
+      };
+    });
   }
   shuffleArray(items) {
     const shuffled = [...items];
@@ -38094,10 +40139,6 @@ var Home = class _Home {
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
     return shuffled;
-  }
-  getScore(likes, index) {
-    const score = 3.5 + (likes + index) % 3 * 0.5;
-    return `${score.toFixed(1)} / 5`;
   }
   openReviewDetail(reviewId) {
     this.router.navigate(["/comentarios", reviewId]);
@@ -38111,13 +40152,7 @@ var Home = class _Home {
   static \u0275fac = function Home_Factory(__ngFactoryType__) {
     return new (__ngFactoryType__ || _Home)();
   };
-  static \u0275cmp = /* @__PURE__ */ \u0275\u0275defineComponent({ type: _Home, selectors: [["app-home"]], hostBindings: function Home_HostBindings(rf, ctx) {
-    if (rf & 1) {
-      \u0275\u0275listener("scroll", function Home_scroll_HostBindingHandler() {
-        return ctx.onWindowScroll();
-      }, \u0275\u0275resolveWindow);
-    }
-  }, decls: 12, vars: 5, consts: [[1, "home-shell"], [1, "home-column"], [1, "hero-head"], ["class", "status", 4, "ngIf"], ["class", "status error", 4, "ngIf"], ["class", "recommended-zone", 4, "ngIf"], ["class", "reviews-zone", 4, "ngIf"], [1, "status"], [1, "status", "error"], [1, "recommended-zone"], [1, "section-head"], [1, "recommended-strip"], ["class", "book-tile", 4, "ngFor", "ngForOf", "ngForTrackBy"], [1, "book-tile"], [1, "cover-wrap"], ["src", "/prueba.webp", "loading", "eager", 3, "alt"], [1, "reviews-zone"], [1, "reviews-scroll"], ["class", "review-card", "role", "button", "tabindex", "0", 3, "click", "keydown.enter", 4, "ngFor", "ngForOf", "ngForTrackBy"], ["role", "button", "tabindex", "0", 1, "review-card", 3, "click", "keydown.enter"], [1, "review-cover"], ["src", "/prueba.webp", "alt", "Portada no disponible", "loading", "eager"], ["loading", "eager", 3, "src", "alt"], [1, "review-body"], [1, "user-row"], [1, "meta-row"], [1, "score"], [1, "review-copy"]], template: function Home_Template(rf, ctx) {
+  static \u0275cmp = /* @__PURE__ */ \u0275\u0275defineComponent({ type: _Home, selectors: [["app-home"]], decls: 12, vars: 5, consts: [[1, "home-shell"], [1, "home-column"], [1, "hero-head"], ["class", "status", 4, "ngIf"], ["class", "status error", 4, "ngIf"], ["class", "recommended-zone", 4, "ngIf"], ["class", "reviews-zone", 4, "ngIf"], [1, "status"], [1, "status", "error"], [1, "recommended-zone"], [1, "section-head"], [1, "recommended-strip"], ["class", "book-tile", 4, "ngFor", "ngForOf", "ngForTrackBy"], [1, "book-tile"], [1, "cover-wrap"], ["src", "/prueba.webp", "loading", "eager", 3, "alt"], ["loading", "eager", 3, "src", "alt"], [1, "reviews-zone"], ["itemSize", "260", "minBufferPx", "520", "maxBufferPx", "1040", 1, "reviews-scroll"], ["class", "review-card", "role", "button", "tabindex", "0", 3, "click", "keydown.enter", 4, "cdkVirtualFor", "cdkVirtualForOf", "cdkVirtualForTrackBy"], ["role", "button", "tabindex", "0", 1, "review-card", 3, "click", "keydown.enter"], [1, "review-cover"], ["src", "/prueba.webp", "alt", "Portada no disponible", "loading", "eager"], [1, "review-body"], [1, "user-row"], [1, "meta-row"], [1, "score"], [1, "review-copy"]], template: function Home_Template(rf, ctx) {
     if (rf & 1) {
       \u0275\u0275elementStart(0, "main", 0)(1, "section", 1)(2, "header", 2)(3, "h1");
       \u0275\u0275text(4, "Books para ti");
@@ -38136,30 +40171,20 @@ var Home = class _Home {
       \u0275\u0275advance();
       \u0275\u0275property("ngIf", !ctx.isLoading && ctx.recommendedBooks.length > 0);
       \u0275\u0275advance();
-      \u0275\u0275property("ngIf", !ctx.isLoading && ctx.featuredReviews.length > 0);
+      \u0275\u0275property("ngIf", !ctx.isLoading && ctx.reviews.length > 0);
       \u0275\u0275advance();
-      \u0275\u0275property("ngIf", !ctx.isLoading && ctx.featuredReviews.length === 0);
+      \u0275\u0275property("ngIf", !ctx.isLoading && ctx.reviews.length === 0);
     }
-  }, dependencies: [CommonModule, NgForOf, NgIf], styles: ['\n\n[_nghost-%COMP%] {\n  --bg: #0b1219;\n  --bg-elev: #121b25;\n  --bg-card: #1a2430;\n  --line: #2c3a49;\n  --ink: #eff5fb;\n  --ink-soft: #9badbf;\n  --accent: #21d36b;\n  display: block;\n}\n.home-shell[_ngcontent-%COMP%] {\n  min-height: 100dvh;\n  padding: 1rem;\n  color: var(--ink);\n  font-family:\n    "Trebuchet MS",\n    "Verdana",\n    sans-serif;\n  background:\n    radial-gradient(\n      circle at top,\n      rgba(38, 56, 78, 0.44),\n      transparent 30%),\n    linear-gradient(\n      180deg,\n      #091017,\n      var(--bg));\n}\n.home-column[_ngcontent-%COMP%] {\n  max-width: 1200px;\n  margin: 0 auto;\n  display: grid;\n  gap: 1.2rem;\n}\n.hero-head[_ngcontent-%COMP%] {\n  padding: 0.8rem 0.2rem;\n  border-bottom: 1px solid var(--line);\n}\n.hero-head[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: clamp(2rem, 3vw, 2.6rem);\n  letter-spacing: -0.04em;\n}\n.hero-head[_ngcontent-%COMP%]   p[_ngcontent-%COMP%] {\n  margin: 0.35rem 0 0;\n  color: var(--ink-soft);\n  font-size: 1.04rem;\n}\n.section-head[_ngcontent-%COMP%] {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  padding: 0.2rem;\n  border-bottom: 1px solid var(--line);\n}\n.section-head[_ngcontent-%COMP%]   h2[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: 1.35rem;\n  text-transform: uppercase;\n  letter-spacing: 0.08em;\n  color: #c6d9ef;\n}\n.recommended-zone[_ngcontent-%COMP%], \n.reviews-zone[_ngcontent-%COMP%] {\n  border: 1px solid #243345;\n  border-radius: 1rem;\n  background:\n    linear-gradient(\n      180deg,\n      #0e1721,\n      var(--bg-elev));\n  padding: 0.9rem;\n}\n.recommended-strip[_ngcontent-%COMP%] {\n  display: grid;\n  grid-auto-flow: column;\n  grid-auto-columns: 150px;\n  gap: 0.8rem;\n  overflow-x: auto;\n  padding: 0.8rem 0.15rem 0.35rem;\n}\n.book-tile[_ngcontent-%COMP%] {\n  border-radius: 0.78rem;\n  border: 1px solid #33465b;\n  background: #111a24;\n  overflow: hidden;\n  display: grid;\n}\n.cover-wrap[_ngcontent-%COMP%] {\n  aspect-ratio: 2 / 3;\n  background: #151f2a;\n}\n.cover-wrap[_ngcontent-%COMP%]   img[_ngcontent-%COMP%] {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.book-tile[_ngcontent-%COMP%]   footer[_ngcontent-%COMP%] {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  gap: 0.65rem;\n  padding: 0.58rem 0.65rem;\n  background: #2f4053;\n}\n.book-tile[_ngcontent-%COMP%]   strong[_ngcontent-%COMP%] {\n  font-size: 1rem;\n}\n.book-tile[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n  color: #b8cbdf;\n  font-size: 0.92rem;\n}\n.reviews-zone[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 1rem;\n}\n.reviews-scroll[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 1rem;\n}\n.review-card[_ngcontent-%COMP%] {\n  display: grid;\n  grid-template-columns: 160px minmax(0, 1fr);\n  gap: 1.2rem;\n  border: 1px solid #2a3d52;\n  border-radius: 0.95rem;\n  padding: 1.1rem;\n  background:\n    linear-gradient(\n      180deg,\n      #121c27,\n      var(--bg-card));\n  cursor: pointer;\n  transition: transform 180ms ease, border-color 180ms ease;\n}\n.review-card[_ngcontent-%COMP%]:hover {\n  transform: translateY(-2px);\n  border-color: #3a5a77;\n}\n.review-card[_ngcontent-%COMP%]:focus-visible {\n  outline: 2px solid #9dc8ff;\n  outline-offset: 2px;\n}\n.review-cover[_ngcontent-%COMP%] {\n  border-radius: 0.75rem;\n  overflow: hidden;\n  background: #1a2432;\n  border: 1px solid #394d62;\n  aspect-ratio: 2 / 3;\n}\n.review-cover[_ngcontent-%COMP%]   img[_ngcontent-%COMP%] {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.review-body[_ngcontent-%COMP%] {\n  display: grid;\n  align-content: center;\n  gap: 0.8rem;\n}\n.review-body[_ngcontent-%COMP%]   header[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.32rem;\n}\n.user-row[_ngcontent-%COMP%] {\n  margin: 0;\n  color: #b4cae0;\n  font-size: 1.02rem;\n  font-weight: 700;\n}\n.review-body[_ngcontent-%COMP%]   h3[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: clamp(1.65rem, 2.8vw, 2.4rem);\n  letter-spacing: -0.03em;\n}\n.review-body[_ngcontent-%COMP%]   h3[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n  font-size: 1.2rem;\n  font-weight: 500;\n  color: var(--ink-soft);\n}\n.meta-row[_ngcontent-%COMP%] {\n  display: flex;\n  align-items: center;\n  gap: 0.8rem;\n  color: #b5c8da;\n}\n.score[_ngcontent-%COMP%] {\n  color: var(--accent);\n  font-weight: 700;\n}\n.review-copy[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: clamp(1.18rem, 1.9vw, 1.6rem);\n  line-height: 1.5;\n  color: #ecf3fa;\n}\n.status[_ngcontent-%COMP%] {\n  margin-top: 0.55rem;\n  padding: 0.65rem 0.75rem;\n  border-radius: 0.6rem;\n  background: #18212b;\n  border: 1px solid #2d3a47;\n  color: #ced7df;\n}\n.status.error[_ngcontent-%COMP%] {\n  background: #301b21;\n  border-color: #5b323b;\n  color: #efbac6;\n}\n@media (max-width: 960px) {\n  .review-card[_ngcontent-%COMP%] {\n    grid-template-columns: 140px minmax(0, 1fr);\n  }\n  .review-copy[_ngcontent-%COMP%] {\n    font-size: 1.1rem;\n  }\n}\n@media (max-width: 640px) {\n  .home-shell[_ngcontent-%COMP%] {\n    padding: 0.75rem;\n  }\n  .hero-head[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%] {\n    font-size: clamp(1.8rem, 10vw, 2.3rem);\n  }\n  .hero-head[_ngcontent-%COMP%]   p[_ngcontent-%COMP%], \n   .user-row[_ngcontent-%COMP%], \n   .book-tile[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n    font-size: 0.96rem;\n  }\n  .section-head[_ngcontent-%COMP%]   h2[_ngcontent-%COMP%] {\n    font-size: 1.1rem;\n  }\n  .recommended-zone[_ngcontent-%COMP%], \n   .reviews-zone[_ngcontent-%COMP%] {\n    padding: 0.8rem;\n  }\n  .recommended-strip[_ngcontent-%COMP%] {\n    grid-auto-columns: minmax(120px, 42vw);\n  }\n  .review-card[_ngcontent-%COMP%] {\n    grid-template-columns: 1fr;\n    gap: 0.9rem;\n    padding: 0.9rem;\n  }\n  .review-cover[_ngcontent-%COMP%] {\n    max-width: 180px;\n  }\n  .review-body[_ngcontent-%COMP%]   h3[_ngcontent-%COMP%] {\n    font-size: 1.45rem;\n  }\n  .review-copy[_ngcontent-%COMP%] {\n    font-size: 1rem;\n    line-height: 1.55;\n  }\n}\n/*# sourceMappingURL=home.css.map */'], changeDetection: 0 });
+  }, dependencies: [CommonModule, NgForOf, NgIf, ScrollingModule, CdkFixedSizeVirtualScroll, CdkVirtualForOf, CdkVirtualScrollViewport], styles: ['\n\n[_nghost-%COMP%] {\n  --bg: #120f0a;\n  --bg-elev: #1d120f;\n  --bg-card: #241713;\n  --line: rgba(255, 225, 178, 0.18);\n  --ink: #f7f3eb;\n  --ink-soft: #cfbca2;\n  --accent: #f8b84e;\n  --accent-strong: #ff8f3c;\n  display: block;\n}\n.home-shell[_ngcontent-%COMP%] {\n  min-height: 100dvh;\n  padding: 1rem;\n  color: var(--ink);\n  font-family:\n    "Space Grotesk",\n    "Segoe UI",\n    sans-serif;\n  background:\n    radial-gradient(\n      circle at 18% 12%,\n      rgba(255, 177, 89, 0.14),\n      transparent 34%),\n    radial-gradient(\n      circle at 82% 88%,\n      rgba(255, 120, 57, 0.12),\n      transparent 28%),\n    linear-gradient(\n      160deg,\n      #120f0a 0%,\n      #1b120f 44%,\n      #2c1911 100%);\n}\n.home-column[_ngcontent-%COMP%] {\n  max-width: 1200px;\n  margin: 0 auto;\n  display: grid;\n  gap: 1.2rem;\n}\n.hero-head[_ngcontent-%COMP%] {\n  padding: 0.8rem 0.2rem;\n  border-bottom: 1px solid rgba(255, 245, 224, 0.2);\n  animation: rise-in 0.65s ease-out both;\n}\n.hero-head[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: clamp(2rem, 3vw, 2.6rem);\n  letter-spacing: -0.04em;\n  line-height: 0.96;\n}\n.hero-head[_ngcontent-%COMP%]   p[_ngcontent-%COMP%] {\n  margin: 0.35rem 0 0;\n  color: var(--ink-soft);\n  font-size: 1.04rem;\n  max-width: 42ch;\n}\n.section-head[_ngcontent-%COMP%] {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  padding: 0.2rem;\n  border-bottom: 1px solid rgba(255, 245, 224, 0.18);\n}\n.section-head[_ngcontent-%COMP%]   h2[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: 1.35rem;\n  text-transform: uppercase;\n  letter-spacing: 0.08em;\n  color: #ffd18b;\n}\n.section-head[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n  color: var(--ink-soft);\n}\n.recommended-zone[_ngcontent-%COMP%], \n.reviews-zone[_ngcontent-%COMP%] {\n  border: 1px solid rgba(255, 225, 178, 0.18);\n  border-radius: 1.2rem;\n  background:\n    linear-gradient(\n      180deg,\n      rgba(33, 25, 18, 0.82),\n      rgba(18, 12, 9, 0.92));\n  padding: 0.9rem;\n  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);\n}\n.recommended-strip[_ngcontent-%COMP%] {\n  display: grid;\n  grid-auto-flow: column;\n  grid-auto-columns: 150px;\n  gap: 0.8rem;\n  overflow-x: auto;\n  padding: 0.8rem 0.15rem 0.35rem;\n}\n.book-tile[_ngcontent-%COMP%] {\n  border-radius: 0.9rem;\n  border: 1px solid rgba(255, 225, 178, 0.18);\n  background: rgba(14, 10, 7, 0.62);\n  overflow: hidden;\n  display: grid;\n}\n.cover-wrap[_ngcontent-%COMP%] {\n  aspect-ratio: 2 / 3;\n  background: rgba(12, 9, 7, 0.72);\n}\n.cover-wrap[_ngcontent-%COMP%]   img[_ngcontent-%COMP%] {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.book-tile[_ngcontent-%COMP%]   footer[_ngcontent-%COMP%] {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  gap: 0.65rem;\n  padding: 0.58rem 0.65rem;\n  background:\n    linear-gradient(\n      90deg,\n      rgba(255, 204, 122, 0.18),\n      rgba(255, 157, 82, 0.12));\n  border-top: 1px solid rgba(255, 225, 178, 0.12);\n}\n.book-tile[_ngcontent-%COMP%]   strong[_ngcontent-%COMP%] {\n  font-size: 1rem;\n  color: var(--ink);\n}\n.book-tile[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n  color: var(--ink-soft);\n  font-size: 0.92rem;\n}\n.reviews-zone[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 1rem;\n}\n.reviews-scroll[_ngcontent-%COMP%] {\n  height: min(72vh, 980px);\n  width: 100%;\n}\n.reviews-scroll[_ngcontent-%COMP%]   .cdk-virtual-scroll-content-wrapper[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 1rem;\n  padding-right: 0.1rem;\n}\n.review-card[_ngcontent-%COMP%] {\n  display: grid;\n  grid-template-columns: 160px minmax(0, 1fr);\n  gap: 1.2rem;\n  border: 1px solid rgba(255, 225, 178, 0.18);\n  border-radius: 1rem;\n  padding: 1.1rem;\n  background:\n    radial-gradient(\n      circle at 14% 14%,\n      rgba(255, 177, 89, 0.08),\n      transparent 26%),\n    linear-gradient(\n      180deg,\n      rgba(27, 18, 14, 0.8),\n      rgba(18, 12, 9, 0.94));\n  cursor: pointer;\n  transition:\n    transform 180ms ease,\n    border-color 180ms ease,\n    box-shadow 180ms ease;\n}\n.review-card[_ngcontent-%COMP%]:hover {\n  transform: translateY(-2px);\n  border-color: rgba(255, 204, 122, 0.42);\n  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.26);\n}\n.review-card[_ngcontent-%COMP%]:focus-visible {\n  outline: 2px solid #ffcc7a;\n  outline-offset: 2px;\n}\n.review-cover[_ngcontent-%COMP%] {\n  border-radius: 0.75rem;\n  overflow: hidden;\n  background: rgba(12, 9, 7, 0.72);\n  border: 1px solid rgba(255, 225, 178, 0.18);\n  aspect-ratio: 2 / 3;\n}\n.review-cover[_ngcontent-%COMP%]   img[_ngcontent-%COMP%] {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.review-body[_ngcontent-%COMP%] {\n  display: grid;\n  align-content: center;\n  gap: 0.8rem;\n}\n.review-body[_ngcontent-%COMP%]   header[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.32rem;\n}\n.user-row[_ngcontent-%COMP%] {\n  margin: 0;\n  color: var(--ink-soft);\n  font-size: 1.02rem;\n  font-weight: 700;\n}\n.review-body[_ngcontent-%COMP%]   h3[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: clamp(1.65rem, 2.8vw, 2.4rem);\n  letter-spacing: -0.03em;\n  line-height: 1.02;\n}\n.review-body[_ngcontent-%COMP%]   h3[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n  font-size: 1.2rem;\n  font-weight: 500;\n  color: var(--accent);\n}\n.meta-row[_ngcontent-%COMP%] {\n  display: flex;\n  align-items: center;\n  gap: 0.8rem;\n  color: #f0e2cd;\n}\n.score[_ngcontent-%COMP%] {\n  color: var(--accent);\n  font-weight: 700;\n}\n.review-copy[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: clamp(1.18rem, 1.9vw, 1.6rem);\n  line-height: 1.5;\n  color: #f4dcc2;\n}\n.status[_ngcontent-%COMP%], \n.status.error[_ngcontent-%COMP%] {\n  -webkit-backdrop-filter: blur(6px);\n  backdrop-filter: blur(6px);\n}\n.status[_ngcontent-%COMP%] {\n  margin-top: 0.55rem;\n  padding: 0.65rem 0.75rem;\n  border-radius: 0.6rem;\n  background: rgba(14, 10, 7, 0.58);\n  border: 1px solid rgba(255, 225, 178, 0.16);\n  color: #f0e2cd;\n}\n.status.error[_ngcontent-%COMP%] {\n  background: rgba(97, 33, 27, 0.55);\n  border-color: rgba(140, 60, 51, 0.9);\n  color: #ffd9d2;\n}\n@media (max-width: 960px) {\n  .review-card[_ngcontent-%COMP%] {\n    grid-template-columns: 140px minmax(0, 1fr);\n  }\n  .review-copy[_ngcontent-%COMP%] {\n    font-size: 1.1rem;\n  }\n}\n@media (max-width: 640px) {\n  .home-shell[_ngcontent-%COMP%] {\n    padding: 0.75rem;\n  }\n  .hero-head[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%] {\n    font-size: clamp(1.8rem, 10vw, 2.3rem);\n  }\n  .hero-head[_ngcontent-%COMP%]   p[_ngcontent-%COMP%], \n   .user-row[_ngcontent-%COMP%], \n   .book-tile[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n    font-size: 0.96rem;\n  }\n  .section-head[_ngcontent-%COMP%]   h2[_ngcontent-%COMP%] {\n    font-size: 1.1rem;\n  }\n  .recommended-zone[_ngcontent-%COMP%], \n   .reviews-zone[_ngcontent-%COMP%] {\n    padding: 0.8rem;\n  }\n  .recommended-strip[_ngcontent-%COMP%] {\n    grid-auto-columns: minmax(120px, 42vw);\n  }\n  .review-card[_ngcontent-%COMP%] {\n    grid-template-columns: 1fr;\n    gap: 0.9rem;\n    padding: 0.9rem;\n  }\n  .review-cover[_ngcontent-%COMP%] {\n    max-width: 180px;\n  }\n  .review-body[_ngcontent-%COMP%]   h3[_ngcontent-%COMP%] {\n    font-size: 1.45rem;\n  }\n  .review-copy[_ngcontent-%COMP%] {\n    font-size: 1rem;\n    line-height: 1.55;\n  }\n}\n/*# sourceMappingURL=home.css.map */'], changeDetection: 0 });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(Home, [{
     type: Component,
-    args: [{
-      selector: "app-home",
-      standalone: true,
-      imports: [CommonModule],
-      changeDetection: ChangeDetectionStrategy.OnPush,
-      template: '<main class="home-shell">\r\n  <section class="home-column">\r\n    <header class="hero-head">\r\n      <h1>Books para ti</h1>\r\n      <p>Descubre recomendaciones recientes y reviews destacadas de la comunidad.</p>\r\n    </header>\r\n\r\n    <p class="status" *ngIf="isLoading">Cargando recomendaciones...</p>\r\n    <p class="status error" *ngIf="errorMessage">{{ errorMessage }}</p>\r\n\r\n    <section class="recommended-zone" *ngIf="!isLoading && recommendedBooks.length > 0">\r\n      <header class="section-head">\r\n        <h2>New on Bookshell</h2>\r\n      </header>\r\n\r\n      <div class="recommended-strip">\r\n        <article class="book-tile" *ngFor="let book of recommendedBooks; trackBy: trackByBookId">\r\n          <div class="cover-wrap">\r\n            <img src="/prueba.webp" [alt]="book.title" loading="eager" />\r\n          </div>\r\n\r\n          <footer>\r\n            <strong>{{ book.username }}</strong>\r\n            <span>{{ book.day }}</span>\r\n          </footer>\r\n        </article>\r\n      </div>\r\n    </section>\r\n\r\n    <section class="reviews-zone" *ngIf="!isLoading && featuredReviews.length > 0">\r\n      <header class="section-head">\r\n        <h2>Popular reviews this week</h2>\r\n      </header>\r\n\r\n      <div class="reviews-scroll">\r\n        <article\r\n          class="review-card"\r\n          *ngFor="let review of displayedReviews; trackBy: trackByReviewId"\r\n          role="button"\r\n          tabindex="0"\r\n          (click)="openReviewDetail(review.id)"\r\n          (keydown.enter)="openReviewDetail(review.id)"\r\n        >\r\n          <div class="review-cover">\r\n            @if(!review.cover) {\r\n              <img src="/prueba.webp" alt="Portada no disponible" loading="eager" />\r\n            } @else {\r\n            <img [src]="review.cover" [alt]="review.titulo" loading="eager" />\r\n            }\r\n          </div>\r\n\r\n          <div class="review-body">\r\n            <header>\r\n              <p class="user-row">{{ review.username }}</p>\r\n              <h3>\r\n                {{ review.titulo }}\r\n                <span>{{ review.year }}</span>\r\n              </h3>\r\n              <div class="meta-row">\r\n                <span class="score">{{ review.score }}</span>\r\n                <span>{{ review.likes }} likes</span>\r\n              </div>\r\n            </header>\r\n\r\n            <p class="review-copy">{{ review.content }}</p>\r\n          </div>\r\n        </article>\r\n      </div>\r\n    </section>\r\n\r\n    <p class="status" *ngIf="!isLoading && featuredReviews.length === 0">\r\n      Todavia no hay reviews para mostrar.\r\n    </p>\r\n  </section>\r\n</main>',
-      styles: ['/* src/app/pages/home/home.css */\n:host {\n  --bg: #0b1219;\n  --bg-elev: #121b25;\n  --bg-card: #1a2430;\n  --line: #2c3a49;\n  --ink: #eff5fb;\n  --ink-soft: #9badbf;\n  --accent: #21d36b;\n  display: block;\n}\n.home-shell {\n  min-height: 100dvh;\n  padding: 1rem;\n  color: var(--ink);\n  font-family:\n    "Trebuchet MS",\n    "Verdana",\n    sans-serif;\n  background:\n    radial-gradient(\n      circle at top,\n      rgba(38, 56, 78, 0.44),\n      transparent 30%),\n    linear-gradient(\n      180deg,\n      #091017,\n      var(--bg));\n}\n.home-column {\n  max-width: 1200px;\n  margin: 0 auto;\n  display: grid;\n  gap: 1.2rem;\n}\n.hero-head {\n  padding: 0.8rem 0.2rem;\n  border-bottom: 1px solid var(--line);\n}\n.hero-head h1 {\n  margin: 0;\n  font-size: clamp(2rem, 3vw, 2.6rem);\n  letter-spacing: -0.04em;\n}\n.hero-head p {\n  margin: 0.35rem 0 0;\n  color: var(--ink-soft);\n  font-size: 1.04rem;\n}\n.section-head {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  padding: 0.2rem;\n  border-bottom: 1px solid var(--line);\n}\n.section-head h2 {\n  margin: 0;\n  font-size: 1.35rem;\n  text-transform: uppercase;\n  letter-spacing: 0.08em;\n  color: #c6d9ef;\n}\n.recommended-zone,\n.reviews-zone {\n  border: 1px solid #243345;\n  border-radius: 1rem;\n  background:\n    linear-gradient(\n      180deg,\n      #0e1721,\n      var(--bg-elev));\n  padding: 0.9rem;\n}\n.recommended-strip {\n  display: grid;\n  grid-auto-flow: column;\n  grid-auto-columns: 150px;\n  gap: 0.8rem;\n  overflow-x: auto;\n  padding: 0.8rem 0.15rem 0.35rem;\n}\n.book-tile {\n  border-radius: 0.78rem;\n  border: 1px solid #33465b;\n  background: #111a24;\n  overflow: hidden;\n  display: grid;\n}\n.cover-wrap {\n  aspect-ratio: 2 / 3;\n  background: #151f2a;\n}\n.cover-wrap img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.book-tile footer {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  gap: 0.65rem;\n  padding: 0.58rem 0.65rem;\n  background: #2f4053;\n}\n.book-tile strong {\n  font-size: 1rem;\n}\n.book-tile span {\n  color: #b8cbdf;\n  font-size: 0.92rem;\n}\n.reviews-zone {\n  display: grid;\n  gap: 1rem;\n}\n.reviews-scroll {\n  display: grid;\n  gap: 1rem;\n}\n.review-card {\n  display: grid;\n  grid-template-columns: 160px minmax(0, 1fr);\n  gap: 1.2rem;\n  border: 1px solid #2a3d52;\n  border-radius: 0.95rem;\n  padding: 1.1rem;\n  background:\n    linear-gradient(\n      180deg,\n      #121c27,\n      var(--bg-card));\n  cursor: pointer;\n  transition: transform 180ms ease, border-color 180ms ease;\n}\n.review-card:hover {\n  transform: translateY(-2px);\n  border-color: #3a5a77;\n}\n.review-card:focus-visible {\n  outline: 2px solid #9dc8ff;\n  outline-offset: 2px;\n}\n.review-cover {\n  border-radius: 0.75rem;\n  overflow: hidden;\n  background: #1a2432;\n  border: 1px solid #394d62;\n  aspect-ratio: 2 / 3;\n}\n.review-cover img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.review-body {\n  display: grid;\n  align-content: center;\n  gap: 0.8rem;\n}\n.review-body header {\n  display: grid;\n  gap: 0.32rem;\n}\n.user-row {\n  margin: 0;\n  color: #b4cae0;\n  font-size: 1.02rem;\n  font-weight: 700;\n}\n.review-body h3 {\n  margin: 0;\n  font-size: clamp(1.65rem, 2.8vw, 2.4rem);\n  letter-spacing: -0.03em;\n}\n.review-body h3 span {\n  font-size: 1.2rem;\n  font-weight: 500;\n  color: var(--ink-soft);\n}\n.meta-row {\n  display: flex;\n  align-items: center;\n  gap: 0.8rem;\n  color: #b5c8da;\n}\n.score {\n  color: var(--accent);\n  font-weight: 700;\n}\n.review-copy {\n  margin: 0;\n  font-size: clamp(1.18rem, 1.9vw, 1.6rem);\n  line-height: 1.5;\n  color: #ecf3fa;\n}\n.status {\n  margin-top: 0.55rem;\n  padding: 0.65rem 0.75rem;\n  border-radius: 0.6rem;\n  background: #18212b;\n  border: 1px solid #2d3a47;\n  color: #ced7df;\n}\n.status.error {\n  background: #301b21;\n  border-color: #5b323b;\n  color: #efbac6;\n}\n@media (max-width: 960px) {\n  .review-card {\n    grid-template-columns: 140px minmax(0, 1fr);\n  }\n  .review-copy {\n    font-size: 1.1rem;\n  }\n}\n@media (max-width: 640px) {\n  .home-shell {\n    padding: 0.75rem;\n  }\n  .hero-head h1 {\n    font-size: clamp(1.8rem, 10vw, 2.3rem);\n  }\n  .hero-head p,\n  .user-row,\n  .book-tile span {\n    font-size: 0.96rem;\n  }\n  .section-head h2 {\n    font-size: 1.1rem;\n  }\n  .recommended-zone,\n  .reviews-zone {\n    padding: 0.8rem;\n  }\n  .recommended-strip {\n    grid-auto-columns: minmax(120px, 42vw);\n  }\n  .review-card {\n    grid-template-columns: 1fr;\n    gap: 0.9rem;\n    padding: 0.9rem;\n  }\n  .review-cover {\n    max-width: 180px;\n  }\n  .review-body h3 {\n    font-size: 1.45rem;\n  }\n  .review-copy {\n    font-size: 1rem;\n    line-height: 1.55;\n  }\n}\n/*# sourceMappingURL=home.css.map */\n']
-    }]
-  }], null, { onWindowScroll: [{
-    type: HostListener,
-    args: ["window:scroll"]
-  }] });
+    args: [{ selector: "app-home", standalone: true, imports: [CommonModule, ScrollingModule], changeDetection: ChangeDetectionStrategy.OnPush, template: '<main class="home-shell">\n  <section class="home-column">\n    <header class="hero-head">\n      <h1>Books para ti</h1>\n      <p>Descubre recomendaciones recientes y reviews destacadas de la comunidad.</p>\n    </header>\n\n    <p class="status" *ngIf="isLoading">Cargando recomendaciones...</p>\n    <p class="status error" *ngIf="errorMessage">{{ errorMessage }}</p>\n\n    <section class="recommended-zone" *ngIf="!isLoading && recommendedBooks.length > 0">\n      <header class="section-head">\n        <h2>New on Bookshell</h2>\n      </header>\n\n      <div class="recommended-strip">\n        <article class="book-tile" *ngFor="let book of recommendedBooks; trackBy: trackByBookId">\n          <div class="cover-wrap">\n            @if(!book.cover) {\n              <img src="/prueba.webp" [alt]="book.title" loading="eager" />\n            } @else {\n              <img [src]="book.cover" [alt]="book.title" loading="eager" />\n            }\n          </div>\n\n          <footer>\n            <strong>{{ book.username }}</strong>\n            <span>{{ book.day }}</span>\n          </footer>\n        </article>\n      </div>\n    </section>\n\n    <section class="reviews-zone" *ngIf="!isLoading && reviews.length > 0">\n      <header class="section-head">\n        <h2>Popular reviews this week</h2>\n      </header>\n\n      <cdk-virtual-scroll-viewport class="reviews-scroll" itemSize="260" minBufferPx="520" maxBufferPx="1040">\n        <article\n          class="review-card"\n          *cdkVirtualFor="let review of reviews; trackBy: trackByReviewId"\n          role="button"\n          tabindex="0"\n          (click)="openReviewDetail(review.id)"\n          (keydown.enter)="openReviewDetail(review.id)"\n        >\n          <div class="review-cover">\n            @if(!review.cover) {\n              <img src="/prueba.webp" alt="Portada no disponible" loading="eager" />\n            } @else {\n            <img [src]="review.cover" [alt]="review.titulo" loading="eager" />\n            }\n          </div>\n\n          <div class="review-body">\n            <header>\n              <p class="user-row">{{ review.username }}</p>\n              <h3>\n                {{ review.titulo }}\n                <span>{{ review.year }}</span>\n              </h3>\n              <div class="meta-row">\n                <span class="score">{{ review.score }}</span>\n                @if(review.hasRating) {\n                  <span>{{ review.likes }} likes</span>\n                } @else {\n                  <span>sin likes</span>\n                }\n              </div>\n            </header>\n\n            <p class="review-copy">{{ review.content }}</p>\n          </div>\n        </article>\n      </cdk-virtual-scroll-viewport>\n    </section>\n\n    <p class="status" *ngIf="!isLoading && reviews.length === 0">\n      Todavia no hay reviews para mostrar.\n    </p>\n  </section>\n</main>', styles: ['/* src/app/pages/home/home.css */\n:host {\n  --bg: #120f0a;\n  --bg-elev: #1d120f;\n  --bg-card: #241713;\n  --line: rgba(255, 225, 178, 0.18);\n  --ink: #f7f3eb;\n  --ink-soft: #cfbca2;\n  --accent: #f8b84e;\n  --accent-strong: #ff8f3c;\n  display: block;\n}\n.home-shell {\n  min-height: 100dvh;\n  padding: 1rem;\n  color: var(--ink);\n  font-family:\n    "Space Grotesk",\n    "Segoe UI",\n    sans-serif;\n  background:\n    radial-gradient(\n      circle at 18% 12%,\n      rgba(255, 177, 89, 0.14),\n      transparent 34%),\n    radial-gradient(\n      circle at 82% 88%,\n      rgba(255, 120, 57, 0.12),\n      transparent 28%),\n    linear-gradient(\n      160deg,\n      #120f0a 0%,\n      #1b120f 44%,\n      #2c1911 100%);\n}\n.home-column {\n  max-width: 1200px;\n  margin: 0 auto;\n  display: grid;\n  gap: 1.2rem;\n}\n.hero-head {\n  padding: 0.8rem 0.2rem;\n  border-bottom: 1px solid rgba(255, 245, 224, 0.2);\n  animation: rise-in 0.65s ease-out both;\n}\n.hero-head h1 {\n  margin: 0;\n  font-size: clamp(2rem, 3vw, 2.6rem);\n  letter-spacing: -0.04em;\n  line-height: 0.96;\n}\n.hero-head p {\n  margin: 0.35rem 0 0;\n  color: var(--ink-soft);\n  font-size: 1.04rem;\n  max-width: 42ch;\n}\n.section-head {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  padding: 0.2rem;\n  border-bottom: 1px solid rgba(255, 245, 224, 0.18);\n}\n.section-head h2 {\n  margin: 0;\n  font-size: 1.35rem;\n  text-transform: uppercase;\n  letter-spacing: 0.08em;\n  color: #ffd18b;\n}\n.section-head span {\n  color: var(--ink-soft);\n}\n.recommended-zone,\n.reviews-zone {\n  border: 1px solid rgba(255, 225, 178, 0.18);\n  border-radius: 1.2rem;\n  background:\n    linear-gradient(\n      180deg,\n      rgba(33, 25, 18, 0.82),\n      rgba(18, 12, 9, 0.92));\n  padding: 0.9rem;\n  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);\n}\n.recommended-strip {\n  display: grid;\n  grid-auto-flow: column;\n  grid-auto-columns: 150px;\n  gap: 0.8rem;\n  overflow-x: auto;\n  padding: 0.8rem 0.15rem 0.35rem;\n}\n.book-tile {\n  border-radius: 0.9rem;\n  border: 1px solid rgba(255, 225, 178, 0.18);\n  background: rgba(14, 10, 7, 0.62);\n  overflow: hidden;\n  display: grid;\n}\n.cover-wrap {\n  aspect-ratio: 2 / 3;\n  background: rgba(12, 9, 7, 0.72);\n}\n.cover-wrap img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.book-tile footer {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  gap: 0.65rem;\n  padding: 0.58rem 0.65rem;\n  background:\n    linear-gradient(\n      90deg,\n      rgba(255, 204, 122, 0.18),\n      rgba(255, 157, 82, 0.12));\n  border-top: 1px solid rgba(255, 225, 178, 0.12);\n}\n.book-tile strong {\n  font-size: 1rem;\n  color: var(--ink);\n}\n.book-tile span {\n  color: var(--ink-soft);\n  font-size: 0.92rem;\n}\n.reviews-zone {\n  display: grid;\n  gap: 1rem;\n}\n.reviews-scroll {\n  height: min(72vh, 980px);\n  width: 100%;\n}\n.reviews-scroll .cdk-virtual-scroll-content-wrapper {\n  display: grid;\n  gap: 1rem;\n  padding-right: 0.1rem;\n}\n.review-card {\n  display: grid;\n  grid-template-columns: 160px minmax(0, 1fr);\n  gap: 1.2rem;\n  border: 1px solid rgba(255, 225, 178, 0.18);\n  border-radius: 1rem;\n  padding: 1.1rem;\n  background:\n    radial-gradient(\n      circle at 14% 14%,\n      rgba(255, 177, 89, 0.08),\n      transparent 26%),\n    linear-gradient(\n      180deg,\n      rgba(27, 18, 14, 0.8),\n      rgba(18, 12, 9, 0.94));\n  cursor: pointer;\n  transition:\n    transform 180ms ease,\n    border-color 180ms ease,\n    box-shadow 180ms ease;\n}\n.review-card:hover {\n  transform: translateY(-2px);\n  border-color: rgba(255, 204, 122, 0.42);\n  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.26);\n}\n.review-card:focus-visible {\n  outline: 2px solid #ffcc7a;\n  outline-offset: 2px;\n}\n.review-cover {\n  border-radius: 0.75rem;\n  overflow: hidden;\n  background: rgba(12, 9, 7, 0.72);\n  border: 1px solid rgba(255, 225, 178, 0.18);\n  aspect-ratio: 2 / 3;\n}\n.review-cover img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.review-body {\n  display: grid;\n  align-content: center;\n  gap: 0.8rem;\n}\n.review-body header {\n  display: grid;\n  gap: 0.32rem;\n}\n.user-row {\n  margin: 0;\n  color: var(--ink-soft);\n  font-size: 1.02rem;\n  font-weight: 700;\n}\n.review-body h3 {\n  margin: 0;\n  font-size: clamp(1.65rem, 2.8vw, 2.4rem);\n  letter-spacing: -0.03em;\n  line-height: 1.02;\n}\n.review-body h3 span {\n  font-size: 1.2rem;\n  font-weight: 500;\n  color: var(--accent);\n}\n.meta-row {\n  display: flex;\n  align-items: center;\n  gap: 0.8rem;\n  color: #f0e2cd;\n}\n.score {\n  color: var(--accent);\n  font-weight: 700;\n}\n.review-copy {\n  margin: 0;\n  font-size: clamp(1.18rem, 1.9vw, 1.6rem);\n  line-height: 1.5;\n  color: #f4dcc2;\n}\n.status,\n.status.error {\n  -webkit-backdrop-filter: blur(6px);\n  backdrop-filter: blur(6px);\n}\n.status {\n  margin-top: 0.55rem;\n  padding: 0.65rem 0.75rem;\n  border-radius: 0.6rem;\n  background: rgba(14, 10, 7, 0.58);\n  border: 1px solid rgba(255, 225, 178, 0.16);\n  color: #f0e2cd;\n}\n.status.error {\n  background: rgba(97, 33, 27, 0.55);\n  border-color: rgba(140, 60, 51, 0.9);\n  color: #ffd9d2;\n}\n@media (max-width: 960px) {\n  .review-card {\n    grid-template-columns: 140px minmax(0, 1fr);\n  }\n  .review-copy {\n    font-size: 1.1rem;\n  }\n}\n@media (max-width: 640px) {\n  .home-shell {\n    padding: 0.75rem;\n  }\n  .hero-head h1 {\n    font-size: clamp(1.8rem, 10vw, 2.3rem);\n  }\n  .hero-head p,\n  .user-row,\n  .book-tile span {\n    font-size: 0.96rem;\n  }\n  .section-head h2 {\n    font-size: 1.1rem;\n  }\n  .recommended-zone,\n  .reviews-zone {\n    padding: 0.8rem;\n  }\n  .recommended-strip {\n    grid-auto-columns: minmax(120px, 42vw);\n  }\n  .review-card {\n    grid-template-columns: 1fr;\n    gap: 0.9rem;\n    padding: 0.9rem;\n  }\n  .review-cover {\n    max-width: 180px;\n  }\n  .review-body h3 {\n    font-size: 1.45rem;\n  }\n  .review-copy {\n    font-size: 1rem;\n    line-height: 1.55;\n  }\n}\n/*# sourceMappingURL=home.css.map */\n'] }]
+  }], null, null);
 })();
 (() => {
-  (typeof ngDevMode === "undefined" || ngDevMode) && \u0275setClassDebugInfo(Home, { className: "Home", filePath: "src/app/pages/home/home.ts", lineNumber: 49 });
+  (typeof ngDevMode === "undefined" || ngDevMode) && \u0275setClassDebugInfo(Home, { className: "Home", filePath: "src/app/pages/home/home.ts", lineNumber: 52 });
 })();
 
 // node_modules/@angular/forms/fesm2022/forms.mjs
@@ -42786,6 +44811,70 @@ var ReactiveFormsModule = class _ReactiveFormsModule {
   }], null, null);
 })();
 
+// src/app/services/Login.service.ts
+var LoginService = class _LoginService {
+  http;
+  router;
+  apiUrl = environment.API_URL + "login";
+  constructor(http, router) {
+    this.http = http;
+    this.router = router;
+  }
+  login(email, password) {
+    return this.http.post(this.apiUrl, { email, password }).pipe(tap((response) => {
+      const token = response.access_token ?? response.token;
+      const username = response.user.name ?? response.user.username;
+      const userId = response.user.id;
+      if (token) {
+        localStorage.setItem("token", token);
+      }
+      if (Number.isFinite(userId)) {
+        localStorage.setItem("userId", String(userId));
+      }
+      if (username) {
+        localStorage.setItem("username", username);
+      }
+      if (response.user.foto) {
+        localStorage.setItem("foto", response.user.foto);
+      }
+    }));
+  }
+  logout() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("userId");
+    localStorage.removeItem("username");
+    localStorage.removeItem("foto");
+    this.router.navigate(["/login"]);
+  }
+  getToken() {
+    return localStorage.getItem("token");
+  }
+  getUserId() {
+    const rawUserId = localStorage.getItem("userId");
+    if (!rawUserId) {
+      return null;
+    }
+    const userId = Number(rawUserId);
+    return Number.isFinite(userId) ? userId : null;
+  }
+  getUsername() {
+    return localStorage.getItem("username");
+  }
+  isLoggedIn() {
+    return !!this.getToken();
+  }
+  static \u0275fac = function LoginService_Factory(__ngFactoryType__) {
+    return new (__ngFactoryType__ || _LoginService)(\u0275\u0275inject(HttpClient), \u0275\u0275inject(Router));
+  };
+  static \u0275prov = /* @__PURE__ */ \u0275\u0275defineInjectable({ token: _LoginService, factory: _LoginService.\u0275fac, providedIn: "root" });
+};
+(() => {
+  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(LoginService, [{
+    type: Injectable,
+    args: [{ providedIn: "root" }]
+  }], () => [{ type: HttpClient }, { type: Router }], null);
+})();
+
 // src/app/pages/usuario/usuario.ts
 function UsuarioPage_p_1_Template(rf, ctx) {
   if (rf & 1) {
@@ -42917,7 +45006,7 @@ function UsuarioPage_section_5_Template(rf, ctx) {
     \u0275\u0275text(8, "Modificar usuario");
     \u0275\u0275elementEnd()();
     \u0275\u0275elementStart(9, "p", 27);
-    \u0275\u0275text(10, "Perfil de usuario estandar listo para personalizar.");
+    \u0275\u0275text(10);
     \u0275\u0275elementEnd()();
     \u0275\u0275elementStart(11, "div", 28);
     \u0275\u0275template(12, UsuarioPage_section_5_article_12_Template, 5, 2, "article", 29);
@@ -42927,7 +45016,9 @@ function UsuarioPage_section_5_Template(rf, ctx) {
     const ctx_r0 = \u0275\u0275nextContext();
     \u0275\u0275advance(6);
     \u0275\u0275textInterpolate(ctx_r0.user.nombre);
-    \u0275\u0275advance(6);
+    \u0275\u0275advance(4);
+    \u0275\u0275textInterpolate(ctx_r0.user.email || "Perfil sincronizado con la base de datos.");
+    \u0275\u0275advance(2);
     \u0275\u0275property("ngForOf", ctx_r0.metrics);
   }
 }
@@ -42963,17 +45054,149 @@ function UsuarioPage_nav_6_Template(rf, ctx) {
     \u0275\u0275property("ngForOf", ctx_r0.profileTabs);
   }
 }
-function UsuarioPage_section_7_section_2_article_7_Template(rf, ctx) {
+function UsuarioPage_section_7_section_2_button_6_Template(rf, ctx) {
   if (rf & 1) {
-    \u0275\u0275elementStart(0, "article", 42);
-    \u0275\u0275element(1, "div", 43);
-    \u0275\u0275elementStart(2, "div", 44)(3, "strong");
+    const _r7 = \u0275\u0275getCurrentView();
+    \u0275\u0275elementStart(0, "button", 45);
+    \u0275\u0275listener("click", function UsuarioPage_section_7_section_2_button_6_Template_button_click_0_listener() {
+      \u0275\u0275restoreView(_r7);
+      const ctx_r0 = \u0275\u0275nextContext(3);
+      return \u0275\u0275resetView(ctx_r0.openBookFinder());
+    });
+    \u0275\u0275text(1);
+    \u0275\u0275elementEnd();
+  }
+  if (rf & 2) {
+    const ctx_r0 = \u0275\u0275nextContext(3);
+    \u0275\u0275advance();
+    \u0275\u0275textInterpolate1(" ", ctx_r0.bookSearchOpen ? "Ocultar buscador" : "A\xF1adir libro", " ");
+  }
+}
+function UsuarioPage_section_7_section_2_section_7_p_7_Template(rf, ctx) {
+  if (rf & 1) {
+    \u0275\u0275elementStart(0, "p", 52);
+    \u0275\u0275text(1, " No se encontraron libros con esa b\xFAsqueda. ");
+    \u0275\u0275elementEnd();
+  }
+}
+function UsuarioPage_section_7_section_2_section_7_div_8_article_1_Template(rf, ctx) {
+  if (rf & 1) {
+    const _r9 = \u0275\u0275getCurrentView();
+    \u0275\u0275elementStart(0, "article", 55);
+    \u0275\u0275element(1, "div", 56);
+    \u0275\u0275elementStart(2, "div", 57)(3, "strong");
     \u0275\u0275text(4);
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(5, "p");
     \u0275\u0275text(6);
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(7, "div", 45)(8, "span");
+    \u0275\u0275elementStart(7, "span");
+    \u0275\u0275text(8);
+    \u0275\u0275elementEnd()();
+    \u0275\u0275elementStart(9, "button", 58);
+    \u0275\u0275listener("click", function UsuarioPage_section_7_section_2_section_7_div_8_article_1_Template_button_click_9_listener() {
+      const book_r10 = \u0275\u0275restoreView(_r9).$implicit;
+      const ctx_r0 = \u0275\u0275nextContext(5);
+      return \u0275\u0275resetView(ctx_r0.addBookToProfile(book_r10));
+    });
+    \u0275\u0275text(10, " A\xF1adir ");
+    \u0275\u0275elementEnd()();
+  }
+  if (rf & 2) {
+    const book_r10 = ctx.$implicit;
+    const ctx_r0 = \u0275\u0275nextContext(5);
+    \u0275\u0275advance(4);
+    \u0275\u0275textInterpolate(book_r10.titulo);
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(book_r10.autor);
+    \u0275\u0275advance(2);
+    \u0275\u0275textInterpolate(book_r10.descripcion || "Sin descripci\xF3n");
+    \u0275\u0275advance();
+    \u0275\u0275property("disabled", ctx_r0.isSavingBook);
+  }
+}
+function UsuarioPage_section_7_section_2_section_7_div_8_Template(rf, ctx) {
+  if (rf & 1) {
+    \u0275\u0275elementStart(0, "div", 53);
+    \u0275\u0275template(1, UsuarioPage_section_7_section_2_section_7_div_8_article_1_Template, 11, 4, "article", 54);
+    \u0275\u0275elementEnd();
+  }
+  if (rf & 2) {
+    const ctx_r0 = \u0275\u0275nextContext(4);
+    \u0275\u0275advance();
+    \u0275\u0275property("ngForOf", ctx_r0.bookSearchResults);
+  }
+}
+function UsuarioPage_section_7_section_2_section_7_Template(rf, ctx) {
+  if (rf & 1) {
+    const _r8 = \u0275\u0275getCurrentView();
+    \u0275\u0275elementStart(0, "section", 46)(1, "div", 47)(2, "input", 48);
+    \u0275\u0275twoWayListener("ngModelChange", function UsuarioPage_section_7_section_2_section_7_Template_input_ngModelChange_2_listener($event) {
+      \u0275\u0275restoreView(_r8);
+      const ctx_r0 = \u0275\u0275nextContext(3);
+      \u0275\u0275twoWayBindingSet(ctx_r0.bookSearchQuery, $event) || (ctx_r0.bookSearchQuery = $event);
+      return \u0275\u0275resetView($event);
+    });
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(3, "button", 49);
+    \u0275\u0275listener("click", function UsuarioPage_section_7_section_2_section_7_Template_button_click_3_listener() {
+      \u0275\u0275restoreView(_r8);
+      const ctx_r0 = \u0275\u0275nextContext(3);
+      return \u0275\u0275resetView(ctx_r0.searchBooks());
+    });
+    \u0275\u0275text(4);
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(5, "button", 20);
+    \u0275\u0275listener("click", function UsuarioPage_section_7_section_2_section_7_Template_button_click_5_listener() {
+      \u0275\u0275restoreView(_r8);
+      const ctx_r0 = \u0275\u0275nextContext(3);
+      return \u0275\u0275resetView(ctx_r0.closeBookFinder());
+    });
+    \u0275\u0275text(6, "Cerrar");
+    \u0275\u0275elementEnd()();
+    \u0275\u0275template(7, UsuarioPage_section_7_section_2_section_7_p_7_Template, 2, 0, "p", 50)(8, UsuarioPage_section_7_section_2_section_7_div_8_Template, 2, 1, "div", 51);
+    \u0275\u0275elementEnd();
+  }
+  if (rf & 2) {
+    const ctx_r0 = \u0275\u0275nextContext(3);
+    \u0275\u0275advance(2);
+    \u0275\u0275twoWayProperty("ngModel", ctx_r0.bookSearchQuery);
+    \u0275\u0275advance();
+    \u0275\u0275property("disabled", ctx_r0.isSearchingBooks);
+    \u0275\u0275advance();
+    \u0275\u0275textInterpolate1(" ", ctx_r0.isSearchingBooks ? "Buscando..." : "Buscar", " ");
+    \u0275\u0275advance(3);
+    \u0275\u0275property("ngIf", !ctx_r0.isSearchingBooks && ctx_r0.bookSearchResults.length === 0 && ctx_r0.bookSearchQuery.trim().length > 0);
+    \u0275\u0275advance();
+    \u0275\u0275property("ngIf", ctx_r0.bookSearchResults.length > 0);
+  }
+}
+function UsuarioPage_section_7_section_2_p_8_Template(rf, ctx) {
+  if (rf & 1) {
+    const _r11 = \u0275\u0275getCurrentView();
+    \u0275\u0275elementStart(0, "p", 59);
+    \u0275\u0275text(1, " Todav\xEDa no tienes libros en tu perfil. ");
+    \u0275\u0275elementStart(2, "button", 60);
+    \u0275\u0275listener("click", function UsuarioPage_section_7_section_2_p_8_Template_button_click_2_listener() {
+      \u0275\u0275restoreView(_r11);
+      const ctx_r0 = \u0275\u0275nextContext(3);
+      return \u0275\u0275resetView(ctx_r0.openBookFinder());
+    });
+    \u0275\u0275text(3, "Buscar y a\xF1adir un libro");
+    \u0275\u0275elementEnd()();
+  }
+}
+function UsuarioPage_section_7_section_2_article_10_Template(rf, ctx) {
+  if (rf & 1) {
+    \u0275\u0275elementStart(0, "article", 61);
+    \u0275\u0275element(1, "div", 62);
+    \u0275\u0275elementStart(2, "div", 63)(3, "strong");
+    \u0275\u0275text(4);
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(5, "p");
+    \u0275\u0275text(6);
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(7, "div", 64)(8, "span");
     \u0275\u0275text(9);
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(10, "span");
@@ -42981,15 +45204,15 @@ function UsuarioPage_section_7_section_2_article_7_Template(rf, ctx) {
     \u0275\u0275elementEnd()()()();
   }
   if (rf & 2) {
-    const book_r7 = ctx.$implicit;
+    const book_r12 = ctx.$implicit;
     \u0275\u0275advance(4);
-    \u0275\u0275textInterpolate(book_r7.title);
+    \u0275\u0275textInterpolate(book_r12.title);
     \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate(book_r7.author);
+    \u0275\u0275textInterpolate(book_r12.author);
     \u0275\u0275advance(3);
-    \u0275\u0275textInterpolate(book_r7.year);
+    \u0275\u0275textInterpolate(book_r12.year);
     \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate(book_r7.rating);
+    \u0275\u0275textInterpolate(book_r12.rating);
   }
 }
 function UsuarioPage_section_7_section_2_Template(rf, ctx) {
@@ -42999,20 +45222,29 @@ function UsuarioPage_section_7_section_2_Template(rf, ctx) {
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(4, "span");
     \u0275\u0275text(5, "Selecciona tus lecturas favoritas.");
-    \u0275\u0275elementEnd()();
-    \u0275\u0275elementStart(6, "div", 40);
-    \u0275\u0275template(7, UsuarioPage_section_7_section_2_article_7_Template, 12, 4, "article", 41);
+    \u0275\u0275elementEnd();
+    \u0275\u0275template(6, UsuarioPage_section_7_section_2_button_6_Template, 2, 1, "button", 40);
+    \u0275\u0275elementEnd();
+    \u0275\u0275template(7, UsuarioPage_section_7_section_2_section_7_Template, 9, 5, "section", 41)(8, UsuarioPage_section_7_section_2_p_8_Template, 4, 0, "p", 42);
+    \u0275\u0275elementStart(9, "div", 43);
+    \u0275\u0275template(10, UsuarioPage_section_7_section_2_article_10_Template, 12, 4, "article", 44);
     \u0275\u0275elementEnd()();
   }
   if (rf & 2) {
     const ctx_r0 = \u0275\u0275nextContext(2);
-    \u0275\u0275advance(7);
+    \u0275\u0275advance(6);
+    \u0275\u0275property("ngIf", ctx_r0.activeTab === "Books");
+    \u0275\u0275advance();
+    \u0275\u0275property("ngIf", ctx_r0.activeTab === "Books" && ctx_r0.bookSearchOpen);
+    \u0275\u0275advance();
+    \u0275\u0275property("ngIf", ctx_r0.activeTab === "Books" && ctx_r0.selectedBooks.length === 0 && ctx_r0.metrics[0].value === "0");
+    \u0275\u0275advance(2);
     \u0275\u0275property("ngForOf", ctx_r0.favoriteBooks);
   }
 }
 function UsuarioPage_section_7_section_3_article_7_Template(rf, ctx) {
   if (rf & 1) {
-    \u0275\u0275elementStart(0, "article", 48)(1, "div")(2, "strong");
+    \u0275\u0275elementStart(0, "article", 67)(1, "div")(2, "strong");
     \u0275\u0275text(3);
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(4, "p");
@@ -43023,13 +45255,13 @@ function UsuarioPage_section_7_section_3_article_7_Template(rf, ctx) {
     \u0275\u0275elementEnd()();
   }
   if (rf & 2) {
-    const item_r8 = ctx.$implicit;
+    const item_r13 = ctx.$implicit;
     \u0275\u0275advance(3);
-    \u0275\u0275textInterpolate(item_r8.title);
+    \u0275\u0275textInterpolate(item_r13.title);
     \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate(item_r8.detail);
+    \u0275\u0275textInterpolate(item_r13.detail);
     \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate(item_r8.time);
+    \u0275\u0275textInterpolate(item_r13.time);
   }
 }
 function UsuarioPage_section_7_section_3_Template(rf, ctx) {
@@ -43040,8 +45272,8 @@ function UsuarioPage_section_7_section_3_Template(rf, ctx) {
     \u0275\u0275elementStart(4, "span");
     \u0275\u0275text(5, "Rese\xF1as y actividad reciente.");
     \u0275\u0275elementEnd()();
-    \u0275\u0275elementStart(6, "div", 46);
-    \u0275\u0275template(7, UsuarioPage_section_7_section_3_article_7_Template, 8, 3, "article", 47);
+    \u0275\u0275elementStart(6, "div", 65);
+    \u0275\u0275template(7, UsuarioPage_section_7_section_3_article_7_Template, 8, 3, "article", 66);
     \u0275\u0275elementEnd()();
   }
   if (rf & 2) {
@@ -43058,29 +45290,29 @@ function UsuarioPage_section_7_section_4_Template(rf, ctx) {
     \u0275\u0275elementStart(4, "span");
     \u0275\u0275text(5, "Libros y rese\xF1as que te gustaron.");
     \u0275\u0275elementEnd()();
-    \u0275\u0275elementStart(6, "p", 49);
+    \u0275\u0275elementStart(6, "p", 59);
     \u0275\u0275text(7, "Todav\xEDa no hay likes para mostrar.");
     \u0275\u0275elementEnd()();
   }
 }
 function UsuarioPage_section_7_aside_5_Template(rf, ctx) {
   if (rf & 1) {
-    \u0275\u0275elementStart(0, "aside", 50)(1, "section", 51)(2, "p", 52);
+    \u0275\u0275elementStart(0, "aside", 68)(1, "section", 69)(2, "p", 70);
     \u0275\u0275text(3, "Need an upgrade?");
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(4, "h2");
     \u0275\u0275text(5, "Profile stats, filtering and watchlist alerts.");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(6, "p", 53);
+    \u0275\u0275elementStart(6, "p", 71);
     \u0275\u0275text(7, "Este bloque ocupa el espacio lateral del dise\xF1o de referencia mientras el perfil sigue siendo funcional.");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(8, "a", 54);
+    \u0275\u0275elementStart(8, "a", 72);
     \u0275\u0275text(9, "Get Pro");
     \u0275\u0275elementEnd()();
-    \u0275\u0275elementStart(10, "section", 55)(11, "header", 39)(12, "h2");
+    \u0275\u0275elementStart(10, "section", 73)(11, "header", 39)(12, "h2");
     \u0275\u0275text(13, "Activity");
     \u0275\u0275elementEnd()();
-    \u0275\u0275elementStart(14, "p", 49);
+    \u0275\u0275elementStart(14, "p", 59);
     \u0275\u0275text(15, "No recent activity");
     \u0275\u0275elementEnd()()();
   }
@@ -43088,7 +45320,7 @@ function UsuarioPage_section_7_aside_5_Template(rf, ctx) {
 function UsuarioPage_section_7_Template(rf, ctx) {
   if (rf & 1) {
     \u0275\u0275elementStart(0, "section", 34)(1, "div", 35);
-    \u0275\u0275template(2, UsuarioPage_section_7_section_2_Template, 8, 1, "section", 36)(3, UsuarioPage_section_7_section_3_Template, 8, 1, "section", 36)(4, UsuarioPage_section_7_section_4_Template, 8, 0, "section", 36);
+    \u0275\u0275template(2, UsuarioPage_section_7_section_2_Template, 11, 4, "section", 36)(3, UsuarioPage_section_7_section_3_Template, 8, 1, "section", 36)(4, UsuarioPage_section_7_section_4_Template, 8, 0, "section", 36);
     \u0275\u0275elementEnd();
     \u0275\u0275template(5, UsuarioPage_section_7_aside_5_Template, 16, 0, "aside", 37);
     \u0275\u0275elementEnd();
@@ -43106,17 +45338,20 @@ function UsuarioPage_section_7_Template(rf, ctx) {
   }
 }
 var UsuarioPage = class _UsuarioPage {
-  // Cambia este ID aqui si quieres apuntar a otro usuario de prueba en el futuro.
-  profileUserId = 1;
+  loginService = inject2(LoginService);
   usuarioService = inject2(UsuarioService);
+  comentarioService = inject2(ComentarioService);
+  bookService = inject2(BookService);
   cdr = inject2(ChangeDetectorRef);
+  currentUserId = null;
   user = {
-    id: this.profileUserId,
+    id: 0,
     nombre: "Cargando...",
     email: "",
     password: "",
     rol: "usuario",
-    foto: ""
+    foto: "",
+    phone: ""
   };
   editDraft = {
     nombre: "",
@@ -43128,22 +45363,25 @@ var UsuarioPage = class _UsuarioPage {
   errorMessage = "";
   successMessage = "";
   activeTab = "Profile";
+  bookSearchOpen = false;
+  bookSearchQuery = "";
+  isSearchingBooks = false;
+  isSavingBook = false;
+  bookSearchResults = [];
+  selectedBooks = [];
+  profileComments = [];
+  profileBooks = [];
   profileTabs = ["Profile", "Books", "Reviews", "Likes"];
   metrics = [
+    { value: "0", label: "Reviews" },
     { value: "0", label: "Books" },
-    { value: "0", label: "Following" },
-    { value: "0", label: "Followers" }
+    { value: "0", label: "Likes" }
   ];
   favoriteBooks = [
-    { title: "No has elegido favoritos a\xFAn", author: "A\xF1ade tus lecturas destacadas", year: "2026", rating: "0.0" },
-    { title: "Tu pr\xF3ximo libro", author: "Sugerencias de lectura", year: "Pr\xF3ximamente", rating: "--" },
-    { title: "Club de lectura", author: "Comparte rese\xF1as", year: "Listo para usar", rating: "--" },
-    { title: "Lista personal", author: "Guarda libros", year: "Sin completar", rating: "--" }
+    { title: "Sin libros todav\xEDa", author: "Escribe tu primera review para empezar", year: "Base de datos", rating: "--" }
   ];
   activity = [
-    { title: "No recent activity", detail: "Todavia no hay actividad para mostrar.", time: "Ahora" },
-    { title: "Editar perfil", detail: "Puedes completar tu biografia y foto de perfil.", time: "Hoy" },
-    { title: "A\xF1adir libros", detail: "Empieza a marcar tus lecturas favoritas.", time: "Esta semana" }
+    { title: "Sin actividad reciente", detail: "Cuando publiques reviews aparecer\xE1n aqu\xED.", time: "Ahora" }
   ];
   ngOnInit() {
     this.loadProfile();
@@ -43151,19 +45389,46 @@ var UsuarioPage = class _UsuarioPage {
   loadProfile() {
     this.isLoading = true;
     this.errorMessage = "";
-    this.usuarioService.getUsuarios().pipe(map((users) => users.find((item) => item.id === this.profileUserId)), catchError(() => this.usuarioService.getUsuario(this.profileUserId).pipe(map((user) => user ? user : null))), catchError(() => of(null))).subscribe({
-      next: (user) => {
-        if (!user) {
-          this.errorMessage = "No se pudo cargar el perfil.";
+    this.successMessage = "";
+    const storedUserId = this.loginService.getUserId();
+    const storedUsername = (this.loginService.getUsername() ?? "").trim().toLowerCase();
+    const user$ = storedUserId != null ? this.usuarioService.getUsuario(storedUserId).pipe(catchError(() => this.usuarioService.getUsuarios().pipe(map((users) => users.find((item) => item.id === storedUserId) ?? null), catchError(() => of(null))))) : this.usuarioService.getUsuarios().pipe(map((users) => {
+      if (!storedUsername) {
+        return null;
+      }
+      return users.find((item) => {
+        const userName = String(item.nombre ?? "").trim().toLowerCase();
+        const userEmail = String(item.email ?? "").trim().toLowerCase();
+        return userName === storedUsername || userEmail === storedUsername;
+      }) ?? null;
+    }), catchError(() => of(null)));
+    user$.pipe(switchMap((user) => {
+      if (!user) {
+        return of({ user: null, comments: [], books: [] });
+      }
+      this.currentUserId = user.id;
+      this.selectedBooks = this.loadSelectedBooks(user.id);
+      return this.comentarioService.getComentarios().pipe(map((comments) => comments.filter((comment) => this.isCommentFromCurrentUser(comment, user))), catchError(() => of([])), switchMap((comments) => this.loadBooksForComments(user, comments)));
+    }), catchError(() => of({ user: null, comments: [], books: [] }))).subscribe({
+      next: (result) => {
+        if (!result.user) {
+          this.errorMessage = "No se pudo identificar el usuario autenticado.";
           this.isLoading = false;
           this.cdr.detectChanges();
           return;
         }
-        this.user = user;
+        this.user = result.user;
+        this.currentUserId = result.user.id;
         this.editDraft = {
-          nombre: user.nombre,
-          email: user.email
+          nombre: String(result.user.nombre ?? ""),
+          email: String(result.user.email ?? "")
         };
+        this.profileComments = result.comments;
+        this.profileBooks = result.books;
+        this.metrics = this.buildMetrics(this.profileComments);
+        this.favoriteBooks = this.buildFavoriteBooks(this.profileComments, this.profileBooks, this.selectedBooks);
+        this.activity = this.buildActivityFeed(this.profileComments, this.profileBooks);
+        this.bookSearchOpen = this.favoriteBooks.length === 1 && this.selectedBooks.length === 0;
         this.isLoading = false;
         this.cdr.detectChanges();
       },
@@ -43174,10 +45439,189 @@ var UsuarioPage = class _UsuarioPage {
       }
     });
   }
+  loadBooksForComments(user, comments) {
+    const bookIds = this.extractDistinctBookIds(comments);
+    if (bookIds.length === 0) {
+      return of({ user, comments, books: [] });
+    }
+    return forkJoin(bookIds.slice(0, 4).map((bookId) => this.bookService.getBook(bookId).pipe(catchError(() => of(null))))).pipe(map((books) => books.filter((book) => book !== null)), map((books) => ({ user, comments, books })));
+  }
+  loadSelectedBooks(userId) {
+    try {
+      const raw = localStorage.getItem(this.profileBooksStorageKey(userId));
+      if (!raw) {
+        return [];
+      }
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  persistSelectedBooks(userId, books) {
+    localStorage.setItem(this.profileBooksStorageKey(userId), JSON.stringify(books));
+  }
+  profileBooksStorageKey(userId) {
+    return `profileBooks:${userId}`;
+  }
+  isCommentFromCurrentUser(comment, user) {
+    const raw = comment;
+    const commentUserId = raw.UsuarioId ?? raw.usuario_id;
+    if (commentUserId != null && Number(commentUserId) === Number(user.id)) {
+      return true;
+    }
+    const storedUsername = (this.loginService.getUsername() ?? "").trim().toLowerCase();
+    const embeddedUserName = String(raw.user ?? raw.usuario?.nombre ?? raw.usuarioNombre ?? raw.username ?? "").trim().toLowerCase();
+    return storedUsername.length > 0 && embeddedUserName.length > 0 && storedUsername === embeddedUserName;
+  }
+  extractDistinctBookIds(comments) {
+    const bookIds = comments.map((comment) => {
+      const raw = comment;
+      const rawBookId = raw.BookId ?? raw.libro_id;
+      if (rawBookId == null) {
+        return null;
+      }
+      const normalizedBookId = Number(rawBookId);
+      return Number.isFinite(normalizedBookId) ? normalizedBookId : null;
+    }).filter((bookId) => bookId !== null);
+    return Array.from(new Set(bookIds));
+  }
+  buildMetrics(comments) {
+    const totalLikes = comments.reduce((sum, comment) => sum + this.resolveCommentLikes(comment), 0);
+    const reviewedBooks = this.extractDistinctBookIds(comments).length;
+    return [
+      { value: String(comments.length), label: "Reviews" },
+      { value: String(reviewedBooks), label: "Books" },
+      { value: String(totalLikes), label: "Likes" }
+    ];
+  }
+  buildFavoriteBooks(comments, books, profileBooks) {
+    const sourceBooks = [...profileBooks];
+    for (const book of books) {
+      if (!sourceBooks.some((item) => item.id === book.id)) {
+        sourceBooks.push(book);
+      }
+    }
+    if (comments.length === 0 && sourceBooks.length === 0) {
+      return [
+        { title: "Sin libros todav\xEDa", author: "Usa el buscador para a\xF1adir un libro", year: "Base de datos", rating: "--" }
+      ];
+    }
+    const commentsByBook = /* @__PURE__ */ new Map();
+    for (const comment of comments) {
+      const raw = comment;
+      const rawBookId = raw.BookId ?? raw.libro_id;
+      if (rawBookId == null) {
+        continue;
+      }
+      const normalizedBookId = Number(rawBookId);
+      if (!Number.isFinite(normalizedBookId)) {
+        continue;
+      }
+      const current = commentsByBook.get(normalizedBookId) ?? [];
+      current.push(comment);
+      commentsByBook.set(normalizedBookId, current);
+    }
+    return sourceBooks.map((book) => {
+      const bookComments = commentsByBook.get(book.id) ?? [];
+      const averageLikes = bookComments.length > 0 ? bookComments.reduce((sum, comment) => sum + this.resolveCommentLikes(comment), 0) / bookComments.length : 0;
+      return {
+        title: book.titulo,
+        author: book.autor,
+        year: `Libro #${book.id}`,
+        rating: `${bookComments.length} reviews \xB7 ${averageLikes.toFixed(1)} likes`
+      };
+    });
+  }
+  openBookFinder() {
+    this.bookSearchOpen = true;
+    this.activeTab = "Books";
+    this.errorMessage = "";
+    this.successMessage = "";
+    this.cdr.detectChanges();
+  }
+  closeBookFinder() {
+    this.bookSearchOpen = false;
+    this.bookSearchQuery = "";
+    this.bookSearchResults = [];
+    this.cdr.detectChanges();
+  }
+  searchBooks() {
+    const query = this.bookSearchQuery.trim();
+    if (!query) {
+      this.errorMessage = "Escribe al menos un t\xEDtulo o autor para buscar.";
+      this.bookSearchResults = [];
+      return;
+    }
+    this.isSearchingBooks = true;
+    this.errorMessage = "";
+    this.successMessage = "";
+    this.bookService.searchBook(query).pipe(catchError(() => of([]))).subscribe({
+      next: (results) => {
+        this.bookSearchResults = results;
+        this.isSearchingBooks = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.errorMessage = "No se pudieron buscar libros.";
+        this.bookSearchResults = [];
+        this.isSearchingBooks = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+  addBookToProfile(book) {
+    if (!this.currentUserId) {
+      this.errorMessage = "No se pudo guardar el libro porque no hay un usuario autenticado.";
+      return;
+    }
+    const alreadyAdded = this.selectedBooks.some((item) => item.id === book.id);
+    if (alreadyAdded) {
+      this.successMessage = "Ese libro ya est\xE1 en tu perfil.";
+      return;
+    }
+    this.isSavingBook = true;
+    this.errorMessage = "";
+    this.successMessage = "";
+    this.selectedBooks = [book, ...this.selectedBooks];
+    this.persistSelectedBooks(this.currentUserId, this.selectedBooks);
+    this.favoriteBooks = this.buildFavoriteBooks(this.profileComments, this.profileBooks, this.selectedBooks);
+    this.successMessage = "Libro a\xF1adido a tu perfil.";
+    this.isSavingBook = false;
+    this.bookSearchOpen = false;
+    this.bookSearchQuery = "";
+    this.bookSearchResults = [];
+    this.cdr.detectChanges();
+  }
+  buildActivityFeed(comments, books) {
+    if (comments.length === 0) {
+      return [
+        { title: "Sin actividad reciente", detail: "Cuando publiques reviews aparecer\xE1n aqu\xED.", time: "Ahora" }
+      ];
+    }
+    const orderedComments = [...comments].sort((left, right) => Number(right.id) - Number(left.id));
+    const bookById = new Map(books.map((book) => [book.id, book]));
+    return orderedComments.slice(0, 3).map((comment, index) => {
+      const raw = comment;
+      const rawBookId = raw.BookId ?? raw.libro_id;
+      const normalizedBookId = rawBookId != null ? Number(rawBookId) : null;
+      const book = normalizedBookId != null && Number.isFinite(normalizedBookId) ? bookById.get(normalizedBookId) : null;
+      return {
+        title: book?.titulo ?? String(raw.libro ?? raw.libroTitulo ?? "Review reciente"),
+        detail: raw.contenido ?? raw.comment ?? "Sin contenido",
+        time: index === 0 ? "Ahora" : index === 1 ? "Hace un momento" : "Reciente"
+      };
+    });
+  }
+  resolveCommentLikes(comment) {
+    const raw = comment;
+    const likes = Number(raw.likes ?? raw.likes_count ?? raw.rating ?? 0);
+    return Number.isFinite(likes) ? likes : 0;
+  }
   startEditing() {
     this.editDraft = {
-      nombre: this.user.nombre,
-      email: this.user.email
+      nombre: String(this.user.nombre ?? ""),
+      email: String(this.user.email ?? "")
     };
     this.errorMessage = "";
     this.successMessage = "";
@@ -43189,8 +45633,8 @@ var UsuarioPage = class _UsuarioPage {
     this.errorMessage = "";
     this.successMessage = "";
     this.editDraft = {
-      nombre: this.user.nombre,
-      email: this.user.email
+      nombre: String(this.user.nombre ?? ""),
+      email: String(this.user.email ?? "")
     };
     this.cdr.detectChanges();
   }
@@ -43201,12 +45645,19 @@ var UsuarioPage = class _UsuarioPage {
       this.errorMessage = "Nombre y email son obligatorios.";
       return;
     }
+    const userId = this.currentUserId ?? this.user.id;
+    if (!userId) {
+      this.errorMessage = "No se pudo actualizar el perfil porque no hay un usuario autenticado.";
+      return;
+    }
     this.isSaving = true;
     this.errorMessage = "";
     this.successMessage = "";
-    this.usuarioService.updateUsuario(this.profileUserId, { nombre, email }).subscribe({
+    this.usuarioService.updateUsuario(userId, { nombre, email }).subscribe({
       next: (updatedUser) => {
         this.user = updatedUser;
+        this.currentUserId = updatedUser.id;
+        localStorage.setItem("username", updatedUser.nombre);
         this.isEditing = false;
         this.successMessage = "Perfil actualizado correctamente.";
         this.isSaving = false;
@@ -43225,10 +45676,10 @@ var UsuarioPage = class _UsuarioPage {
   static \u0275fac = function UsuarioPage_Factory(__ngFactoryType__) {
     return new (__ngFactoryType__ || _UsuarioPage)();
   };
-  static \u0275cmp = /* @__PURE__ */ \u0275\u0275defineComponent({ type: _UsuarioPage, selectors: [["app-usuario-page"]], decls: 8, vars: 7, consts: [[1, "profile-shell"], ["class", "status", 4, "ngIf"], ["class", "status error", 4, "ngIf"], ["class", "status success", 4, "ngIf"], ["class", "edit-shell", 4, "ngIf"], ["class", "profile-hero", 4, "ngIf"], ["class", "profile-tabs", "aria-label", "Secciones del perfil", 4, "ngIf"], ["class", "profile-grid", 4, "ngIf"], [1, "status"], [1, "status", "error"], [1, "status", "success"], [1, "edit-shell"], [1, "edit-card"], [1, "edit-head"], [1, "edit-eyebrow"], [1, "editor-form", 3, "ngSubmit"], ["type", "text", "name", "nombre", "autocomplete", "name", 3, "ngModelChange", "ngModel"], ["type", "email", "name", "email", "autocomplete", "email", 3, "ngModelChange", "ngModel"], [1, "editor-actions"], ["type", "submit", 1, "btn-save", 3, "disabled"], ["type", "button", 1, "btn-cancel", 3, "click"], [1, "profile-hero"], ["aria-hidden", "true", 1, "avatar-block"], ["aria-hidden", "true", 1, "avatar-icon"], [1, "hero-copy"], [1, "hero-actions"], ["type", "button", 1, "btn-edit", 3, "click"], [1, "hero-subtitle"], [1, "metric-strip"], ["class", "metric-card", 4, "ngFor", "ngForOf"], [1, "metric-card"], ["aria-label", "Secciones del perfil", 1, "profile-tabs"], ["type", "button", "class", "tab-button", 3, "active", "click", 4, "ngFor", "ngForOf"], ["type", "button", 1, "tab-button", 3, "click"], [1, "profile-grid"], [1, "main-column"], ["class", "panel", 4, "ngIf"], ["class", "side-column", 4, "ngIf"], [1, "panel"], [1, "panel-head"], [1, "book-grid"], ["class", "book-card", 4, "ngFor", "ngForOf"], [1, "book-card"], ["aria-hidden", "true", 1, "book-cover"], [1, "book-info"], [1, "book-meta"], [1, "activity-list"], ["class", "activity-card", 4, "ngFor", "ngForOf"], [1, "activity-card"], [1, "empty-state"], [1, "side-column"], [1, "promo-card"], [1, "promo-eyebrow"], [1, "promo-copy"], ["href", "#", 1, "promo-button"], [1, "panel", "side-panel"]], template: function UsuarioPage_Template(rf, ctx) {
+  static \u0275cmp = /* @__PURE__ */ \u0275\u0275defineComponent({ type: _UsuarioPage, selectors: [["app-usuario-page"]], decls: 8, vars: 7, consts: [[1, "profile-shell"], ["class", "status", 4, "ngIf"], ["class", "status error", 4, "ngIf"], ["class", "status success", 4, "ngIf"], ["class", "edit-shell", 4, "ngIf"], ["class", "profile-hero", 4, "ngIf"], ["class", "profile-tabs", "aria-label", "Secciones del perfil", 4, "ngIf"], ["class", "profile-grid", 4, "ngIf"], [1, "status"], [1, "status", "error"], [1, "status", "success"], [1, "edit-shell"], [1, "edit-card"], [1, "edit-head"], [1, "edit-eyebrow"], [1, "editor-form", 3, "ngSubmit"], ["type", "text", "name", "nombre", "autocomplete", "name", 3, "ngModelChange", "ngModel"], ["type", "email", "name", "email", "autocomplete", "email", 3, "ngModelChange", "ngModel"], [1, "editor-actions"], ["type", "submit", 1, "btn-save", 3, "disabled"], ["type", "button", 1, "btn-cancel", 3, "click"], [1, "profile-hero"], ["aria-hidden", "true", 1, "avatar-block"], ["aria-hidden", "true", 1, "avatar-icon"], [1, "hero-copy"], [1, "hero-actions"], ["type", "button", 1, "btn-edit", 3, "click"], [1, "hero-subtitle"], [1, "metric-strip"], ["class", "metric-card", 4, "ngFor", "ngForOf"], [1, "metric-card"], ["aria-label", "Secciones del perfil", 1, "profile-tabs"], ["type", "button", "class", "tab-button", 3, "active", "click", 4, "ngFor", "ngForOf"], ["type", "button", 1, "tab-button", 3, "click"], [1, "profile-grid"], [1, "main-column"], ["class", "panel", 4, "ngIf"], ["class", "side-column", 4, "ngIf"], [1, "panel"], [1, "panel-head"], ["type", "button", "class", "btn-edit panel-action", 3, "click", 4, "ngIf"], ["class", "book-finder", 4, "ngIf"], ["class", "empty-state", 4, "ngIf"], [1, "book-grid"], ["class", "book-card", 4, "ngFor", "ngForOf"], ["type", "button", 1, "btn-edit", "panel-action", 3, "click"], [1, "book-finder"], [1, "finder-toolbar"], ["type", "text", "name", "bookSearchQuery", "placeholder", "Busca por t\xEDtulo o autor", "autocomplete", "off", 3, "ngModelChange", "ngModel"], ["type", "button", 1, "btn-save", 3, "click", "disabled"], ["class", "finder-empty", 4, "ngIf"], ["class", "finder-results", 4, "ngIf"], [1, "finder-empty"], [1, "finder-results"], ["class", "finder-result", 4, "ngFor", "ngForOf"], [1, "finder-result"], ["aria-hidden", "true", 1, "finder-cover"], [1, "finder-copy"], ["type", "button", 1, "btn-edit", "finder-action", 3, "click", "disabled"], [1, "empty-state"], ["type", "button", 1, "btn-edit", "inline-action", 3, "click"], [1, "book-card"], ["aria-hidden", "true", 1, "book-cover"], [1, "book-info"], [1, "book-meta"], [1, "activity-list"], ["class", "activity-card", 4, "ngFor", "ngForOf"], [1, "activity-card"], [1, "side-column"], [1, "promo-card"], [1, "promo-eyebrow"], [1, "promo-copy"], ["href", "#", 1, "promo-button"], [1, "panel", "side-panel"]], template: function UsuarioPage_Template(rf, ctx) {
     if (rf & 1) {
       \u0275\u0275elementStart(0, "main", 0);
-      \u0275\u0275template(1, UsuarioPage_p_1_Template, 2, 0, "p", 1)(2, UsuarioPage_p_2_Template, 2, 1, "p", 2)(3, UsuarioPage_p_3_Template, 2, 1, "p", 3)(4, UsuarioPage_section_4_Template, 23, 4, "section", 4)(5, UsuarioPage_section_5_Template, 13, 2, "section", 5)(6, UsuarioPage_nav_6_Template, 2, 1, "nav", 6)(7, UsuarioPage_section_7_Template, 6, 4, "section", 7);
+      \u0275\u0275template(1, UsuarioPage_p_1_Template, 2, 0, "p", 1)(2, UsuarioPage_p_2_Template, 2, 1, "p", 2)(3, UsuarioPage_p_3_Template, 2, 1, "p", 3)(4, UsuarioPage_section_4_Template, 23, 4, "section", 4)(5, UsuarioPage_section_5_Template, 13, 3, "section", 5)(6, UsuarioPage_nav_6_Template, 2, 1, "nav", 6)(7, UsuarioPage_section_7_Template, 6, 4, "section", 7);
       \u0275\u0275elementEnd();
     }
     if (rf & 2) {
@@ -43247,191 +45698,218 @@ var UsuarioPage = class _UsuarioPage {
       \u0275\u0275advance();
       \u0275\u0275property("ngIf", !ctx.isLoading && !ctx.isEditing);
     }
-  }, dependencies: [CommonModule, NgForOf, NgIf, FormsModule, \u0275NgNoValidate, DefaultValueAccessor, NgControlStatus, NgControlStatusGroup, NgModel, NgForm], styles: ["\n\n[_nghost-%COMP%] {\n  display: block;\n  min-height: 100dvh;\n  background:\n    radial-gradient(\n      circle at top,\n      rgba(32, 48, 68, 0.5),\n      transparent 32%),\n    linear-gradient(\n      180deg,\n      #0b1219 0%,\n      #0e151e 100%);\n  color: #edf3f9;\n}\n.profile-shell[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 1rem;\n  max-width: 1180px;\n  margin: 0 auto;\n  padding: 1rem;\n}\n.status[_ngcontent-%COMP%] {\n  margin: 0;\n  padding: 0.75rem 0.85rem;\n  border-radius: 0.8rem;\n  border: 1px solid rgba(111, 130, 150, 0.35);\n  background: rgba(17, 24, 33, 0.82);\n  color: #d9e6f3;\n}\n.status.error[_ngcontent-%COMP%] {\n  border-color: rgba(130, 58, 74, 0.85);\n  background: rgba(54, 22, 30, 0.84);\n  color: #ffd2dc;\n}\n.status.success[_ngcontent-%COMP%] {\n  border-color: rgba(29, 215, 96, 0.35);\n  background: rgba(20, 43, 28, 0.84);\n  color: #bff3cf;\n}\n.editor-panel[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.85rem;\n  padding: 1rem;\n  border-radius: 1rem;\n  border: 1px solid rgba(78, 94, 110, 0.45);\n  background: rgba(12, 18, 26, 0.72);\n  -webkit-backdrop-filter: blur(8px);\n  backdrop-filter: blur(8px);\n}\n.editor-form[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.85rem;\n}\n.editor-form[_ngcontent-%COMP%]   label[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.4rem;\n  color: #b7c7d6;\n  font-size: 0.95rem;\n}\n.editor-form[_ngcontent-%COMP%]   input[_ngcontent-%COMP%] {\n  width: 100%;\n  padding: 0.9rem 1rem;\n  border-radius: 0.85rem;\n  border: 1px solid #344556;\n  background: #0f1720;\n  color: #edf3f9;\n}\n.editor-form[_ngcontent-%COMP%]   input[_ngcontent-%COMP%]:focus {\n  outline: 2px solid #1fd760;\n  outline-offset: 2px;\n}\n.editor-actions[_ngcontent-%COMP%] {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 0.75rem;\n  align-items: center;\n}\n.preview-actions[_ngcontent-%COMP%] {\n  justify-content: flex-start;\n}\n.primary-action[_ngcontent-%COMP%]:disabled {\n  opacity: 0.7;\n  cursor: progress;\n}\n.profile-shell[_ngcontent-%COMP%]   .profile-hero[_ngcontent-%COMP%] {\n  padding-top: 0.35rem;\n}\n.edit-shell[_ngcontent-%COMP%] {\n  min-height: calc(100dvh - 3rem);\n  display: grid;\n  place-items: center;\n  padding: 0.4rem 0;\n}\n.edit-card[_ngcontent-%COMP%] {\n  width: min(580px, 100%);\n  border-radius: 1.1rem;\n  border: 1px solid rgba(74, 90, 104, 0.62);\n  background:\n    linear-gradient(\n      170deg,\n      rgba(12, 18, 26, 0.95),\n      rgba(16, 25, 35, 0.95));\n  padding: 1.2rem;\n  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);\n  display: grid;\n  gap: 1rem;\n}\n.edit-head[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.35rem;\n  padding-bottom: 0.8rem;\n  border-bottom: 1px solid rgba(74, 90, 104, 0.45);\n}\n.edit-eyebrow[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: 0.78rem;\n  letter-spacing: 0.1em;\n  text-transform: uppercase;\n  color: #a7bccf;\n  font-weight: 700;\n}\n.edit-head[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: clamp(1.6rem, 3vw, 2rem);\n  letter-spacing: -0.02em;\n}\n.edit-head[_ngcontent-%COMP%]   p[_ngcontent-%COMP%] {\n  margin: 0;\n  color: #9fb3c4;\n}\n.btn-edit[_ngcontent-%COMP%], \n.btn-save[_ngcontent-%COMP%], \n.btn-cancel[_ngcontent-%COMP%] {\n  border-radius: 999px;\n  padding: 0.6rem 1rem;\n  font-weight: 700;\n  font: inherit;\n  cursor: pointer;\n  transition:\n    transform 140ms ease,\n    box-shadow 140ms ease,\n    background 140ms ease,\n    color 140ms ease;\n}\n.btn-edit[_ngcontent-%COMP%], \n.btn-save[_ngcontent-%COMP%] {\n  background: #0d141b;\n  color: #43de7f;\n  border: 1px solid #26bf62;\n  box-shadow: inset 0 0 0 1px rgba(38, 191, 98, 0.2);\n}\n.btn-edit[_ngcontent-%COMP%]:hover, \n.btn-save[_ngcontent-%COMP%]:hover {\n  background: #173320;\n  color: #d8ffea;\n  transform: translateY(-1px);\n}\n.btn-cancel[_ngcontent-%COMP%] {\n  background: #2a1a0f;\n  color: #ffd4b0;\n  border: 1px solid #ff9b57;\n}\n.btn-cancel[_ngcontent-%COMP%]:hover {\n  background: #472612;\n  transform: translateY(-1px);\n}\n.btn-save[_ngcontent-%COMP%]:disabled {\n  opacity: 0.7;\n  cursor: progress;\n  transform: none;\n}\n@media (max-width: 720px) {\n  .profile-shell[_ngcontent-%COMP%] {\n    padding: 0.85rem;\n  }\n  .editor-panel[_ngcontent-%COMP%] {\n    padding: 0.9rem;\n  }\n  .editor-actions[_ngcontent-%COMP%] {\n    flex-direction: column;\n    align-items: stretch;\n  }\n  .editor-actions[_ngcontent-%COMP%]   .primary-action[_ngcontent-%COMP%], \n   .editor-actions[_ngcontent-%COMP%]   .ghost-action[_ngcontent-%COMP%] {\n    width: 100%;\n  }\n  .edit-card[_ngcontent-%COMP%] {\n    padding: 1rem;\n    border-radius: 1rem;\n  }\n  .editor-actions[_ngcontent-%COMP%]   .btn-save[_ngcontent-%COMP%], \n   .editor-actions[_ngcontent-%COMP%]   .btn-cancel[_ngcontent-%COMP%] {\n    width: 100%;\n  }\n}\n/*# sourceMappingURL=usuario.css.map */"] });
+  }, dependencies: [CommonModule, NgForOf, NgIf, FormsModule, \u0275NgNoValidate, DefaultValueAccessor, NgControlStatus, NgControlStatusGroup, NgModel, NgForm], styles: ["\n\n[_nghost-%COMP%] {\n  display: block;\n  min-height: 100dvh;\n  background:\n    radial-gradient(\n      circle at 18% 12%,\n      rgba(255, 177, 89, 0.14),\n      transparent 34%),\n    radial-gradient(\n      circle at 82% 88%,\n      rgba(255, 120, 57, 0.1),\n      transparent 28%),\n    linear-gradient(\n      160deg,\n      #120f0a 0%,\n      #1d120f 44%,\n      #2c1911 100%);\n  color: #f7f3eb;\n}\n.profile-shell[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 1rem;\n  max-width: 1180px;\n  margin: 0 auto;\n  padding: 1rem;\n}\n.status[_ngcontent-%COMP%] {\n  margin: 0;\n  padding: 0.75rem 0.85rem;\n  border-radius: 0.8rem;\n  border: 1px solid rgba(255, 225, 178, 0.2);\n  background: rgba(14, 10, 7, 0.58);\n  color: #f0e2cd;\n}\n.status.error[_ngcontent-%COMP%] {\n  border-color: rgba(130, 58, 74, 0.85);\n  background: rgba(54, 22, 30, 0.84);\n  color: #ffd2dc;\n}\n.status.success[_ngcontent-%COMP%] {\n  border-color: rgba(255, 204, 122, 0.4);\n  background: rgba(56, 37, 18, 0.72);\n  color: #ffe1b5;\n}\n.editor-panel[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.85rem;\n  padding: 1rem;\n  border-radius: 1rem;\n  border: 1px solid rgba(255, 225, 178, 0.2);\n  background: rgba(33, 25, 18, 0.78);\n  -webkit-backdrop-filter: blur(8px);\n  backdrop-filter: blur(8px);\n}\n.editor-form[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.85rem;\n}\n.editor-form[_ngcontent-%COMP%]   label[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.4rem;\n  color: #cfbca2;\n  font-size: 0.95rem;\n}\n.editor-form[_ngcontent-%COMP%]   input[_ngcontent-%COMP%] {\n  width: 100%;\n  padding: 0.9rem 1rem;\n  border-radius: 0.85rem;\n  border: 1px solid rgba(255, 225, 178, 0.2);\n  background: rgba(12, 9, 7, 0.72);\n  color: #f7f3eb;\n}\n.editor-form[_ngcontent-%COMP%]   input[_ngcontent-%COMP%]:focus {\n  outline: 2px solid #ffb14c;\n  outline-offset: 2px;\n}\n.editor-actions[_ngcontent-%COMP%] {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 0.75rem;\n  align-items: center;\n}\n.panel-head[_ngcontent-%COMP%] {\n  flex-wrap: wrap;\n}\n.panel-action[_ngcontent-%COMP%] {\n  margin-left: auto;\n  padding-inline: 0.95rem;\n  font-size: 0.95rem;\n}\n.book-finder[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.9rem;\n  padding: 0.95rem;\n  border: 1px solid rgba(255, 225, 178, 0.16);\n  border-radius: 0.95rem;\n  background: rgba(14, 10, 7, 0.42);\n  margin-bottom: 1rem;\n}\n.finder-toolbar[_ngcontent-%COMP%] {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) auto auto;\n  gap: 0.65rem;\n  align-items: center;\n}\n.finder-toolbar[_ngcontent-%COMP%]   input[_ngcontent-%COMP%] {\n  width: 100%;\n  padding: 0.88rem 0.95rem;\n  border-radius: 0.85rem;\n  border: 1px solid rgba(255, 225, 178, 0.18);\n  background: rgba(12, 9, 7, 0.72);\n  color: #f7f3eb;\n}\n.finder-toolbar[_ngcontent-%COMP%]   input[_ngcontent-%COMP%]:focus {\n  outline: 2px solid #ffb14c;\n  outline-offset: 2px;\n}\n.finder-results[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.75rem;\n  max-height: 360px;\n  overflow: auto;\n}\n.finder-result[_ngcontent-%COMP%] {\n  display: grid;\n  grid-template-columns: 72px minmax(0, 1fr) auto;\n  gap: 0.8rem;\n  align-items: center;\n  padding: 0.75rem;\n  border-radius: 0.9rem;\n  border: 1px solid rgba(255, 225, 178, 0.12);\n  background: rgba(33, 25, 18, 0.66);\n}\n.finder-cover[_ngcontent-%COMP%] {\n  width: 72px;\n  height: 100px;\n  border-radius: 0.7rem;\n  background:\n    linear-gradient(\n      160deg,\n      rgba(255, 177, 89, 0.25),\n      rgba(255, 120, 57, 0.18));\n  border: 1px solid rgba(255, 225, 178, 0.22);\n}\n.finder-copy[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.25rem;\n}\n.finder-copy[_ngcontent-%COMP%]   strong[_ngcontent-%COMP%] {\n  font-size: 1rem;\n}\n.finder-copy[_ngcontent-%COMP%]   p[_ngcontent-%COMP%], \n.finder-copy[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n  margin: 0;\n  color: #cfbca2;\n  font-size: 0.92rem;\n}\n.finder-action[_ngcontent-%COMP%] {\n  white-space: nowrap;\n}\n.finder-empty[_ngcontent-%COMP%] {\n  margin: 0;\n  color: #cfbca2;\n}\n.inline-action[_ngcontent-%COMP%] {\n  margin-left: 0.55rem;\n  padding: 0.42rem 0.8rem;\n  font-size: 0.92rem;\n}\n.preview-actions[_ngcontent-%COMP%] {\n  justify-content: flex-start;\n}\n.primary-action[_ngcontent-%COMP%]:disabled {\n  opacity: 0.7;\n  cursor: progress;\n}\n.profile-shell[_ngcontent-%COMP%]   .profile-hero[_ngcontent-%COMP%] {\n  padding-top: 0.35rem;\n}\n.edit-shell[_ngcontent-%COMP%] {\n  min-height: calc(100dvh - 3rem);\n  display: grid;\n  place-items: center;\n  padding: 0.4rem 0;\n}\n.edit-card[_ngcontent-%COMP%] {\n  width: min(580px, 100%);\n  border-radius: 1.1rem;\n  border: 1px solid rgba(255, 225, 178, 0.2);\n  background:\n    linear-gradient(\n      170deg,\n      rgba(33, 25, 18, 0.92),\n      rgba(18, 12, 9, 0.94));\n  padding: 1.2rem;\n  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);\n  display: grid;\n  gap: 1rem;\n}\n.edit-head[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.35rem;\n  padding-bottom: 0.8rem;\n  border-bottom: 1px solid rgba(255, 225, 178, 0.16);\n}\n.edit-eyebrow[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: 0.78rem;\n  letter-spacing: 0.1em;\n  text-transform: uppercase;\n  color: #ffd18b;\n  font-weight: 700;\n}\n.edit-head[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: clamp(1.6rem, 3vw, 2rem);\n  letter-spacing: -0.02em;\n}\n.edit-head[_ngcontent-%COMP%]   p[_ngcontent-%COMP%] {\n  margin: 0;\n  color: #cfbca2;\n}\n.btn-edit[_ngcontent-%COMP%], \n.btn-save[_ngcontent-%COMP%], \n.btn-cancel[_ngcontent-%COMP%] {\n  border-radius: 999px;\n  padding: 0.6rem 1rem;\n  font-weight: 700;\n  font: inherit;\n  cursor: pointer;\n  transition:\n    transform 140ms ease,\n    box-shadow 140ms ease,\n    background 140ms ease,\n    color 140ms ease;\n}\n.btn-edit[_ngcontent-%COMP%], \n.btn-save[_ngcontent-%COMP%] {\n  background:\n    linear-gradient(\n      90deg,\n      rgba(255, 204, 122, 0.16),\n      rgba(255, 157, 82, 0.14));\n  color: #ffd18b;\n  border: 1px solid rgba(255, 204, 122, 0.35);\n  box-shadow: inset 0 0 0 1px rgba(255, 177, 89, 0.18);\n}\n.btn-edit[_ngcontent-%COMP%]:hover, \n.btn-save[_ngcontent-%COMP%]:hover {\n  background:\n    linear-gradient(\n      95deg,\n      #f8b84e,\n      #ff8f3c);\n  color: #1c130f;\n  transform: translateY(-1px);\n}\n.btn-cancel[_ngcontent-%COMP%] {\n  background: rgba(33, 25, 18, 0.78);\n  color: #f4dcc2;\n  border: 1px solid rgba(255, 225, 178, 0.24);\n}\n.btn-cancel[_ngcontent-%COMP%]:hover {\n  background: rgba(44, 25, 17, 0.88);\n  transform: translateY(-1px);\n}\n[_nghost-%COMP%]   .profile-hero[_ngcontent-%COMP%], \n[_nghost-%COMP%]   .profile-tabs[_ngcontent-%COMP%], \n[_nghost-%COMP%]   .panel[_ngcontent-%COMP%], \n[_nghost-%COMP%]   .promo-card[_ngcontent-%COMP%], \n[_nghost-%COMP%]   .book-card[_ngcontent-%COMP%], \n[_nghost-%COMP%]   .activity-card[_ngcontent-%COMP%] {\n  border-color: rgba(255, 225, 178, 0.18);\n}\n[_nghost-%COMP%]   .profile-hero[_ngcontent-%COMP%] {\n  border-bottom-color: rgba(255, 225, 178, 0.2);\n}\n[_nghost-%COMP%]   .avatar-block[_ngcontent-%COMP%] {\n  background:\n    linear-gradient(\n      180deg,\n      rgba(255, 177, 89, 0.25),\n      rgba(255, 120, 57, 0.2));\n  border-color: rgba(255, 225, 178, 0.3);\n}\n[_nghost-%COMP%]   .avatar-face[_ngcontent-%COMP%] {\n  background: rgba(255, 209, 139, 0.3);\n  box-shadow: 0 1.85rem 0 0.9rem rgba(255, 209, 139, 0.3);\n}\n[_nghost-%COMP%]   .hero-subtitle[_ngcontent-%COMP%], \n[_nghost-%COMP%]   .panel-head[_ngcontent-%COMP%]   span[_ngcontent-%COMP%], \n[_nghost-%COMP%]   .empty-state[_ngcontent-%COMP%], \n[_nghost-%COMP%]   .book-info[_ngcontent-%COMP%]   p[_ngcontent-%COMP%], \n[_nghost-%COMP%]   .activity-card[_ngcontent-%COMP%]   p[_ngcontent-%COMP%], \n[_nghost-%COMP%]   .metric-card[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n  color: #cfbca2;\n}\n[_nghost-%COMP%]   .profile-tabs[_ngcontent-%COMP%] {\n  border-bottom-color: rgba(255, 225, 178, 0.16);\n}\n[_nghost-%COMP%]   .tab-button[_ngcontent-%COMP%] {\n  color: #cfbca2;\n}\n[_nghost-%COMP%]   .tab-button.active[_ngcontent-%COMP%] {\n  background:\n    linear-gradient(\n      90deg,\n      rgba(255, 204, 122, 0.16),\n      rgba(255, 157, 82, 0.14));\n  color: #ffd18b;\n  border-color: rgba(255, 204, 122, 0.3);\n}\n[_nghost-%COMP%]   .panel[_ngcontent-%COMP%], \n[_nghost-%COMP%]   .promo-card[_ngcontent-%COMP%] {\n  background:\n    linear-gradient(\n      180deg,\n      rgba(33, 25, 18, 0.78),\n      rgba(18, 12, 9, 0.9));\n}\n[_nghost-%COMP%]   .book-card[_ngcontent-%COMP%], \n[_nghost-%COMP%]   .activity-card[_ngcontent-%COMP%] {\n  background: rgba(14, 10, 7, 0.58);\n}\n[_nghost-%COMP%]   .book-cover[_ngcontent-%COMP%] {\n  background:\n    linear-gradient(\n      145deg,\n      rgba(255, 177, 89, 0.25),\n      rgba(255, 120, 57, 0.18));\n  border-color: rgba(255, 225, 178, 0.24);\n}\n[_nghost-%COMP%]   .promo-eyebrow[_ngcontent-%COMP%] {\n  color: #ffd18b;\n}\n[_nghost-%COMP%]   .promo-button[_ngcontent-%COMP%] {\n  background:\n    linear-gradient(\n      95deg,\n      #f8b84e,\n      #ff8f3c);\n  color: #1c130f;\n  box-shadow: 0 10px 24px rgba(255, 143, 60, 0.25);\n}\n.btn-save[_ngcontent-%COMP%]:disabled {\n  opacity: 0.7;\n  cursor: progress;\n  transform: none;\n}\n@media (max-width: 720px) {\n  .profile-shell[_ngcontent-%COMP%] {\n    padding: 0.85rem;\n  }\n  .editor-panel[_ngcontent-%COMP%] {\n    padding: 0.9rem;\n  }\n  .editor-actions[_ngcontent-%COMP%] {\n    flex-direction: column;\n    align-items: stretch;\n  }\n  .editor-actions[_ngcontent-%COMP%]   .primary-action[_ngcontent-%COMP%], \n   .editor-actions[_ngcontent-%COMP%]   .ghost-action[_ngcontent-%COMP%] {\n    width: 100%;\n  }\n  .edit-card[_ngcontent-%COMP%] {\n    padding: 1rem;\n    border-radius: 1rem;\n  }\n  .editor-actions[_ngcontent-%COMP%]   .btn-save[_ngcontent-%COMP%], \n   .editor-actions[_ngcontent-%COMP%]   .btn-cancel[_ngcontent-%COMP%] {\n    width: 100%;\n  }\n  .panel-head[_ngcontent-%COMP%] {\n    align-items: flex-start;\n  }\n  .panel-action[_ngcontent-%COMP%] {\n    width: 100%;\n    margin-left: 0;\n  }\n  .finder-toolbar[_ngcontent-%COMP%] {\n    grid-template-columns: 1fr;\n  }\n  .finder-result[_ngcontent-%COMP%] {\n    grid-template-columns: 1fr;\n  }\n  .finder-action[_ngcontent-%COMP%] {\n    width: 100%;\n  }\n}\n/*# sourceMappingURL=usuario.css.map */"] });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(UsuarioPage, [{
     type: Component,
-    args: [{ selector: "app-usuario-page", standalone: true, imports: [CommonModule, FormsModule], template: `<main class="profile-shell">\r
-	<p class="status" *ngIf="isLoading">Cargando perfil...</p>\r
-	<p class="status error" *ngIf="errorMessage">{{ errorMessage }}</p>\r
-	<p class="status success" *ngIf="successMessage">{{ successMessage }}</p>\r
-\r
-	<section class="edit-shell" *ngIf="!isLoading && isEditing">\r
-		<article class="edit-card">\r
-			<header class="edit-head">\r
-				<p class="edit-eyebrow">Configuracion de perfil</p>\r
-				<h1>Modificar usuario</h1>\r
-				<p>Actualiza tus datos y guarda los cambios.</p>\r
-			</header>\r
-\r
-			<form class="editor-form" (ngSubmit)="saveProfile()">\r
-				<label>\r
-					<span>Nombre</span>\r
-					<input type="text" [(ngModel)]="editDraft.nombre" name="nombre" autocomplete="name" />\r
-				</label>\r
-\r
-				<label>\r
-					<span>Email</span>\r
-					<input type="email" [(ngModel)]="editDraft.email" name="email" autocomplete="email" />\r
-				</label>\r
-\r
-				<div class="editor-actions">\r
-					<button type="submit" class="btn-save" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar cambios' }}</button>\r
-					<button type="button" class="btn-cancel" (click)="cancelEditing()">Cancelar</button>\r
-				</div>\r
-			</form>\r
-		</article>\r
-	</section>\r
-\r
-	<section class="profile-hero" *ngIf="!isLoading && !isEditing">\r
-		<div class="avatar-block" aria-hidden="true">\r
-			<span class="avatar-icon" aria-hidden="true"></span>\r
-		</div>\r
-\r
-		<div class="hero-copy">\r
-			<div class="hero-actions">\r
-				<h1>{{ user.nombre }}</h1>\r
-				<button type="button" class="btn-edit" (click)="startEditing()">Modificar usuario</button>\r
-			</div>\r
-			<p class="hero-subtitle">Perfil de usuario estandar listo para personalizar.</p>\r
-		</div>\r
-\r
-		<div class="metric-strip">\r
-			<article *ngFor="let metric of metrics" class="metric-card">\r
-				<strong>{{ metric.value }}</strong>\r
-				<span>{{ metric.label }}</span>\r
-			</article>\r
-		</div>\r
-	</section>\r
-\r
-	<nav class="profile-tabs" aria-label="Secciones del perfil" *ngIf="!isLoading && !isEditing">\r
-		<button\r
-			*ngFor="let tab of profileTabs"\r
-			type="button"\r
-			class="tab-button"\r
-			[class.active]="tab === activeTab"\r
-			(click)="setActiveTab(tab)"\r
-		>\r
-			{{ tab }}\r
-		</button>\r
-	</nav>\r
-\r
-	<section class="profile-grid" *ngIf="!isLoading && !isEditing">\r
-		<div class="main-column">\r
-			<section class="panel" *ngIf="activeTab === 'Profile' || activeTab === 'Books'">\r
-				<header class="panel-head">\r
-					<h2>Favorite books</h2>\r
-					<span>Selecciona tus lecturas favoritas.</span>\r
-				</header>\r
-\r
-				<div class="book-grid">\r
-					<article *ngFor="let book of favoriteBooks" class="book-card">\r
-						<div class="book-cover" aria-hidden="true"></div>\r
-						<div class="book-info">\r
-							<strong>{{ book.title }}</strong>\r
-							<p>{{ book.author }}</p>\r
-							<div class="book-meta">\r
-								<span>{{ book.year }}</span>\r
-								<span>{{ book.rating }}</span>\r
-							</div>\r
-						</div>\r
-					</article>\r
-				</div>\r
-			</section>\r
-\r
-			<section class="panel" *ngIf="activeTab === 'Profile' || activeTab === 'Reviews'">\r
-				<header class="panel-head">\r
-					<h2>Reviews</h2>\r
-					<span>Rese\xF1as y actividad reciente.</span>\r
-				</header>\r
-\r
-				<div class="activity-list">\r
-					<article *ngFor="let item of activity" class="activity-card">\r
-						<div>\r
-							<strong>{{ item.title }}</strong>\r
-							<p>{{ item.detail }}</p>\r
-						</div>\r
-						<span>{{ item.time }}</span>\r
-					</article>\r
-				</div>\r
-			</section>\r
-\r
-			<section class="panel" *ngIf="activeTab === 'Likes'">\r
-				<header class="panel-head">\r
-					<h2>Likes</h2>\r
-					<span>Libros y rese\xF1as que te gustaron.</span>\r
-				</header>\r
-				<p class="empty-state">Todav\xEDa no hay likes para mostrar.</p>\r
-			</section>\r
-		</div>\r
-\r
-		<aside class="side-column" *ngIf="activeTab === 'Profile'">\r
-			<section class="promo-card">\r
-				<p class="promo-eyebrow">Need an upgrade?</p>\r
-				<h2>Profile stats, filtering and watchlist alerts.</h2>\r
-				<p class="promo-copy">Este bloque ocupa el espacio lateral del dise\xF1o de referencia mientras el perfil sigue siendo funcional.</p>\r
-				<a href="#" class="promo-button">Get Pro</a>\r
-			</section>\r
-\r
-			<section class="panel side-panel">\r
-				<header class="panel-head">\r
-					<h2>Activity</h2>\r
-				</header>\r
-				<p class="empty-state">No recent activity</p>\r
-			</section>\r
-		</aside>\r
-	</section>\r
-</main>`, styles: ["/* src/app/pages/usuario/usuario.css */\n:host {\n  display: block;\n  min-height: 100dvh;\n  background:\n    radial-gradient(\n      circle at top,\n      rgba(32, 48, 68, 0.5),\n      transparent 32%),\n    linear-gradient(\n      180deg,\n      #0b1219 0%,\n      #0e151e 100%);\n  color: #edf3f9;\n}\n.profile-shell {\n  display: grid;\n  gap: 1rem;\n  max-width: 1180px;\n  margin: 0 auto;\n  padding: 1rem;\n}\n.status {\n  margin: 0;\n  padding: 0.75rem 0.85rem;\n  border-radius: 0.8rem;\n  border: 1px solid rgba(111, 130, 150, 0.35);\n  background: rgba(17, 24, 33, 0.82);\n  color: #d9e6f3;\n}\n.status.error {\n  border-color: rgba(130, 58, 74, 0.85);\n  background: rgba(54, 22, 30, 0.84);\n  color: #ffd2dc;\n}\n.status.success {\n  border-color: rgba(29, 215, 96, 0.35);\n  background: rgba(20, 43, 28, 0.84);\n  color: #bff3cf;\n}\n.editor-panel {\n  display: grid;\n  gap: 0.85rem;\n  padding: 1rem;\n  border-radius: 1rem;\n  border: 1px solid rgba(78, 94, 110, 0.45);\n  background: rgba(12, 18, 26, 0.72);\n  -webkit-backdrop-filter: blur(8px);\n  backdrop-filter: blur(8px);\n}\n.editor-form {\n  display: grid;\n  gap: 0.85rem;\n}\n.editor-form label {\n  display: grid;\n  gap: 0.4rem;\n  color: #b7c7d6;\n  font-size: 0.95rem;\n}\n.editor-form input {\n  width: 100%;\n  padding: 0.9rem 1rem;\n  border-radius: 0.85rem;\n  border: 1px solid #344556;\n  background: #0f1720;\n  color: #edf3f9;\n}\n.editor-form input:focus {\n  outline: 2px solid #1fd760;\n  outline-offset: 2px;\n}\n.editor-actions {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 0.75rem;\n  align-items: center;\n}\n.preview-actions {\n  justify-content: flex-start;\n}\n.primary-action:disabled {\n  opacity: 0.7;\n  cursor: progress;\n}\n.profile-shell .profile-hero {\n  padding-top: 0.35rem;\n}\n.edit-shell {\n  min-height: calc(100dvh - 3rem);\n  display: grid;\n  place-items: center;\n  padding: 0.4rem 0;\n}\n.edit-card {\n  width: min(580px, 100%);\n  border-radius: 1.1rem;\n  border: 1px solid rgba(74, 90, 104, 0.62);\n  background:\n    linear-gradient(\n      170deg,\n      rgba(12, 18, 26, 0.95),\n      rgba(16, 25, 35, 0.95));\n  padding: 1.2rem;\n  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);\n  display: grid;\n  gap: 1rem;\n}\n.edit-head {\n  display: grid;\n  gap: 0.35rem;\n  padding-bottom: 0.8rem;\n  border-bottom: 1px solid rgba(74, 90, 104, 0.45);\n}\n.edit-eyebrow {\n  margin: 0;\n  font-size: 0.78rem;\n  letter-spacing: 0.1em;\n  text-transform: uppercase;\n  color: #a7bccf;\n  font-weight: 700;\n}\n.edit-head h1 {\n  margin: 0;\n  font-size: clamp(1.6rem, 3vw, 2rem);\n  letter-spacing: -0.02em;\n}\n.edit-head p {\n  margin: 0;\n  color: #9fb3c4;\n}\n.btn-edit,\n.btn-save,\n.btn-cancel {\n  border-radius: 999px;\n  padding: 0.6rem 1rem;\n  font-weight: 700;\n  font: inherit;\n  cursor: pointer;\n  transition:\n    transform 140ms ease,\n    box-shadow 140ms ease,\n    background 140ms ease,\n    color 140ms ease;\n}\n.btn-edit,\n.btn-save {\n  background: #0d141b;\n  color: #43de7f;\n  border: 1px solid #26bf62;\n  box-shadow: inset 0 0 0 1px rgba(38, 191, 98, 0.2);\n}\n.btn-edit:hover,\n.btn-save:hover {\n  background: #173320;\n  color: #d8ffea;\n  transform: translateY(-1px);\n}\n.btn-cancel {\n  background: #2a1a0f;\n  color: #ffd4b0;\n  border: 1px solid #ff9b57;\n}\n.btn-cancel:hover {\n  background: #472612;\n  transform: translateY(-1px);\n}\n.btn-save:disabled {\n  opacity: 0.7;\n  cursor: progress;\n  transform: none;\n}\n@media (max-width: 720px) {\n  .profile-shell {\n    padding: 0.85rem;\n  }\n  .editor-panel {\n    padding: 0.9rem;\n  }\n  .editor-actions {\n    flex-direction: column;\n    align-items: stretch;\n  }\n  .editor-actions .primary-action,\n  .editor-actions .ghost-action {\n    width: 100%;\n  }\n  .edit-card {\n    padding: 1rem;\n    border-radius: 1rem;\n  }\n  .editor-actions .btn-save,\n  .editor-actions .btn-cancel {\n    width: 100%;\n  }\n}\n/*# sourceMappingURL=usuario.css.map */\n"] }]
+    args: [{ selector: "app-usuario-page", standalone: true, imports: [CommonModule, FormsModule], template: `<main class="profile-shell">
+	<p class="status" *ngIf="isLoading">Cargando perfil...</p>
+	<p class="status error" *ngIf="errorMessage">{{ errorMessage }}</p>
+	<p class="status success" *ngIf="successMessage">{{ successMessage }}</p>
+
+	<section class="edit-shell" *ngIf="!isLoading && isEditing">
+		<article class="edit-card">
+			<header class="edit-head">
+				<p class="edit-eyebrow">Configuracion de perfil</p>
+				<h1>Modificar usuario</h1>
+				<p>Actualiza tus datos y guarda los cambios.</p>
+			</header>
+
+			<form class="editor-form" (ngSubmit)="saveProfile()">
+				<label>
+					<span>Nombre</span>
+					<input type="text" [(ngModel)]="editDraft.nombre" name="nombre" autocomplete="name" />
+				</label>
+
+				<label>
+					<span>Email</span>
+					<input type="email" [(ngModel)]="editDraft.email" name="email" autocomplete="email" />
+				</label>
+
+				<div class="editor-actions">
+					<button type="submit" class="btn-save" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar cambios' }}</button>
+					<button type="button" class="btn-cancel" (click)="cancelEditing()">Cancelar</button>
+				</div>
+			</form>
+		</article>
+	</section>
+
+	<section class="profile-hero" *ngIf="!isLoading && !isEditing">
+		<div class="avatar-block" aria-hidden="true">
+			<span class="avatar-icon" aria-hidden="true"></span>
+		</div>
+
+		<div class="hero-copy">
+			<div class="hero-actions">
+				<h1>{{ user.nombre }}</h1>
+				<button type="button" class="btn-edit" (click)="startEditing()">Modificar usuario</button>
+			</div>
+			<p class="hero-subtitle">{{ user.email || 'Perfil sincronizado con la base de datos.' }}</p>
+		</div>
+
+		<div class="metric-strip">
+			<article *ngFor="let metric of metrics" class="metric-card">
+				<strong>{{ metric.value }}</strong>
+				<span>{{ metric.label }}</span>
+			</article>
+		</div>
+	</section>
+
+	<nav class="profile-tabs" aria-label="Secciones del perfil" *ngIf="!isLoading && !isEditing">
+		<button
+			*ngFor="let tab of profileTabs"
+			type="button"
+			class="tab-button"
+			[class.active]="tab === activeTab"
+			(click)="setActiveTab(tab)"
+		>
+			{{ tab }}
+		</button>
+	</nav>
+
+	<section class="profile-grid" *ngIf="!isLoading && !isEditing">
+		<div class="main-column">
+			<section class="panel" *ngIf="activeTab === 'Profile' || activeTab === 'Books'">
+				<header class="panel-head">
+					<h2>Favorite books</h2>
+					<span>Selecciona tus lecturas favoritas.</span>
+					<button type="button" class="btn-edit panel-action" *ngIf="activeTab === 'Books'" (click)="openBookFinder()">
+						{{ bookSearchOpen ? 'Ocultar buscador' : 'A\xF1adir libro' }}
+					</button>
+				</header>
+
+				<section class="book-finder" *ngIf="activeTab === 'Books' && bookSearchOpen">
+					<div class="finder-toolbar">
+						<input
+							type="text"
+							[(ngModel)]="bookSearchQuery"
+							name="bookSearchQuery"
+							placeholder="Busca por t\xEDtulo o autor"
+							autocomplete="off"
+						/>
+						<button type="button" class="btn-save" (click)="searchBooks()" [disabled]="isSearchingBooks">
+							{{ isSearchingBooks ? 'Buscando...' : 'Buscar' }}
+						</button>
+						<button type="button" class="btn-cancel" (click)="closeBookFinder()">Cerrar</button>
+					</div>
+
+					<p class="finder-empty" *ngIf="!isSearchingBooks && bookSearchResults.length === 0 && bookSearchQuery.trim().length > 0">
+						No se encontraron libros con esa b\xFAsqueda.
+					</p>
+
+					<div class="finder-results" *ngIf="bookSearchResults.length > 0">
+						<article class="finder-result" *ngFor="let book of bookSearchResults">
+							<div class="finder-cover" aria-hidden="true"></div>
+							<div class="finder-copy">
+								<strong>{{ book.titulo }}</strong>
+								<p>{{ book.autor }}</p>
+								<span>{{ book.descripcion || 'Sin descripci\xF3n' }}</span>
+							</div>
+							<button type="button" class="btn-edit finder-action" (click)="addBookToProfile(book)" [disabled]="isSavingBook">
+								A\xF1adir
+							</button>
+						</article>
+					</div>
+				</section>
+
+				<p class="empty-state" *ngIf="activeTab === 'Books' && selectedBooks.length === 0 && metrics[0].value === '0'">
+					Todav\xEDa no tienes libros en tu perfil.
+					<button type="button" class="btn-edit inline-action" (click)="openBookFinder()">Buscar y a\xF1adir un libro</button>
+				</p>
+
+				<div class="book-grid">
+					<article *ngFor="let book of favoriteBooks" class="book-card">
+						<div class="book-cover" aria-hidden="true"></div>
+						<div class="book-info">
+							<strong>{{ book.title }}</strong>
+							<p>{{ book.author }}</p>
+							<div class="book-meta">
+								<span>{{ book.year }}</span>
+								<span>{{ book.rating }}</span>
+							</div>
+						</div>
+					</article>
+				</div>
+			</section>
+
+			<section class="panel" *ngIf="activeTab === 'Profile' || activeTab === 'Reviews'">
+				<header class="panel-head">
+					<h2>Reviews</h2>
+					<span>Rese\xF1as y actividad reciente.</span>
+				</header>
+
+				<div class="activity-list">
+					<article *ngFor="let item of activity" class="activity-card">
+						<div>
+							<strong>{{ item.title }}</strong>
+							<p>{{ item.detail }}</p>
+						</div>
+						<span>{{ item.time }}</span>
+					</article>
+				</div>
+			</section>
+
+			<section class="panel" *ngIf="activeTab === 'Likes'">
+				<header class="panel-head">
+					<h2>Likes</h2>
+					<span>Libros y rese\xF1as que te gustaron.</span>
+				</header>
+				<p class="empty-state">Todav\xEDa no hay likes para mostrar.</p>
+			</section>
+		</div>
+
+		<aside class="side-column" *ngIf="activeTab === 'Profile'">
+			<section class="promo-card">
+				<p class="promo-eyebrow">Need an upgrade?</p>
+				<h2>Profile stats, filtering and watchlist alerts.</h2>
+				<p class="promo-copy">Este bloque ocupa el espacio lateral del dise\xF1o de referencia mientras el perfil sigue siendo funcional.</p>
+				<a href="#" class="promo-button">Get Pro</a>
+			</section>
+
+			<section class="panel side-panel">
+				<header class="panel-head">
+					<h2>Activity</h2>
+				</header>
+				<p class="empty-state">No recent activity</p>
+			</section>
+		</aside>
+	</section>
+</main>`, styles: ["/* src/app/pages/usuario/usuario.css */\n:host {\n  display: block;\n  min-height: 100dvh;\n  background:\n    radial-gradient(\n      circle at 18% 12%,\n      rgba(255, 177, 89, 0.14),\n      transparent 34%),\n    radial-gradient(\n      circle at 82% 88%,\n      rgba(255, 120, 57, 0.1),\n      transparent 28%),\n    linear-gradient(\n      160deg,\n      #120f0a 0%,\n      #1d120f 44%,\n      #2c1911 100%);\n  color: #f7f3eb;\n}\n.profile-shell {\n  display: grid;\n  gap: 1rem;\n  max-width: 1180px;\n  margin: 0 auto;\n  padding: 1rem;\n}\n.status {\n  margin: 0;\n  padding: 0.75rem 0.85rem;\n  border-radius: 0.8rem;\n  border: 1px solid rgba(255, 225, 178, 0.2);\n  background: rgba(14, 10, 7, 0.58);\n  color: #f0e2cd;\n}\n.status.error {\n  border-color: rgba(130, 58, 74, 0.85);\n  background: rgba(54, 22, 30, 0.84);\n  color: #ffd2dc;\n}\n.status.success {\n  border-color: rgba(255, 204, 122, 0.4);\n  background: rgba(56, 37, 18, 0.72);\n  color: #ffe1b5;\n}\n.editor-panel {\n  display: grid;\n  gap: 0.85rem;\n  padding: 1rem;\n  border-radius: 1rem;\n  border: 1px solid rgba(255, 225, 178, 0.2);\n  background: rgba(33, 25, 18, 0.78);\n  -webkit-backdrop-filter: blur(8px);\n  backdrop-filter: blur(8px);\n}\n.editor-form {\n  display: grid;\n  gap: 0.85rem;\n}\n.editor-form label {\n  display: grid;\n  gap: 0.4rem;\n  color: #cfbca2;\n  font-size: 0.95rem;\n}\n.editor-form input {\n  width: 100%;\n  padding: 0.9rem 1rem;\n  border-radius: 0.85rem;\n  border: 1px solid rgba(255, 225, 178, 0.2);\n  background: rgba(12, 9, 7, 0.72);\n  color: #f7f3eb;\n}\n.editor-form input:focus {\n  outline: 2px solid #ffb14c;\n  outline-offset: 2px;\n}\n.editor-actions {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 0.75rem;\n  align-items: center;\n}\n.panel-head {\n  flex-wrap: wrap;\n}\n.panel-action {\n  margin-left: auto;\n  padding-inline: 0.95rem;\n  font-size: 0.95rem;\n}\n.book-finder {\n  display: grid;\n  gap: 0.9rem;\n  padding: 0.95rem;\n  border: 1px solid rgba(255, 225, 178, 0.16);\n  border-radius: 0.95rem;\n  background: rgba(14, 10, 7, 0.42);\n  margin-bottom: 1rem;\n}\n.finder-toolbar {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) auto auto;\n  gap: 0.65rem;\n  align-items: center;\n}\n.finder-toolbar input {\n  width: 100%;\n  padding: 0.88rem 0.95rem;\n  border-radius: 0.85rem;\n  border: 1px solid rgba(255, 225, 178, 0.18);\n  background: rgba(12, 9, 7, 0.72);\n  color: #f7f3eb;\n}\n.finder-toolbar input:focus {\n  outline: 2px solid #ffb14c;\n  outline-offset: 2px;\n}\n.finder-results {\n  display: grid;\n  gap: 0.75rem;\n  max-height: 360px;\n  overflow: auto;\n}\n.finder-result {\n  display: grid;\n  grid-template-columns: 72px minmax(0, 1fr) auto;\n  gap: 0.8rem;\n  align-items: center;\n  padding: 0.75rem;\n  border-radius: 0.9rem;\n  border: 1px solid rgba(255, 225, 178, 0.12);\n  background: rgba(33, 25, 18, 0.66);\n}\n.finder-cover {\n  width: 72px;\n  height: 100px;\n  border-radius: 0.7rem;\n  background:\n    linear-gradient(\n      160deg,\n      rgba(255, 177, 89, 0.25),\n      rgba(255, 120, 57, 0.18));\n  border: 1px solid rgba(255, 225, 178, 0.22);\n}\n.finder-copy {\n  display: grid;\n  gap: 0.25rem;\n}\n.finder-copy strong {\n  font-size: 1rem;\n}\n.finder-copy p,\n.finder-copy span {\n  margin: 0;\n  color: #cfbca2;\n  font-size: 0.92rem;\n}\n.finder-action {\n  white-space: nowrap;\n}\n.finder-empty {\n  margin: 0;\n  color: #cfbca2;\n}\n.inline-action {\n  margin-left: 0.55rem;\n  padding: 0.42rem 0.8rem;\n  font-size: 0.92rem;\n}\n.preview-actions {\n  justify-content: flex-start;\n}\n.primary-action:disabled {\n  opacity: 0.7;\n  cursor: progress;\n}\n.profile-shell .profile-hero {\n  padding-top: 0.35rem;\n}\n.edit-shell {\n  min-height: calc(100dvh - 3rem);\n  display: grid;\n  place-items: center;\n  padding: 0.4rem 0;\n}\n.edit-card {\n  width: min(580px, 100%);\n  border-radius: 1.1rem;\n  border: 1px solid rgba(255, 225, 178, 0.2);\n  background:\n    linear-gradient(\n      170deg,\n      rgba(33, 25, 18, 0.92),\n      rgba(18, 12, 9, 0.94));\n  padding: 1.2rem;\n  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);\n  display: grid;\n  gap: 1rem;\n}\n.edit-head {\n  display: grid;\n  gap: 0.35rem;\n  padding-bottom: 0.8rem;\n  border-bottom: 1px solid rgba(255, 225, 178, 0.16);\n}\n.edit-eyebrow {\n  margin: 0;\n  font-size: 0.78rem;\n  letter-spacing: 0.1em;\n  text-transform: uppercase;\n  color: #ffd18b;\n  font-weight: 700;\n}\n.edit-head h1 {\n  margin: 0;\n  font-size: clamp(1.6rem, 3vw, 2rem);\n  letter-spacing: -0.02em;\n}\n.edit-head p {\n  margin: 0;\n  color: #cfbca2;\n}\n.btn-edit,\n.btn-save,\n.btn-cancel {\n  border-radius: 999px;\n  padding: 0.6rem 1rem;\n  font-weight: 700;\n  font: inherit;\n  cursor: pointer;\n  transition:\n    transform 140ms ease,\n    box-shadow 140ms ease,\n    background 140ms ease,\n    color 140ms ease;\n}\n.btn-edit,\n.btn-save {\n  background:\n    linear-gradient(\n      90deg,\n      rgba(255, 204, 122, 0.16),\n      rgba(255, 157, 82, 0.14));\n  color: #ffd18b;\n  border: 1px solid rgba(255, 204, 122, 0.35);\n  box-shadow: inset 0 0 0 1px rgba(255, 177, 89, 0.18);\n}\n.btn-edit:hover,\n.btn-save:hover {\n  background:\n    linear-gradient(\n      95deg,\n      #f8b84e,\n      #ff8f3c);\n  color: #1c130f;\n  transform: translateY(-1px);\n}\n.btn-cancel {\n  background: rgba(33, 25, 18, 0.78);\n  color: #f4dcc2;\n  border: 1px solid rgba(255, 225, 178, 0.24);\n}\n.btn-cancel:hover {\n  background: rgba(44, 25, 17, 0.88);\n  transform: translateY(-1px);\n}\n:host .profile-hero,\n:host .profile-tabs,\n:host .panel,\n:host .promo-card,\n:host .book-card,\n:host .activity-card {\n  border-color: rgba(255, 225, 178, 0.18);\n}\n:host .profile-hero {\n  border-bottom-color: rgba(255, 225, 178, 0.2);\n}\n:host .avatar-block {\n  background:\n    linear-gradient(\n      180deg,\n      rgba(255, 177, 89, 0.25),\n      rgba(255, 120, 57, 0.2));\n  border-color: rgba(255, 225, 178, 0.3);\n}\n:host .avatar-face {\n  background: rgba(255, 209, 139, 0.3);\n  box-shadow: 0 1.85rem 0 0.9rem rgba(255, 209, 139, 0.3);\n}\n:host .hero-subtitle,\n:host .panel-head span,\n:host .empty-state,\n:host .book-info p,\n:host .activity-card p,\n:host .metric-card span {\n  color: #cfbca2;\n}\n:host .profile-tabs {\n  border-bottom-color: rgba(255, 225, 178, 0.16);\n}\n:host .tab-button {\n  color: #cfbca2;\n}\n:host .tab-button.active {\n  background:\n    linear-gradient(\n      90deg,\n      rgba(255, 204, 122, 0.16),\n      rgba(255, 157, 82, 0.14));\n  color: #ffd18b;\n  border-color: rgba(255, 204, 122, 0.3);\n}\n:host .panel,\n:host .promo-card {\n  background:\n    linear-gradient(\n      180deg,\n      rgba(33, 25, 18, 0.78),\n      rgba(18, 12, 9, 0.9));\n}\n:host .book-card,\n:host .activity-card {\n  background: rgba(14, 10, 7, 0.58);\n}\n:host .book-cover {\n  background:\n    linear-gradient(\n      145deg,\n      rgba(255, 177, 89, 0.25),\n      rgba(255, 120, 57, 0.18));\n  border-color: rgba(255, 225, 178, 0.24);\n}\n:host .promo-eyebrow {\n  color: #ffd18b;\n}\n:host .promo-button {\n  background:\n    linear-gradient(\n      95deg,\n      #f8b84e,\n      #ff8f3c);\n  color: #1c130f;\n  box-shadow: 0 10px 24px rgba(255, 143, 60, 0.25);\n}\n.btn-save:disabled {\n  opacity: 0.7;\n  cursor: progress;\n  transform: none;\n}\n@media (max-width: 720px) {\n  .profile-shell {\n    padding: 0.85rem;\n  }\n  .editor-panel {\n    padding: 0.9rem;\n  }\n  .editor-actions {\n    flex-direction: column;\n    align-items: stretch;\n  }\n  .editor-actions .primary-action,\n  .editor-actions .ghost-action {\n    width: 100%;\n  }\n  .edit-card {\n    padding: 1rem;\n    border-radius: 1rem;\n  }\n  .editor-actions .btn-save,\n  .editor-actions .btn-cancel {\n    width: 100%;\n  }\n  .panel-head {\n    align-items: flex-start;\n  }\n  .panel-action {\n    width: 100%;\n    margin-left: 0;\n  }\n  .finder-toolbar {\n    grid-template-columns: 1fr;\n  }\n  .finder-result {\n    grid-template-columns: 1fr;\n  }\n  .finder-action {\n    width: 100%;\n  }\n}\n/*# sourceMappingURL=usuario.css.map */\n"] }]
   }], null, null);
 })();
 (() => {
-  (typeof ngDevMode === "undefined" || ngDevMode) && \u0275setClassDebugInfo(UsuarioPage, { className: "UsuarioPage", filePath: "src/app/pages/usuario/usuario.ts", lineNumber: 35 });
-})();
-
-// src/app/services/Login.service.ts
-var LoginService = class _LoginService {
-  http;
-  router;
-  apiUrl = environment.API_URL + "login";
-  constructor(http, router) {
-    this.http = http;
-    this.router = router;
-  }
-  login(email, password) {
-    return this.http.post(this.apiUrl, { email, password }).pipe(tap((response) => {
-      localStorage.setItem("token", response["token"]);
-      localStorage.setItem("username", response["user"]["username"]);
-      localStorage.setItem("foto", response["user"]["foto"]);
-      this.router.navigate(["/"]);
-    }));
-  }
-  logout() {
-    localStorage.removeItem("token");
-    this.router.navigate(["/login"]);
-  }
-  getToken() {
-    return localStorage.getItem("token");
-  }
-  isLoggedIn() {
-    return !!this.getToken();
-  }
-  register(email, password, name, numero_tel) {
-  }
-  static \u0275fac = function LoginService_Factory(__ngFactoryType__) {
-    return new (__ngFactoryType__ || _LoginService)(\u0275\u0275inject(HttpClient), \u0275\u0275inject(Router));
-  };
-  static \u0275prov = /* @__PURE__ */ \u0275\u0275defineInjectable({ token: _LoginService, factory: _LoginService.\u0275fac, providedIn: "root" });
-};
-(() => {
-  (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(LoginService, [{
-    type: Injectable,
-    args: [{ providedIn: "root" }]
-  }], () => [{ type: HttpClient }, { type: Router }], null);
+  (typeof ngDevMode === "undefined" || ngDevMode) && \u0275setClassDebugInfo(UsuarioPage, { className: "UsuarioPage", filePath: "src/app/pages/usuario/usuario.ts", lineNumber: 40 });
 })();
 
 // src/app/pages/login/login.ts
-function LoginComponent_form_59_div_10_Template(rf, ctx) {
+function LoginComponent_div_44_Template(rf, ctx) {
+  if (rf & 1) {
+    \u0275\u0275elementStart(0, "div", 20)(1, "p", 21);
+    \u0275\u0275text(2, "Acceso personal");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(3, "h2");
+    \u0275\u0275text(4, "Inicia sesion");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(5, "p", 22);
+    \u0275\u0275text(6, "Ingresa con tu cuenta para continuar con tu biblioteca y tus rese\xF1as.");
+    \u0275\u0275elementEnd()();
+  }
+}
+function LoginComponent_ng_template_45_Template(rf, ctx) {
+  if (rf & 1) {
+    \u0275\u0275elementStart(0, "div", 20)(1, "p", 21);
+    \u0275\u0275text(2, "Nuevo lector");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(3, "h2");
+    \u0275\u0275text(4, "Crea tu cuenta");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(5, "p", 22);
+    \u0275\u0275text(6, "Registra tus datos una sola vez y despues inicia sesion desde este mismo panel.");
+    \u0275\u0275elementEnd()();
+  }
+}
+function LoginComponent_form_48_div_10_Template(rf, ctx) {
   if (rf & 1) {
     \u0275\u0275elementStart(0, "div", 33);
     \u0275\u0275text(1);
@@ -43443,7 +45921,7 @@ function LoginComponent_form_59_div_10_Template(rf, ctx) {
     \u0275\u0275textInterpolate(ctx_r1.errorMessage);
   }
 }
-function LoginComponent_form_59_div_11_Template(rf, ctx) {
+function LoginComponent_form_48_div_11_Template(rf, ctx) {
   if (rf & 1) {
     \u0275\u0275elementStart(0, "div", 34);
     \u0275\u0275text(1);
@@ -43455,59 +45933,49 @@ function LoginComponent_form_59_div_11_Template(rf, ctx) {
     \u0275\u0275textInterpolate(ctx_r1.successMessage);
   }
 }
-function LoginComponent_form_59_Template(rf, ctx) {
+function LoginComponent_form_48_Template(rf, ctx) {
   if (rf & 1) {
     const _r1 = \u0275\u0275getCurrentView();
-    \u0275\u0275elementStart(0, "form", 21);
-    \u0275\u0275listener("ngSubmit", function LoginComponent_form_59_Template_form_ngSubmit_0_listener() {
+    \u0275\u0275elementStart(0, "form", 23);
+    \u0275\u0275listener("ngSubmit", function LoginComponent_form_48_Template_form_ngSubmit_0_listener() {
       \u0275\u0275restoreView(_r1);
       const ctx_r1 = \u0275\u0275nextContext();
       return \u0275\u0275resetView(ctx_r1.onSubmit());
     });
-    \u0275\u0275elementStart(1, "label", 22);
+    \u0275\u0275elementStart(1, "label", 24);
     \u0275\u0275text(2, "Correo electronico");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(3, "input", 23);
-    \u0275\u0275twoWayListener("ngModelChange", function LoginComponent_form_59_Template_input_ngModelChange_3_listener($event) {
+    \u0275\u0275elementStart(3, "input", 25);
+    \u0275\u0275twoWayListener("ngModelChange", function LoginComponent_form_48_Template_input_ngModelChange_3_listener($event) {
       \u0275\u0275restoreView(_r1);
       const ctx_r1 = \u0275\u0275nextContext();
       \u0275\u0275twoWayBindingSet(ctx_r1.email, $event) || (ctx_r1.email = $event);
       return \u0275\u0275resetView($event);
     });
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(4, "label", 24);
+    \u0275\u0275elementStart(4, "label", 26);
     \u0275\u0275text(5, "Contrasena");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(6, "div", 25)(7, "input", 26);
-    \u0275\u0275twoWayListener("ngModelChange", function LoginComponent_form_59_Template_input_ngModelChange_7_listener($event) {
+    \u0275\u0275elementStart(6, "div", 27)(7, "input", 28);
+    \u0275\u0275twoWayListener("ngModelChange", function LoginComponent_form_48_Template_input_ngModelChange_7_listener($event) {
       \u0275\u0275restoreView(_r1);
       const ctx_r1 = \u0275\u0275nextContext();
       \u0275\u0275twoWayBindingSet(ctx_r1.password, $event) || (ctx_r1.password = $event);
       return \u0275\u0275resetView($event);
     });
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(8, "button", 27);
-    \u0275\u0275listener("click", function LoginComponent_form_59_Template_button_click_8_listener() {
+    \u0275\u0275elementStart(8, "button", 29);
+    \u0275\u0275listener("click", function LoginComponent_form_48_Template_button_click_8_listener() {
       \u0275\u0275restoreView(_r1);
       const ctx_r1 = \u0275\u0275nextContext();
       return \u0275\u0275resetView(ctx_r1.togglePasswordVisibility());
     });
     \u0275\u0275text(9);
     \u0275\u0275elementEnd()();
-    \u0275\u0275template(10, LoginComponent_form_59_div_10_Template, 2, 1, "div", 28)(11, LoginComponent_form_59_div_11_Template, 2, 1, "div", 29);
-    \u0275\u0275elementStart(12, "button", 30);
+    \u0275\u0275template(10, LoginComponent_form_48_div_10_Template, 2, 1, "div", 30)(11, LoginComponent_form_48_div_11_Template, 2, 1, "div", 31);
+    \u0275\u0275elementStart(12, "button", 32);
     \u0275\u0275text(13, "Entrar a mi espacio");
-    \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(14, "p", 31);
-    \u0275\u0275text(15, " \xBFNo tienes cuenta? ");
-    \u0275\u0275elementStart(16, "button", 32);
-    \u0275\u0275listener("click", function LoginComponent_form_59_Template_button_click_16_listener() {
-      \u0275\u0275restoreView(_r1);
-      const ctx_r1 = \u0275\u0275nextContext();
-      return \u0275\u0275resetView(ctx_r1.setMode("signin"));
-    });
-    \u0275\u0275text(17, "Ir a sign in");
-    \u0275\u0275elementEnd()()();
+    \u0275\u0275elementEnd()();
   }
   if (rf & 2) {
     const ctx_r1 = \u0275\u0275nextContext();
@@ -43526,7 +45994,7 @@ function LoginComponent_form_59_Template(rf, ctx) {
     \u0275\u0275property("ngIf", ctx_r1.successMessage);
   }
 }
-function LoginComponent_ng_template_60_div_16_Template(rf, ctx) {
+function LoginComponent_ng_template_49_div_19_Template(rf, ctx) {
   if (rf & 1) {
     \u0275\u0275elementStart(0, "div", 33);
     \u0275\u0275text(1);
@@ -43538,7 +46006,7 @@ function LoginComponent_ng_template_60_div_16_Template(rf, ctx) {
     \u0275\u0275textInterpolate(ctx_r1.errorMessage);
   }
 }
-function LoginComponent_ng_template_60_div_17_Template(rf, ctx) {
+function LoginComponent_ng_template_49_div_20_Template(rf, ctx) {
   if (rf & 1) {
     \u0275\u0275elementStart(0, "div", 34);
     \u0275\u0275text(1);
@@ -43550,20 +46018,20 @@ function LoginComponent_ng_template_60_div_17_Template(rf, ctx) {
     \u0275\u0275textInterpolate(ctx_r1.successMessage);
   }
 }
-function LoginComponent_ng_template_60_Template(rf, ctx) {
+function LoginComponent_ng_template_49_Template(rf, ctx) {
   if (rf & 1) {
     const _r3 = \u0275\u0275getCurrentView();
-    \u0275\u0275elementStart(0, "form", 21);
-    \u0275\u0275listener("ngSubmit", function LoginComponent_ng_template_60_Template_form_ngSubmit_0_listener() {
+    \u0275\u0275elementStart(0, "form", 23);
+    \u0275\u0275listener("ngSubmit", function LoginComponent_ng_template_49_Template_form_ngSubmit_0_listener() {
       \u0275\u0275restoreView(_r3);
       const ctx_r1 = \u0275\u0275nextContext();
       return \u0275\u0275resetView(ctx_r1.onSubmit());
     });
     \u0275\u0275elementStart(1, "label", 35);
-    \u0275\u0275text(2, "Nombre");
+    \u0275\u0275text(2, "Usuario");
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(3, "input", 36);
-    \u0275\u0275twoWayListener("ngModelChange", function LoginComponent_ng_template_60_Template_input_ngModelChange_3_listener($event) {
+    \u0275\u0275twoWayListener("ngModelChange", function LoginComponent_ng_template_49_Template_input_ngModelChange_3_listener($event) {
       \u0275\u0275restoreView(_r3);
       const ctx_r1 = \u0275\u0275nextContext();
       \u0275\u0275twoWayBindingSet(ctx_r1.registerName, $event) || (ctx_r1.registerName = $event);
@@ -43574,7 +46042,7 @@ function LoginComponent_ng_template_60_Template(rf, ctx) {
     \u0275\u0275text(5, "Correo electronico");
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(6, "input", 38);
-    \u0275\u0275twoWayListener("ngModelChange", function LoginComponent_ng_template_60_Template_input_ngModelChange_6_listener($event) {
+    \u0275\u0275twoWayListener("ngModelChange", function LoginComponent_ng_template_49_Template_input_ngModelChange_6_listener($event) {
       \u0275\u0275restoreView(_r3);
       const ctx_r1 = \u0275\u0275nextContext();
       \u0275\u0275twoWayBindingSet(ctx_r1.registerEmail, $event) || (ctx_r1.registerEmail = $event);
@@ -43582,48 +46050,59 @@ function LoginComponent_ng_template_60_Template(rf, ctx) {
     });
     \u0275\u0275elementEnd();
     \u0275\u0275elementStart(7, "label", 39);
-    \u0275\u0275text(8, "Contrasena");
+    \u0275\u0275text(8, "Telefono");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(9, "div", 25)(10, "input", 40);
-    \u0275\u0275twoWayListener("ngModelChange", function LoginComponent_ng_template_60_Template_input_ngModelChange_10_listener($event) {
+    \u0275\u0275elementStart(9, "input", 40);
+    \u0275\u0275twoWayListener("ngModelChange", function LoginComponent_ng_template_49_Template_input_ngModelChange_9_listener($event) {
+      \u0275\u0275restoreView(_r3);
+      const ctx_r1 = \u0275\u0275nextContext();
+      \u0275\u0275twoWayBindingSet(ctx_r1.registerPhone, $event) || (ctx_r1.registerPhone = $event);
+      return \u0275\u0275resetView($event);
+    });
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(10, "label", 41);
+    \u0275\u0275text(11, "Contrasena");
+    \u0275\u0275elementEnd();
+    \u0275\u0275elementStart(12, "div", 27)(13, "input", 42);
+    \u0275\u0275twoWayListener("ngModelChange", function LoginComponent_ng_template_49_Template_input_ngModelChange_13_listener($event) {
       \u0275\u0275restoreView(_r3);
       const ctx_r1 = \u0275\u0275nextContext();
       \u0275\u0275twoWayBindingSet(ctx_r1.registerPassword, $event) || (ctx_r1.registerPassword = $event);
       return \u0275\u0275resetView($event);
     });
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(11, "button", 27);
-    \u0275\u0275listener("click", function LoginComponent_ng_template_60_Template_button_click_11_listener() {
+    \u0275\u0275elementStart(14, "button", 29);
+    \u0275\u0275listener("click", function LoginComponent_ng_template_49_Template_button_click_14_listener() {
       \u0275\u0275restoreView(_r3);
       const ctx_r1 = \u0275\u0275nextContext();
       return \u0275\u0275resetView(ctx_r1.togglePasswordVisibility());
     });
-    \u0275\u0275text(12);
+    \u0275\u0275text(15);
     \u0275\u0275elementEnd()();
-    \u0275\u0275elementStart(13, "label", 41);
-    \u0275\u0275text(14, "Confirmar contrasena");
+    \u0275\u0275elementStart(16, "label", 43);
+    \u0275\u0275text(17, "Confirmar contrasena");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(15, "input", 42);
-    \u0275\u0275twoWayListener("ngModelChange", function LoginComponent_ng_template_60_Template_input_ngModelChange_15_listener($event) {
+    \u0275\u0275elementStart(18, "input", 44);
+    \u0275\u0275twoWayListener("ngModelChange", function LoginComponent_ng_template_49_Template_input_ngModelChange_18_listener($event) {
       \u0275\u0275restoreView(_r3);
       const ctx_r1 = \u0275\u0275nextContext();
       \u0275\u0275twoWayBindingSet(ctx_r1.registerConfirmPassword, $event) || (ctx_r1.registerConfirmPassword = $event);
       return \u0275\u0275resetView($event);
     });
     \u0275\u0275elementEnd();
-    \u0275\u0275template(16, LoginComponent_ng_template_60_div_16_Template, 2, 1, "div", 28)(17, LoginComponent_ng_template_60_div_17_Template, 2, 1, "div", 29);
-    \u0275\u0275elementStart(18, "button", 30);
-    \u0275\u0275text(19, "Crear cuenta");
+    \u0275\u0275template(19, LoginComponent_ng_template_49_div_19_Template, 2, 1, "div", 30)(20, LoginComponent_ng_template_49_div_20_Template, 2, 1, "div", 31);
+    \u0275\u0275elementStart(21, "button", 32);
+    \u0275\u0275text(22, "Crear cuenta");
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(20, "p", 31);
-    \u0275\u0275text(21, " \xBFYa tienes cuenta? ");
-    \u0275\u0275elementStart(22, "button", 32);
-    \u0275\u0275listener("click", function LoginComponent_ng_template_60_Template_button_click_22_listener() {
+    \u0275\u0275elementStart(23, "p", 45);
+    \u0275\u0275text(24, " \xBFYa tienes cuenta? ");
+    \u0275\u0275elementStart(25, "button", 46);
+    \u0275\u0275listener("click", function LoginComponent_ng_template_49_Template_button_click_25_listener() {
       \u0275\u0275restoreView(_r3);
       const ctx_r1 = \u0275\u0275nextContext();
       return \u0275\u0275resetView(ctx_r1.setMode("login"));
     });
-    \u0275\u0275text(23, "Volver a login");
+    \u0275\u0275text(26, "Volver a login");
     \u0275\u0275elementEnd()()();
   }
   if (rf & 2) {
@@ -43632,6 +46111,8 @@ function LoginComponent_ng_template_60_Template(rf, ctx) {
     \u0275\u0275twoWayProperty("ngModel", ctx_r1.registerName);
     \u0275\u0275advance(3);
     \u0275\u0275twoWayProperty("ngModel", ctx_r1.registerEmail);
+    \u0275\u0275advance(3);
+    \u0275\u0275twoWayProperty("ngModel", ctx_r1.registerPhone);
     \u0275\u0275advance(4);
     \u0275\u0275property("type", ctx_r1.showPassword ? "text" : "password");
     \u0275\u0275twoWayProperty("ngModel", ctx_r1.registerPassword);
@@ -43661,6 +46142,7 @@ var LoginComponent = class _LoginComponent {
   registerEmail = "";
   registerPassword = "";
   registerConfirmPassword = "";
+  registerPhone = "";
   showPassword = false;
   errorMessage = "";
   successMessage = "";
@@ -43680,6 +46162,30 @@ var LoginComponent = class _LoginComponent {
       return true;
     }
     return false;
+  }
+  validatePassword(password) {
+    if (!password) {
+      return "La contrase\xF1a es requerida.";
+    }
+    if (password.length < 8) {
+      return "La contrase\xF1a debe tener al menos 8 caracteres.";
+    }
+    if (password.includes(" ")) {
+      return "La contrase\xF1a no puede contener espacios.";
+    }
+    if (!/[A-Z]/.test(password)) {
+      return "La contrase\xF1a debe contener al menos una may\xFAscula.";
+    }
+    if (!/[a-z]/.test(password)) {
+      return "La contrase\xF1a debe contener al menos una min\xFAscula.";
+    }
+    if (!/[0-9]/.test(password)) {
+      return "La contrase\xF1a debe contener al menos un n\xFAmero.";
+    }
+    if (!/[@\-.*!#$%&_]/.test(password)) {
+      return "La contrase\xF1a debe contener al menos un car\xE1cter especial (@, -, ., *, !, #, $, %, &, _).";
+    }
+    return null;
   }
   setMode(mode) {
     if (this.activeMode === mode) {
@@ -43716,8 +46222,8 @@ var LoginComponent = class _LoginComponent {
     }
     this.loginService.login(this.email, this.password).subscribe({
       next: (response) => {
-        if (response.token) {
-          localStorage.setItem("token", response.token);
+        const token = response.access_token ?? response.token;
+        if (token) {
           this.router.navigate(["/"]);
           return;
         }
@@ -43735,19 +46241,21 @@ var LoginComponent = class _LoginComponent {
     const email = this.registerEmail.trim();
     const password = this.registerPassword;
     const confirmPassword = this.registerConfirmPassword;
-    if (!nombre || !email || !password || !confirmPassword) {
+    const phone = this.registerPhone.trim();
+    if (!nombre || !email || !password || !confirmPassword || !phone) {
       this.errorMessage = "Completa todos los campos para crear tu cuenta.";
       return;
     }
-    if (password.length < 8) {
-      this.errorMessage = "La contrase\xF1a debe tener al menos 8 caracteres.";
+    const passwordError = this.validatePassword(password);
+    if (passwordError) {
+      this.errorMessage = passwordError;
       return;
     }
     if (password !== confirmPassword) {
       this.errorMessage = "Las contrase\xF1as no coinciden.";
       return;
     }
-    this.usuarioService.createUsuario({ nombre, email, password }).subscribe({
+    this.usuarioService.createUsuario({ nombre, email, password, phone }).subscribe({
       next: () => {
         this.successMessage = "Cuenta creada. Ahora inicia sesi\xF3n con tus credenciales.";
         this.email = email;
@@ -43769,11 +46277,11 @@ var LoginComponent = class _LoginComponent {
   static \u0275fac = function LoginComponent_Factory(__ngFactoryType__) {
     return new (__ngFactoryType__ || _LoginComponent)();
   };
-  static \u0275cmp = /* @__PURE__ */ \u0275\u0275defineComponent({ type: _LoginComponent, selectors: [["app-login"]], decls: 62, vars: 12, consts: [["signInForm", ""], [1, "auth-scene"], ["aria-hidden", "true", 1, "noise-layer"], [1, "scene-layout"], [1, "mood-panel"], [1, "kicker"], [1, "lede"], ["aria-hidden", "true", 1, "ticker"], [1, "ticker-rail"], [1, "ticker-track"], ["aria-hidden", "true", 1, "ticker-track"], [1, "login-panel"], [1, "panel-head"], ["role", "tablist", "aria-label", "Modo de autenticacion", 1, "mode-switch"], ["type", "button", 1, "mode-chip", 3, "click"], [1, "panel-copy"], [1, "panel-page"], [1, "eyebrow"], [1, "panel-note"], [1, "panel-body"], ["class", "login-form auth-form", 3, "ngSubmit", 4, "ngIf", "ngIfElse"], [1, "login-form", "auth-form", 3, "ngSubmit"], ["for", "email"], ["type", "email", "id", "email", "name", "email", "placeholder", "tu@correo.com", "autocomplete", "email", "required", "", 3, "ngModelChange", "ngModel"], ["for", "password"], [1, "password-wrap"], ["id", "password", "name", "password", "placeholder", "Minimo 8 caracteres", "autocomplete", "current-password", "required", "", 3, "ngModelChange", "type", "ngModel"], ["type", "button", 1, "toggle-visibility", 3, "click"], ["class", "status error", 4, "ngIf"], ["class", "status success", 4, "ngIf"], ["type", "submit", 1, "submit-btn"], [1, "form-hint"], ["type", "button", 1, "text-link", 3, "click"], [1, "status", "error"], [1, "status", "success"], ["for", "registerName"], ["type", "text", "id", "registerName", "name", "registerName", "placeholder", "Tu nombre", "autocomplete", "name", "required", "", 3, "ngModelChange", "ngModel"], ["for", "registerEmail"], ["type", "email", "id", "registerEmail", "name", "registerEmail", "placeholder", "tu@correo.com", "autocomplete", "email", "required", "", 3, "ngModelChange", "ngModel"], ["for", "registerPassword"], ["id", "registerPassword", "name", "registerPassword", "placeholder", "Minimo 8 caracteres", "autocomplete", "new-password", "required", "", 3, "ngModelChange", "type", "ngModel"], ["for", "registerConfirmPassword"], ["id", "registerConfirmPassword", "name", "registerConfirmPassword", "placeholder", "Repite tu contrasena", "autocomplete", "new-password", "required", "", 3, "ngModelChange", "type", "ngModel"]], template: function LoginComponent_Template(rf, ctx) {
+  static \u0275cmp = /* @__PURE__ */ \u0275\u0275defineComponent({ type: _LoginComponent, selectors: [["app-login"]], decls: 51, vars: 12, consts: [["signInCopy", ""], ["signInForm", ""], [1, "auth-scene"], ["aria-hidden", "true", 1, "noise-layer"], [1, "scene-layout"], [1, "mood-panel"], [1, "kicker"], [1, "lede"], ["aria-hidden", "true", 1, "ticker"], [1, "ticker-rail"], [1, "ticker-track"], ["aria-hidden", "true", 1, "ticker-track"], [1, "login-panel"], [1, "panel-head"], ["role", "tablist", "aria-label", "Modo de autenticacion", 1, "mode-switch"], ["type", "button", 1, "mode-chip", 3, "click"], [1, "panel-copy", "panel-copy-right"], ["class", "panel-page", 4, "ngIf", "ngIfElse"], [1, "panel-body"], ["class", "login-form auth-form", 3, "ngSubmit", 4, "ngIf", "ngIfElse"], [1, "panel-page"], [1, "eyebrow"], [1, "panel-note"], [1, "login-form", "auth-form", 3, "ngSubmit"], ["for", "email"], ["type", "email", "id", "email", "name", "email", "placeholder", "tu@correo.com", "autocomplete", "email", "required", "", 3, "ngModelChange", "ngModel"], ["for", "password"], [1, "password-wrap"], ["id", "password", "name", "password", "placeholder", "Minimo 8 caracteres", "autocomplete", "current-password", "required", "", 3, "ngModelChange", "type", "ngModel"], ["type", "button", 1, "toggle-visibility", 3, "click"], ["class", "status error", 4, "ngIf"], ["class", "status success", 4, "ngIf"], ["type", "submit", 1, "submit-btn"], [1, "status", "error"], [1, "status", "success"], ["for", "registerName"], ["type", "text", "id", "registerName", "name", "registerName", "placeholder", "Tu usuario", "autocomplete", "name", "required", "", 3, "ngModelChange", "ngModel"], ["for", "registerEmail"], ["type", "email", "id", "registerEmail", "name", "registerEmail", "placeholder", "tu@correo.com", "autocomplete", "email", "required", "", 3, "ngModelChange", "ngModel"], ["for", "registerPhone"], ["type", "tel", "id", "registerPhone", "name", "registerPhone", "placeholder", "Tu numero de telefono", "autocomplete", "tel", "required", "", 3, "ngModelChange", "ngModel"], ["for", "registerPassword"], ["id", "registerPassword", "name", "registerPassword", "placeholder", "Minimo 8 caracteres", "autocomplete", "new-password", "required", "", 3, "ngModelChange", "type", "ngModel"], ["for", "registerConfirmPassword"], ["id", "registerConfirmPassword", "name", "registerConfirmPassword", "placeholder", "Repite tu contrasena", "autocomplete", "new-password", "required", "", 3, "ngModelChange", "type", "ngModel"], [1, "form-hint"], ["type", "button", 1, "text-link", 3, "click"]], template: function LoginComponent_Template(rf, ctx) {
     if (rf & 1) {
-      \u0275\u0275elementStart(0, "main", 1);
-      \u0275\u0275element(1, "div", 2);
-      \u0275\u0275elementStart(2, "section", 3)(3, "aside", 4)(4, "p", 5);
+      \u0275\u0275elementStart(0, "main", 2);
+      \u0275\u0275element(1, "div", 3);
+      \u0275\u0275elementStart(2, "section", 4)(3, "aside", 5)(4, "p", 6);
       \u0275\u0275text(5, "Biblioteca Viva");
       \u0275\u0275elementEnd();
       \u0275\u0275elementStart(6, "h1");
@@ -43781,10 +46289,10 @@ var LoginComponent = class _LoginComponent {
       \u0275\u0275elementStart(8, "span");
       \u0275\u0275text(9, "Conecta, Le\xE9 y Comparte");
       \u0275\u0275elementEnd()();
-      \u0275\u0275elementStart(10, "p", 6);
+      \u0275\u0275elementStart(10, "p", 7);
       \u0275\u0275text(11, " Descubre recomendaciones con una portada din\xE1mica, rese\xF1as frescas y una experiencia menos plantilla. ");
       \u0275\u0275elementEnd();
-      \u0275\u0275elementStart(12, "div", 7)(13, "div", 8)(14, "div", 9)(15, "span");
+      \u0275\u0275elementStart(12, "div", 8)(13, "div", 9)(14, "div", 10)(15, "span");
       \u0275\u0275text(16, "ficcion");
       \u0275\u0275elementEnd();
       \u0275\u0275elementStart(17, "span");
@@ -43799,7 +46307,7 @@ var LoginComponent = class _LoginComponent {
       \u0275\u0275elementStart(23, "span");
       \u0275\u0275text(24, "historia");
       \u0275\u0275elementEnd()();
-      \u0275\u0275elementStart(25, "div", 10)(26, "span");
+      \u0275\u0275elementStart(25, "div", 11)(26, "span");
       \u0275\u0275text(27, "ficcion");
       \u0275\u0275elementEnd();
       \u0275\u0275elementStart(28, "span");
@@ -43814,42 +46322,28 @@ var LoginComponent = class _LoginComponent {
       \u0275\u0275elementStart(34, "span");
       \u0275\u0275text(35, "historia");
       \u0275\u0275elementEnd()()()()();
-      \u0275\u0275elementStart(36, "section", 11)(37, "header", 12)(38, "div", 13)(39, "button", 14);
+      \u0275\u0275elementStart(36, "section", 12)(37, "header", 13)(38, "div", 14)(39, "button", 15);
       \u0275\u0275listener("click", function LoginComponent_Template_button_click_39_listener() {
         return ctx.setMode("login");
       });
       \u0275\u0275text(40, " Login ");
       \u0275\u0275elementEnd();
-      \u0275\u0275elementStart(41, "button", 14);
+      \u0275\u0275elementStart(41, "button", 15);
       \u0275\u0275listener("click", function LoginComponent_Template_button_click_41_listener() {
         return ctx.setMode("signin");
       });
       \u0275\u0275text(42, " Sign in ");
       \u0275\u0275elementEnd()();
-      \u0275\u0275elementStart(43, "div", 15)(44, "div", 16)(45, "p", 17);
-      \u0275\u0275text(46, "Acceso personal");
-      \u0275\u0275elementEnd();
-      \u0275\u0275elementStart(47, "h2");
-      \u0275\u0275text(48, "Inicia sesion");
-      \u0275\u0275elementEnd();
-      \u0275\u0275elementStart(49, "p", 18);
-      \u0275\u0275text(50, "Ingresa con tu cuenta para continuar con tu biblioteca y tus rese\xF1as.");
+      \u0275\u0275elementStart(43, "div", 16);
+      \u0275\u0275template(44, LoginComponent_div_44_Template, 7, 0, "div", 17)(45, LoginComponent_ng_template_45_Template, 7, 0, "ng-template", null, 0, \u0275\u0275templateRefExtractor);
       \u0275\u0275elementEnd()();
-      \u0275\u0275elementStart(51, "div", 16)(52, "p", 17);
-      \u0275\u0275text(53, "Nuevo lector");
-      \u0275\u0275elementEnd();
-      \u0275\u0275elementStart(54, "h2");
-      \u0275\u0275text(55, "Crea tu cuenta");
-      \u0275\u0275elementEnd();
-      \u0275\u0275elementStart(56, "p", 18);
-      \u0275\u0275text(57, "Registra tus datos una sola vez y despues inicia sesion desde este mismo panel.");
-      \u0275\u0275elementEnd()()()();
-      \u0275\u0275elementStart(58, "div", 19);
-      \u0275\u0275template(59, LoginComponent_form_59_Template, 18, 7, "form", 20)(60, LoginComponent_ng_template_60_Template, 24, 10, "ng-template", null, 0, \u0275\u0275templateRefExtractor);
+      \u0275\u0275elementStart(47, "div", 18);
+      \u0275\u0275template(48, LoginComponent_form_48_Template, 14, 7, "form", 19)(49, LoginComponent_ng_template_49_Template, 27, 11, "ng-template", null, 1, \u0275\u0275templateRefExtractor);
       \u0275\u0275elementEnd()()()();
     }
     if (rf & 2) {
-      const signInForm_r4 = \u0275\u0275reference(61);
+      const signInCopy_r4 = \u0275\u0275reference(46);
+      const signInForm_r5 = \u0275\u0275reference(50);
       \u0275\u0275advance(36);
       \u0275\u0275classProp("is-transitioning", ctx.isTransitioning);
       \u0275\u0275advance(3);
@@ -43858,12 +46352,12 @@ var LoginComponent = class _LoginComponent {
       \u0275\u0275advance(2);
       \u0275\u0275classProp("active", ctx.activeMode === "signin");
       \u0275\u0275attribute("aria-selected", ctx.activeMode === "signin");
-      \u0275\u0275advance(2);
-      \u0275\u0275classProp("swap-left", ctx.activeMode === "signin");
-      \u0275\u0275advance(16);
-      \u0275\u0275property("ngIf", ctx.activeMode === "login")("ngIfElse", signInForm_r4);
+      \u0275\u0275advance(3);
+      \u0275\u0275property("ngIf", ctx.activeMode === "login")("ngIfElse", signInCopy_r4);
+      \u0275\u0275advance(4);
+      \u0275\u0275property("ngIf", ctx.activeMode === "login")("ngIfElse", signInForm_r5);
     }
-  }, dependencies: [CommonModule, NgIf, FormsModule, \u0275NgNoValidate, DefaultValueAccessor, NgControlStatus, NgControlStatusGroup, RequiredValidator, NgModel, NgForm], styles: ['\n\n[_nghost-%COMP%] {\n  --ink: #f7f3eb;\n  --ink-soft: #cfbca2;\n  --line: #4f3f2f;\n  --panel-bg: rgba(33, 25, 18, 0.78);\n  --accent: #f8b84e;\n  --accent-strong: #ff8f3c;\n  --field-bg: rgba(12, 9, 7, 0.74);\n  display: block;\n  height: 100%;\n  min-height: 100dvh;\n}\n.auth-scene[_ngcontent-%COMP%] {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  min-height: 100dvh;\n  overflow: hidden;\n  color: var(--ink);\n  font-family:\n    "Space Grotesk",\n    "Segoe UI",\n    sans-serif;\n  background:\n    radial-gradient(\n      circle at 18% 12%,\n      rgba(255, 177, 89, 0.18),\n      transparent 38%),\n    radial-gradient(\n      circle at 78% 84%,\n      rgba(255, 120, 57, 0.16),\n      transparent 34%),\n    linear-gradient(\n      160deg,\n      #120f0a 0%,\n      #1d120f 44%,\n      #2c1911 100%);\n}\n.noise-layer[_ngcontent-%COMP%] {\n  position: absolute;\n  inset: 0;\n  pointer-events: none;\n  opacity: 0.2;\n  background-image:\n    linear-gradient(transparent 95%, rgba(255, 255, 255, 0.07) 95%),\n    linear-gradient(\n      90deg,\n      transparent 95%,\n      rgba(255, 255, 255, 0.05) 95%);\n  background-size: 22px 22px;\n  animation: _ngcontent-%COMP%_drift 18s linear infinite;\n}\n.scene-layout[_ngcontent-%COMP%] {\n  position: relative;\n  z-index: 1;\n  flex: 1;\n  width: min(1100px, 100% - 2rem);\n  margin: 0 auto;\n  min-height: 100dvh;\n  display: grid;\n  align-items: center;\n  gap: 2rem;\n  grid-template-columns: minmax(0, 1.05fr) minmax(420px, 1fr);\n}\n.mood-panel[_ngcontent-%COMP%] {\n  padding: 2rem 1rem;\n  animation: _ngcontent-%COMP%_rise-in 0.85s ease-out both;\n}\n.kicker[_ngcontent-%COMP%] {\n  margin: 0;\n  text-transform: uppercase;\n  letter-spacing: 0.28em;\n  font-size: 0.76rem;\n  color: var(--ink-soft);\n}\n.mood-panel[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%] {\n  margin: 0.7rem 0 0;\n  font-size: clamp(2.1rem, 6vw, 4.7rem);\n  line-height: 0.95;\n  letter-spacing: -0.03em;\n  text-wrap: balance;\n}\n.mood-panel[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n  display: block;\n  color: var(--accent);\n}\n.lede[_ngcontent-%COMP%] {\n  margin: 1.35rem 0 0;\n  max-width: 34ch;\n  line-height: 1.55;\n  color: #f0e2cd;\n}\n.ticker[_ngcontent-%COMP%] {\n  margin-top: 1.9rem;\n  border-top: 1px solid rgba(255, 245, 224, 0.24);\n  border-bottom: 1px solid rgba(255, 245, 224, 0.24);\n  position: relative;\n  display: flex;\n  align-items: center;\n  overflow: hidden;\n  height: 2.2rem;\n  padding: 0.65rem 0;\n}\n.ticker-rail[_ngcontent-%COMP%] {\n  position: relative;\n  width: 100%;\n  height: 1rem;\n}\n.ticker-track[_ngcontent-%COMP%] {\n  position: absolute;\n  left: 0;\n  top: 50%;\n  display: flex;\n  align-items: center;\n  flex: 0 0 auto;\n  gap: 1rem;\n  width: max-content;\n  will-change: transform;\n  animation: _ngcontent-%COMP%_ticker-loop 14s linear infinite;\n  transform: translate3d(100%, -50%, 0);\n}\n.ticker-track[_ngcontent-%COMP%]:last-child {\n  animation-delay: -7s;\n}\n.ticker[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n  flex: 0 0 auto;\n  text-transform: uppercase;\n  font-size: 0.8rem;\n  letter-spacing: 0.18em;\n  white-space: nowrap;\n  color: #ffd18b;\n}\n.login-panel[_ngcontent-%COMP%] {\n  border: 1px solid rgba(255, 225, 178, 0.22);\n  background: var(--panel-bg);\n  -webkit-backdrop-filter: blur(8px);\n  backdrop-filter: blur(8px);\n  border-radius: 1.4rem;\n  width: 100%;\n  max-width: 540px;\n  justify-self: end;\n  padding: 2rem 2.15rem;\n  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);\n  animation: _ngcontent-%COMP%_rise-in 0.75s ease-out 0.15s both;\n}\n.login-panel.is-transitioning[_ngcontent-%COMP%]   .panel-copy[_ngcontent-%COMP%], \n.login-panel.is-transitioning[_ngcontent-%COMP%]   .panel-body[_ngcontent-%COMP%] {\n  animation: _ngcontent-%COMP%_soft-switch 0.22s ease-out;\n}\n.panel-head[_ngcontent-%COMP%] {\n  margin-bottom: 1.25rem;\n}\n.mode-switch[_ngcontent-%COMP%] {\n  display: inline-flex;\n  gap: 0.45rem;\n  padding: 0.35rem;\n  border-radius: 999px;\n  border: 1px solid rgba(255, 225, 178, 0.18);\n  background: rgba(14, 10, 7, 0.52);\n}\n.mode-chip[_ngcontent-%COMP%] {\n  border: 0;\n  border-radius: 999px;\n  padding: 0.72rem 0.95rem;\n  background: transparent;\n  color: var(--ink-soft);\n  font-size: 0.8rem;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n  cursor: pointer;\n  transition:\n    background 0.2s ease,\n    color 0.2s ease,\n    transform 0.2s ease;\n}\n.mode-chip.active[_ngcontent-%COMP%] {\n  color: #1b110a;\n  background:\n    linear-gradient(\n      90deg,\n      #ffcc7a,\n      #ff9d52);\n}\n.panel-copy[_ngcontent-%COMP%] {\n  position: relative;\n  display: flex;\n  width: 200%;\n  align-items: start;\n  overflow: hidden;\n  margin-top: 1rem;\n  transition: transform 0.24s ease;\n}\n.panel-page[_ngcontent-%COMP%] {\n  flex: 0 0 50%;\n  min-width: 0;\n}\n.panel-copy.swap-left[_ngcontent-%COMP%] {\n  transform: translateX(-50%);\n}\n.panel-note[_ngcontent-%COMP%] {\n  margin: 0.35rem 0 0;\n  color: var(--ink-soft);\n  line-height: 1.45;\n  font-size: 0.92rem;\n}\n.panel-body[_ngcontent-%COMP%] {\n  overflow: hidden;\n  margin-top: 0.8rem;\n}\n.auth-form[_ngcontent-%COMP%] {\n  animation: _ngcontent-%COMP%_form-slide-in 0.24s ease-out;\n}\n.eyebrow[_ngcontent-%COMP%] {\n  margin: 0;\n  color: var(--ink-soft);\n  text-transform: uppercase;\n  letter-spacing: 0.2em;\n  font-size: 0.72rem;\n}\n.panel-head[_ngcontent-%COMP%]   h2[_ngcontent-%COMP%] {\n  margin: 0.35rem 0 0;\n  font-size: clamp(1.8rem, 3vw, 2.2rem);\n  letter-spacing: -0.02em;\n}\n.login-form[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.9rem;\n}\n.login-form[_ngcontent-%COMP%]   label[_ngcontent-%COMP%] {\n  color: #f4dcc2;\n  font-size: 0.88rem;\n  letter-spacing: 0.05em;\n  text-transform: uppercase;\n}\n.login-form[_ngcontent-%COMP%]   input[_ngcontent-%COMP%] {\n  width: 100%;\n  border-radius: 0.85rem;\n  border: 1px solid var(--line);\n  background: var(--field-bg);\n  color: var(--ink);\n  font-size: 1rem;\n  padding: 0.95rem 0.9rem;\n  transition: border-color 0.25s ease, transform 0.2s ease;\n}\n.login-form[_ngcontent-%COMP%]   input[_ngcontent-%COMP%]:focus {\n  outline: none;\n  border-color: var(--accent);\n  transform: translateY(-1px);\n}\n.password-wrap[_ngcontent-%COMP%] {\n  position: relative;\n}\n.password-wrap[_ngcontent-%COMP%]   input[_ngcontent-%COMP%] {\n  padding-right: 5.5rem;\n}\n.toggle-visibility[_ngcontent-%COMP%] {\n  position: absolute;\n  top: 50%;\n  right: 0.5rem;\n  transform: translateY(-50%);\n  border: 0;\n  border-radius: 0.55rem;\n  min-height: 2rem;\n  padding: 0.4rem 0.65rem;\n  text-transform: uppercase;\n  letter-spacing: 0.08em;\n  font-size: 0.67rem;\n  color: #1b110a;\n  background:\n    linear-gradient(\n      90deg,\n      #ffcc7a,\n      #ff9d52);\n  touch-action: manipulation;\n  cursor: pointer;\n}\n.submit-btn[_ngcontent-%COMP%] {\n  margin-top: 0.8rem;\n  border: none;\n  border-radius: 0.95rem;\n  min-height: 3.25rem;\n  padding: 1rem 1.05rem;\n  font-weight: 700;\n  letter-spacing: 0.03em;\n  color: #1c130f;\n  background:\n    linear-gradient(\n      95deg,\n      var(--accent),\n      var(--accent-strong));\n  touch-action: manipulation;\n  cursor: pointer;\n  transition: transform 0.2s ease, filter 0.2s ease;\n}\n.submit-btn[_ngcontent-%COMP%]:hover {\n  transform: translateY(-2px);\n  filter: brightness(1.05);\n}\n.status[_ngcontent-%COMP%] {\n  padding: 0.64rem 0.75rem;\n  border-radius: 0.7rem;\n  border: 1px solid #8c3c33;\n  background: rgba(97, 33, 27, 0.55);\n  color: #ffd9d2;\n  font-size: 0.92rem;\n}\n.status.success[_ngcontent-%COMP%] {\n  border-color: rgba(113, 182, 118, 0.35);\n  background: rgba(22, 74, 38, 0.55);\n  color: #d4f7d8;\n}\n.form-hint[_ngcontent-%COMP%] {\n  margin: 0.35rem 0 0;\n  color: var(--ink-soft);\n  font-size: 0.88rem;\n}\n.text-link[_ngcontent-%COMP%] {\n  border: 0;\n  padding: 0;\n  margin-left: 0.3rem;\n  background: none;\n  color: var(--accent);\n  font: inherit;\n  cursor: pointer;\n}\n.text-link[_ngcontent-%COMP%]:hover {\n  color: var(--accent-strong);\n}\n@keyframes _ngcontent-%COMP%_rise-in {\n  from {\n    opacity: 0;\n    transform: translateY(18px) scale(0.99);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0) scale(1);\n  }\n}\n@keyframes _ngcontent-%COMP%_ticker-loop {\n  from {\n    transform: translate3d(100%, -50%, 0);\n  }\n  to {\n    transform: translate3d(-100%, -50%, 0);\n  }\n}\n@keyframes _ngcontent-%COMP%_drift {\n  from {\n    transform: translate(0, 0);\n  }\n  to {\n    transform: translate(-22px, -22px);\n  }\n}\n@keyframes _ngcontent-%COMP%_soft-switch {\n  from {\n    opacity: 0.72;\n    transform: translateY(4px);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0);\n  }\n}\n@keyframes _ngcontent-%COMP%_form-slide-in {\n  from {\n    opacity: 0;\n    transform: translateX(10px);\n  }\n  to {\n    opacity: 1;\n    transform: translateX(0);\n  }\n}\n@media (max-width: 940px) {\n  .scene-layout[_ngcontent-%COMP%] {\n    grid-template-columns: 1fr;\n    padding: 1.25rem 0;\n  }\n  .login-panel[_ngcontent-%COMP%] {\n    max-width: 95%;\n    justify-self: stretch;\n  }\n  .mood-panel[_ngcontent-%COMP%] {\n    padding: 1rem 0.3rem 0;\n  }\n  .lede[_ngcontent-%COMP%] {\n    max-width: 46ch;\n  }\n}\n@media (max-width: 560px) {\n  .auth-scene[_ngcontent-%COMP%] {\n    min-height: 100dvh;\n    padding: max(0.75rem, env(safe-area-inset-top)) 0 max(1rem, env(safe-area-inset-bottom));\n  }\n  .scene-layout[_ngcontent-%COMP%] {\n    width: min(100% - 1rem, 520px);\n    min-height: calc(100dvh - max(0.75rem, env(safe-area-inset-top)) - max(1rem, env(safe-area-inset-bottom)));\n    gap: 0.95rem;\n  }\n  .mood-panel[_ngcontent-%COMP%] {\n    padding: 0.25rem 0.2rem 0;\n  }\n  .kicker[_ngcontent-%COMP%] {\n    font-size: 0.68rem;\n    letter-spacing: 0.22em;\n  }\n  .mood-panel[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%] {\n    font-size: clamp(1.8rem, 10vw, 2.8rem);\n  }\n  .lede[_ngcontent-%COMP%] {\n    margin-top: 0.95rem;\n    font-size: 0.94rem;\n    line-height: 1.48;\n  }\n  .login-panel[_ngcontent-%COMP%] {\n    padding: 1rem;\n    border-radius: 1rem;\n    -webkit-backdrop-filter: blur(5px);\n    backdrop-filter: blur(5px);\n    box-shadow: 0 16px 45px rgba(0, 0, 0, 0.38);\n  }\n  .mode-switch[_ngcontent-%COMP%] {\n    width: 100%;\n    justify-content: space-between;\n  }\n  .mode-chip[_ngcontent-%COMP%] {\n    flex: 1;\n    padding: 0.66rem 0.8rem;\n    font-size: 0.72rem;\n  }\n  .panel-copy[_ngcontent-%COMP%] {\n    margin-top: 0.85rem;\n  }\n  .ticker[_ngcontent-%COMP%] {\n    margin-top: 0.8rem;\n    padding: 0.48rem 0;\n  }\n  .ticker[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n    font-size: 0.7rem;\n    letter-spacing: 0.16em;\n  }\n  .login-form[_ngcontent-%COMP%] {\n    gap: 0.62rem;\n  }\n  .login-form[_ngcontent-%COMP%]   label[_ngcontent-%COMP%] {\n    font-size: 0.78rem;\n  }\n  .login-form[_ngcontent-%COMP%]   input[_ngcontent-%COMP%] {\n    padding: 0.86rem 0.82rem;\n    border-radius: 0.75rem;\n  }\n  .password-wrap[_ngcontent-%COMP%]   input[_ngcontent-%COMP%] {\n    padding-right: 5.75rem;\n  }\n  .toggle-visibility[_ngcontent-%COMP%] {\n    right: 0.38rem;\n    font-size: 0.62rem;\n    min-height: 1.9rem;\n  }\n  .submit-btn[_ngcontent-%COMP%] {\n    margin-top: 0.5rem;\n    min-height: 3.1rem;\n    font-size: 0.95rem;\n  }\n}\n@media (max-width: 420px) {\n  .scene-layout[_ngcontent-%COMP%] {\n    width: calc(100% - 0.7rem);\n  }\n  .mood-panel[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%] {\n    font-size: clamp(1.58rem, 9.2vw, 2.2rem);\n  }\n  .lede[_ngcontent-%COMP%] {\n    display: none;\n  }\n  .ticker[_ngcontent-%COMP%] {\n    margin-top: 0.65rem;\n  }\n  .panel-head[_ngcontent-%COMP%]   h2[_ngcontent-%COMP%] {\n    font-size: 1.55rem;\n  }\n  .login-panel[_ngcontent-%COMP%] {\n    padding: 0.9rem;\n    border-radius: 0.9rem;\n  }\n  .status[_ngcontent-%COMP%] {\n    font-size: 0.86rem;\n  }\n}\n@media (prefers-reduced-motion: reduce) {\n  .noise-layer[_ngcontent-%COMP%], \n   .ticker-track[_ngcontent-%COMP%], \n   .mood-panel[_ngcontent-%COMP%], \n   .login-panel[_ngcontent-%COMP%], \n   .auth-form[_ngcontent-%COMP%], \n   .login-panel.is-transitioning[_ngcontent-%COMP%]   .panel-copy[_ngcontent-%COMP%], \n   .login-panel.is-transitioning[_ngcontent-%COMP%]   .panel-body[_ngcontent-%COMP%] {\n    animation: none;\n  }\n}\n/*# sourceMappingURL=login.css.map */'] });
+  }, dependencies: [CommonModule, NgIf, FormsModule, \u0275NgNoValidate, DefaultValueAccessor, NgControlStatus, NgControlStatusGroup, RequiredValidator, NgModel, NgForm], styles: ['\n\n[_nghost-%COMP%] {\n  --ink: #f7f3eb;\n  --ink-soft: #cfbca2;\n  --line: #4f3f2f;\n  --panel-bg: rgba(33, 25, 18, 0.78);\n  --accent: #f8b84e;\n  --accent-strong: #ff8f3c;\n  --field-bg: rgba(12, 9, 7, 0.74);\n  display: block;\n  height: 100%;\n  min-height: 100dvh;\n}\n.auth-scene[_ngcontent-%COMP%] {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  min-height: 100dvh;\n  overflow: hidden;\n  color: var(--ink);\n  font-family:\n    "Space Grotesk",\n    "Segoe UI",\n    sans-serif;\n  background:\n    radial-gradient(\n      circle at 18% 12%,\n      rgba(255, 177, 89, 0.18),\n      transparent 38%),\n    radial-gradient(\n      circle at 78% 84%,\n      rgba(255, 120, 57, 0.16),\n      transparent 34%),\n    linear-gradient(\n      160deg,\n      #120f0a 0%,\n      #1d120f 44%,\n      #2c1911 100%);\n}\n.noise-layer[_ngcontent-%COMP%] {\n  position: absolute;\n  inset: 0;\n  pointer-events: none;\n  opacity: 0.2;\n  background-image:\n    linear-gradient(transparent 95%, rgba(255, 255, 255, 0.07) 95%),\n    linear-gradient(\n      90deg,\n      transparent 95%,\n      rgba(255, 255, 255, 0.05) 95%);\n  background-size: 22px 22px;\n  animation: _ngcontent-%COMP%_drift 18s linear infinite;\n}\n.scene-layout[_ngcontent-%COMP%] {\n  position: relative;\n  z-index: 1;\n  flex: 1;\n  width: min(1100px, 100% - 2rem);\n  margin: 0 auto;\n  min-height: 100dvh;\n  padding-top: 1.2rem;\n  padding-bottom: 1rem;\n  display: grid;\n  align-items: center;\n  gap: 2rem;\n  grid-template-columns: minmax(0, 1.05fr) minmax(420px, 1fr);\n}\n.mood-panel[_ngcontent-%COMP%] {\n  padding: 2rem 1rem;\n  animation: _ngcontent-%COMP%_rise-in 0.85s ease-out both;\n}\n.kicker[_ngcontent-%COMP%] {\n  margin: 0;\n  text-transform: uppercase;\n  letter-spacing: 0.28em;\n  font-size: 0.76rem;\n  color: var(--ink-soft);\n}\n.mood-panel[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%] {\n  margin: 0.7rem 0 0;\n  font-size: clamp(2.1rem, 6vw, 4.7rem);\n  line-height: 0.95;\n  letter-spacing: -0.03em;\n  text-wrap: balance;\n}\n.mood-panel[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n  display: block;\n  color: var(--accent);\n}\n.lede[_ngcontent-%COMP%] {\n  margin: 1.35rem 0 0;\n  max-width: 34ch;\n  line-height: 1.55;\n  color: #f0e2cd;\n}\n.ticker[_ngcontent-%COMP%] {\n  margin-top: 1.9rem;\n  border-top: 1px solid rgba(255, 245, 224, 0.24);\n  border-bottom: 1px solid rgba(255, 245, 224, 0.24);\n  position: relative;\n  display: flex;\n  align-items: center;\n  overflow: hidden;\n  height: 2.2rem;\n  padding: 0.65rem 0;\n}\n.ticker-rail[_ngcontent-%COMP%] {\n  position: relative;\n  width: 100%;\n  height: 1rem;\n}\n.ticker-track[_ngcontent-%COMP%] {\n  position: absolute;\n  left: 0;\n  top: 50%;\n  display: flex;\n  align-items: center;\n  flex: 0 0 auto;\n  gap: 1rem;\n  width: max-content;\n  will-change: transform;\n  animation: _ngcontent-%COMP%_ticker-loop 14s linear infinite;\n  transform: translate3d(100%, -50%, 0);\n}\n.ticker-track[_ngcontent-%COMP%]:last-child {\n  animation-delay: -7s;\n}\n.ticker[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n  flex: 0 0 auto;\n  text-transform: uppercase;\n  font-size: 0.8rem;\n  letter-spacing: 0.18em;\n  white-space: nowrap;\n  color: #ffd18b;\n}\n.login-panel[_ngcontent-%COMP%] {\n  border: 1px solid rgba(255, 225, 178, 0.22);\n  background: var(--panel-bg);\n  -webkit-backdrop-filter: blur(8px);\n  backdrop-filter: blur(8px);\n  border-radius: 1.4rem;\n  width: 100%;\n  max-width: 540px;\n  justify-self: end;\n  padding: 2rem 2.15rem;\n  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);\n  animation: _ngcontent-%COMP%_rise-in 0.75s ease-out 0.15s both;\n}\n.login-panel.is-transitioning[_ngcontent-%COMP%]   .panel-copy[_ngcontent-%COMP%], \n.login-panel.is-transitioning[_ngcontent-%COMP%]   .panel-body[_ngcontent-%COMP%] {\n  animation: _ngcontent-%COMP%_soft-switch 0.22s ease-out;\n}\n.panel-head[_ngcontent-%COMP%] {\n  margin-bottom: 1.25rem;\n}\n.mode-switch[_ngcontent-%COMP%] {\n  display: inline-flex;\n  width: 100%;\n  gap: 0.55rem;\n  padding: 0.35rem;\n  border-radius: 999px;\n  border: 1px solid rgba(255, 225, 178, 0.18);\n  background: rgba(14, 10, 7, 0.52);\n}\n.mode-chip[_ngcontent-%COMP%] {\n  flex: 1;\n  border: 0;\n  border-radius: 999px;\n  padding: 0.72rem 0.95rem;\n  background: transparent;\n  color: var(--ink-soft);\n  font-size: 0.8rem;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n  text-align: center;\n  white-space: nowrap;\n  cursor: pointer;\n  transition:\n    background 0.2s ease,\n    color 0.2s ease,\n    transform 0.2s ease;\n}\n.mode-chip.active[_ngcontent-%COMP%] {\n  color: #1b110a;\n  background:\n    linear-gradient(\n      90deg,\n      #ffcc7a,\n      #ff9d52);\n}\n.panel-copy[_ngcontent-%COMP%] {\n  position: relative;\n  display: flex;\n  width: 100%;\n  align-items: start;\n  justify-content: flex-end;\n  overflow: hidden;\n  margin-top: 1rem;\n}\n.panel-page[_ngcontent-%COMP%] {\n  flex: 0 0 100%;\n  min-width: 0;\n  text-align: right;\n}\n.panel-copy.swap-left[_ngcontent-%COMP%] {\n  transform: none;\n}\n.panel-note[_ngcontent-%COMP%] {\n  margin: 0.35rem 0 0;\n  color: var(--ink-soft);\n  line-height: 1.45;\n  font-size: 0.92rem;\n}\n.panel-body[_ngcontent-%COMP%] {\n  overflow: hidden;\n  margin-top: 0.8rem;\n}\n.auth-form[_ngcontent-%COMP%] {\n  animation: _ngcontent-%COMP%_form-slide-in 0.24s ease-out;\n}\n.eyebrow[_ngcontent-%COMP%] {\n  margin: 0;\n  color: var(--ink-soft);\n  text-transform: uppercase;\n  letter-spacing: 0.2em;\n  font-size: 0.72rem;\n}\n.panel-head[_ngcontent-%COMP%]   h2[_ngcontent-%COMP%] {\n  margin: 0.35rem 0 0;\n  font-size: clamp(1.8rem, 3vw, 2.2rem);\n  letter-spacing: -0.02em;\n}\n.login-form[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.45rem;\n}\n.login-form[_ngcontent-%COMP%]   label[_ngcontent-%COMP%] {\n  color: #f4dcc2;\n  font-size: 0.88rem;\n  letter-spacing: 0.05em;\n  text-transform: uppercase;\n  margin-bottom: 0.15rem;\n}\n.login-form[_ngcontent-%COMP%]   input[_ngcontent-%COMP%] {\n  width: 100%;\n  border-radius: 0.85rem;\n  border: 1px solid var(--line);\n  background: var(--field-bg);\n  color: var(--ink);\n  font-size: 1rem;\n  padding: 0.8rem 0.9rem;\n  transition: border-color 0.25s ease, transform 0.2s ease;\n}\n.login-form[_ngcontent-%COMP%]   input[_ngcontent-%COMP%]:focus {\n  outline: none;\n  border-color: var(--accent);\n  transform: translateY(-1px);\n}\n.password-wrap[_ngcontent-%COMP%] {\n  position: relative;\n}\n.password-wrap[_ngcontent-%COMP%]   input[_ngcontent-%COMP%] {\n  padding-right: 5.5rem;\n}\n.toggle-visibility[_ngcontent-%COMP%] {\n  position: absolute;\n  top: 50%;\n  right: 0.5rem;\n  transform: translateY(-50%);\n  border: 0;\n  border-radius: 0.55rem;\n  min-height: 2rem;\n  padding: 0.4rem 0.65rem;\n  text-transform: uppercase;\n  letter-spacing: 0.08em;\n  font-size: 0.67rem;\n  color: #1b110a;\n  background:\n    linear-gradient(\n      90deg,\n      #ffcc7a,\n      #ff9d52);\n  touch-action: manipulation;\n  cursor: pointer;\n}\n.submit-btn[_ngcontent-%COMP%] {\n  margin-top: 0.6rem;\n  border: none;\n  border-radius: 0.95rem;\n  min-height: 3.1rem;\n  padding: 0.95rem 1.05rem;\n  font-weight: 700;\n  letter-spacing: 0.03em;\n  color: #1c130f;\n  background:\n    linear-gradient(\n      95deg,\n      var(--accent),\n      var(--accent-strong));\n  touch-action: manipulation;\n  cursor: pointer;\n  transition: transform 0.2s ease, filter 0.2s ease;\n}\n.submit-btn[_ngcontent-%COMP%]:hover {\n  transform: translateY(-2px);\n  filter: brightness(1.05);\n}\n.status[_ngcontent-%COMP%] {\n  margin-top: 0.1rem;\n  padding: 0.55rem 0.7rem;\n  border-radius: 0.7rem;\n  border: 1px solid #8c3c33;\n  background: rgba(97, 33, 27, 0.55);\n  color: #ffd9d2;\n  font-size: 0.92rem;\n}\n.status.success[_ngcontent-%COMP%] {\n  border-color: rgba(113, 182, 118, 0.35);\n  background: rgba(22, 74, 38, 0.55);\n  color: #d4f7d8;\n}\n.form-hint[_ngcontent-%COMP%] {\n  margin: 0.35rem 0 0;\n  color: var(--ink-soft);\n  font-size: 0.88rem;\n}\n.text-link[_ngcontent-%COMP%] {\n  border: 0;\n  padding: 0;\n  margin-left: 0.3rem;\n  background: none;\n  color: var(--accent);\n  font: inherit;\n  cursor: pointer;\n}\n.text-link[_ngcontent-%COMP%]:hover {\n  color: var(--accent-strong);\n}\n@keyframes _ngcontent-%COMP%_rise-in {\n  from {\n    opacity: 0;\n    transform: translateY(18px) scale(0.99);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0) scale(1);\n  }\n}\n@keyframes _ngcontent-%COMP%_ticker-loop {\n  from {\n    transform: translate3d(100%, -50%, 0);\n  }\n  to {\n    transform: translate3d(-100%, -50%, 0);\n  }\n}\n@keyframes _ngcontent-%COMP%_drift {\n  from {\n    transform: translate(0, 0);\n  }\n  to {\n    transform: translate(-22px, -22px);\n  }\n}\n@keyframes _ngcontent-%COMP%_soft-switch {\n  from {\n    opacity: 0.72;\n    transform: translateY(4px);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0);\n  }\n}\n@keyframes _ngcontent-%COMP%_form-slide-in {\n  from {\n    opacity: 0;\n    transform: translateX(10px);\n  }\n  to {\n    opacity: 1;\n    transform: translateX(0);\n  }\n}\n@media (max-width: 940px) {\n  .scene-layout[_ngcontent-%COMP%] {\n    grid-template-columns: 1fr;\n    min-height: auto;\n    padding-top: 1.1rem;\n    padding: 1.25rem 0;\n  }\n  .login-panel[_ngcontent-%COMP%] {\n    max-width: 95%;\n    justify-self: stretch;\n  }\n  .mood-panel[_ngcontent-%COMP%] {\n    padding: 1rem 0.3rem 0;\n  }\n  .lede[_ngcontent-%COMP%] {\n    max-width: 46ch;\n  }\n}\n@media (max-width: 560px) {\n  .auth-scene[_ngcontent-%COMP%] {\n    min-height: 100dvh;\n    padding: max(0.9rem, env(safe-area-inset-top)) 0 max(1rem, env(safe-area-inset-bottom));\n  }\n  .scene-layout[_ngcontent-%COMP%] {\n    width: min(100% - 1rem, 520px);\n    min-height: calc(100dvh - max(0.75rem, env(safe-area-inset-top)) - max(1rem, env(safe-area-inset-bottom)));\n    gap: 0.95rem;\n    padding-top: 0.8rem;\n  }\n  .mood-panel[_ngcontent-%COMP%] {\n    padding: 0.25rem 0.2rem 0;\n  }\n  .kicker[_ngcontent-%COMP%] {\n    font-size: 0.68rem;\n    letter-spacing: 0.22em;\n  }\n  .mood-panel[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%] {\n    font-size: clamp(1.8rem, 10vw, 2.8rem);\n  }\n  .lede[_ngcontent-%COMP%] {\n    margin-top: 0.95rem;\n    font-size: 0.94rem;\n    line-height: 1.48;\n  }\n  .login-panel[_ngcontent-%COMP%] {\n    padding: 1rem;\n    border-radius: 1rem;\n    -webkit-backdrop-filter: blur(5px);\n    backdrop-filter: blur(5px);\n    box-shadow: 0 16px 45px rgba(0, 0, 0, 0.38);\n  }\n  .mode-switch[_ngcontent-%COMP%] {\n    width: 100%;\n    justify-content: space-between;\n  }\n  .mode-chip[_ngcontent-%COMP%] {\n    flex: 1;\n    padding: 0.66rem 0.8rem;\n    font-size: 0.72rem;\n  }\n  .panel-copy[_ngcontent-%COMP%] {\n    margin-top: 0.85rem;\n  }\n  .ticker[_ngcontent-%COMP%] {\n    margin-top: 0.8rem;\n    padding: 0.48rem 0;\n  }\n  .ticker[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n    font-size: 0.7rem;\n    letter-spacing: 0.16em;\n  }\n  .login-form[_ngcontent-%COMP%] {\n    gap: 0.62rem;\n  }\n  .login-form[_ngcontent-%COMP%]   label[_ngcontent-%COMP%] {\n    font-size: 0.78rem;\n  }\n  .login-form[_ngcontent-%COMP%]   input[_ngcontent-%COMP%] {\n    padding: 0.86rem 0.82rem;\n    border-radius: 0.75rem;\n  }\n  .password-wrap[_ngcontent-%COMP%]   input[_ngcontent-%COMP%] {\n    padding-right: 5.75rem;\n  }\n  .toggle-visibility[_ngcontent-%COMP%] {\n    right: 0.38rem;\n    font-size: 0.62rem;\n    min-height: 1.9rem;\n  }\n  .submit-btn[_ngcontent-%COMP%] {\n    margin-top: 0.5rem;\n    min-height: 3.1rem;\n    font-size: 0.95rem;\n  }\n}\n@media (max-width: 420px) {\n  .scene-layout[_ngcontent-%COMP%] {\n    width: calc(100% - 0.7rem);\n  }\n  .mood-panel[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%] {\n    font-size: clamp(1.58rem, 9.2vw, 2.2rem);\n  }\n  .lede[_ngcontent-%COMP%] {\n    display: none;\n  }\n  .ticker[_ngcontent-%COMP%] {\n    margin-top: 0.65rem;\n  }\n  .panel-head[_ngcontent-%COMP%]   h2[_ngcontent-%COMP%] {\n    font-size: 1.55rem;\n  }\n  .login-panel[_ngcontent-%COMP%] {\n    padding: 0.9rem;\n    border-radius: 0.9rem;\n  }\n  .status[_ngcontent-%COMP%] {\n    font-size: 0.86rem;\n  }\n}\n@media (prefers-reduced-motion: reduce) {\n  .noise-layer[_ngcontent-%COMP%], \n   .ticker-track[_ngcontent-%COMP%], \n   .mood-panel[_ngcontent-%COMP%], \n   .login-panel[_ngcontent-%COMP%], \n   .auth-form[_ngcontent-%COMP%], \n   .login-panel.is-transitioning[_ngcontent-%COMP%]   .panel-copy[_ngcontent-%COMP%], \n   .login-panel.is-transitioning[_ngcontent-%COMP%]   .panel-body[_ngcontent-%COMP%] {\n    animation: none;\n  }\n}\n/*# sourceMappingURL=login.css.map */'] });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(LoginComponent, [{
@@ -43928,18 +46422,20 @@ var LoginComponent = class _LoginComponent {
           </button>
         </div>
 
-        <div class="panel-copy" [class.swap-left]="activeMode === 'signin'">
-          <div class="panel-page">
+        <div class="panel-copy panel-copy-right">
+          <div class="panel-page" *ngIf="activeMode === 'login'; else signInCopy">
             <p class="eyebrow">Acceso personal</p>
             <h2>Inicia sesion</h2>
             <p class="panel-note">Ingresa con tu cuenta para continuar con tu biblioteca y tus rese\xF1as.</p>
           </div>
 
-          <div class="panel-page">
-            <p class="eyebrow">Nuevo lector</p>
-            <h2>Crea tu cuenta</h2>
-            <p class="panel-note">Registra tus datos una sola vez y despues inicia sesion desde este mismo panel.</p>
-          </div>
+          <ng-template #signInCopy>
+            <div class="panel-page">
+              <p class="eyebrow">Nuevo lector</p>
+              <h2>Crea tu cuenta</h2>
+              <p class="panel-note">Registra tus datos una sola vez y despues inicia sesion desde este mismo panel.</p>
+            </div>
+          </ng-template>
         </div>
       </header>
 
@@ -43981,22 +46477,18 @@ var LoginComponent = class _LoginComponent {
           <div class="status success" *ngIf="successMessage">{{ successMessage }}</div>
 
           <button class="submit-btn" type="submit">Entrar a mi espacio</button>
-
-          <p class="form-hint">
-            \xBFNo tienes cuenta?
-            <button type="button" class="text-link" (click)="setMode('signin')">Ir a sign in</button>
-          </p>
         </form>
 
         <ng-template #signInForm>
           <form class="login-form auth-form" (ngSubmit)="onSubmit()">
-            <label for="registerName">Nombre</label>
+
+            <label for="registerName">Usuario</label>
             <input
               type="text"
               id="registerName"
               [(ngModel)]="registerName"
               name="registerName"
-              placeholder="Tu nombre"
+              placeholder="Tu usuario"
               autocomplete="name"
               required
             />
@@ -44009,6 +46501,17 @@ var LoginComponent = class _LoginComponent {
               name="registerEmail"
               placeholder="tu@correo.com"
               autocomplete="email"
+              required
+            />
+
+            <label for="registerPhone">Telefono</label>
+            <input
+              type="tel"
+              id="registerPhone"
+              [(ngModel)]="registerPhone"
+              name="registerPhone"
+              placeholder="Tu numero de telefono"
+              autocomplete="tel"
               required
             />
 
@@ -44058,7 +46561,7 @@ var LoginComponent = class _LoginComponent {
       </div>
     </section>
   </section>
-</main>`, styles: ['/* src/app/pages/login/login.css */\n:host {\n  --ink: #f7f3eb;\n  --ink-soft: #cfbca2;\n  --line: #4f3f2f;\n  --panel-bg: rgba(33, 25, 18, 0.78);\n  --accent: #f8b84e;\n  --accent-strong: #ff8f3c;\n  --field-bg: rgba(12, 9, 7, 0.74);\n  display: block;\n  height: 100%;\n  min-height: 100dvh;\n}\n.auth-scene {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  min-height: 100dvh;\n  overflow: hidden;\n  color: var(--ink);\n  font-family:\n    "Space Grotesk",\n    "Segoe UI",\n    sans-serif;\n  background:\n    radial-gradient(\n      circle at 18% 12%,\n      rgba(255, 177, 89, 0.18),\n      transparent 38%),\n    radial-gradient(\n      circle at 78% 84%,\n      rgba(255, 120, 57, 0.16),\n      transparent 34%),\n    linear-gradient(\n      160deg,\n      #120f0a 0%,\n      #1d120f 44%,\n      #2c1911 100%);\n}\n.noise-layer {\n  position: absolute;\n  inset: 0;\n  pointer-events: none;\n  opacity: 0.2;\n  background-image:\n    linear-gradient(transparent 95%, rgba(255, 255, 255, 0.07) 95%),\n    linear-gradient(\n      90deg,\n      transparent 95%,\n      rgba(255, 255, 255, 0.05) 95%);\n  background-size: 22px 22px;\n  animation: drift 18s linear infinite;\n}\n.scene-layout {\n  position: relative;\n  z-index: 1;\n  flex: 1;\n  width: min(1100px, 100% - 2rem);\n  margin: 0 auto;\n  min-height: 100dvh;\n  display: grid;\n  align-items: center;\n  gap: 2rem;\n  grid-template-columns: minmax(0, 1.05fr) minmax(420px, 1fr);\n}\n.mood-panel {\n  padding: 2rem 1rem;\n  animation: rise-in 0.85s ease-out both;\n}\n.kicker {\n  margin: 0;\n  text-transform: uppercase;\n  letter-spacing: 0.28em;\n  font-size: 0.76rem;\n  color: var(--ink-soft);\n}\n.mood-panel h1 {\n  margin: 0.7rem 0 0;\n  font-size: clamp(2.1rem, 6vw, 4.7rem);\n  line-height: 0.95;\n  letter-spacing: -0.03em;\n  text-wrap: balance;\n}\n.mood-panel h1 span {\n  display: block;\n  color: var(--accent);\n}\n.lede {\n  margin: 1.35rem 0 0;\n  max-width: 34ch;\n  line-height: 1.55;\n  color: #f0e2cd;\n}\n.ticker {\n  margin-top: 1.9rem;\n  border-top: 1px solid rgba(255, 245, 224, 0.24);\n  border-bottom: 1px solid rgba(255, 245, 224, 0.24);\n  position: relative;\n  display: flex;\n  align-items: center;\n  overflow: hidden;\n  height: 2.2rem;\n  padding: 0.65rem 0;\n}\n.ticker-rail {\n  position: relative;\n  width: 100%;\n  height: 1rem;\n}\n.ticker-track {\n  position: absolute;\n  left: 0;\n  top: 50%;\n  display: flex;\n  align-items: center;\n  flex: 0 0 auto;\n  gap: 1rem;\n  width: max-content;\n  will-change: transform;\n  animation: ticker-loop 14s linear infinite;\n  transform: translate3d(100%, -50%, 0);\n}\n.ticker-track:last-child {\n  animation-delay: -7s;\n}\n.ticker span {\n  flex: 0 0 auto;\n  text-transform: uppercase;\n  font-size: 0.8rem;\n  letter-spacing: 0.18em;\n  white-space: nowrap;\n  color: #ffd18b;\n}\n.login-panel {\n  border: 1px solid rgba(255, 225, 178, 0.22);\n  background: var(--panel-bg);\n  -webkit-backdrop-filter: blur(8px);\n  backdrop-filter: blur(8px);\n  border-radius: 1.4rem;\n  width: 100%;\n  max-width: 540px;\n  justify-self: end;\n  padding: 2rem 2.15rem;\n  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);\n  animation: rise-in 0.75s ease-out 0.15s both;\n}\n.login-panel.is-transitioning .panel-copy,\n.login-panel.is-transitioning .panel-body {\n  animation: soft-switch 0.22s ease-out;\n}\n.panel-head {\n  margin-bottom: 1.25rem;\n}\n.mode-switch {\n  display: inline-flex;\n  gap: 0.45rem;\n  padding: 0.35rem;\n  border-radius: 999px;\n  border: 1px solid rgba(255, 225, 178, 0.18);\n  background: rgba(14, 10, 7, 0.52);\n}\n.mode-chip {\n  border: 0;\n  border-radius: 999px;\n  padding: 0.72rem 0.95rem;\n  background: transparent;\n  color: var(--ink-soft);\n  font-size: 0.8rem;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n  cursor: pointer;\n  transition:\n    background 0.2s ease,\n    color 0.2s ease,\n    transform 0.2s ease;\n}\n.mode-chip.active {\n  color: #1b110a;\n  background:\n    linear-gradient(\n      90deg,\n      #ffcc7a,\n      #ff9d52);\n}\n.panel-copy {\n  position: relative;\n  display: flex;\n  width: 200%;\n  align-items: start;\n  overflow: hidden;\n  margin-top: 1rem;\n  transition: transform 0.24s ease;\n}\n.panel-page {\n  flex: 0 0 50%;\n  min-width: 0;\n}\n.panel-copy.swap-left {\n  transform: translateX(-50%);\n}\n.panel-note {\n  margin: 0.35rem 0 0;\n  color: var(--ink-soft);\n  line-height: 1.45;\n  font-size: 0.92rem;\n}\n.panel-body {\n  overflow: hidden;\n  margin-top: 0.8rem;\n}\n.auth-form {\n  animation: form-slide-in 0.24s ease-out;\n}\n.eyebrow {\n  margin: 0;\n  color: var(--ink-soft);\n  text-transform: uppercase;\n  letter-spacing: 0.2em;\n  font-size: 0.72rem;\n}\n.panel-head h2 {\n  margin: 0.35rem 0 0;\n  font-size: clamp(1.8rem, 3vw, 2.2rem);\n  letter-spacing: -0.02em;\n}\n.login-form {\n  display: grid;\n  gap: 0.9rem;\n}\n.login-form label {\n  color: #f4dcc2;\n  font-size: 0.88rem;\n  letter-spacing: 0.05em;\n  text-transform: uppercase;\n}\n.login-form input {\n  width: 100%;\n  border-radius: 0.85rem;\n  border: 1px solid var(--line);\n  background: var(--field-bg);\n  color: var(--ink);\n  font-size: 1rem;\n  padding: 0.95rem 0.9rem;\n  transition: border-color 0.25s ease, transform 0.2s ease;\n}\n.login-form input:focus {\n  outline: none;\n  border-color: var(--accent);\n  transform: translateY(-1px);\n}\n.password-wrap {\n  position: relative;\n}\n.password-wrap input {\n  padding-right: 5.5rem;\n}\n.toggle-visibility {\n  position: absolute;\n  top: 50%;\n  right: 0.5rem;\n  transform: translateY(-50%);\n  border: 0;\n  border-radius: 0.55rem;\n  min-height: 2rem;\n  padding: 0.4rem 0.65rem;\n  text-transform: uppercase;\n  letter-spacing: 0.08em;\n  font-size: 0.67rem;\n  color: #1b110a;\n  background:\n    linear-gradient(\n      90deg,\n      #ffcc7a,\n      #ff9d52);\n  touch-action: manipulation;\n  cursor: pointer;\n}\n.submit-btn {\n  margin-top: 0.8rem;\n  border: none;\n  border-radius: 0.95rem;\n  min-height: 3.25rem;\n  padding: 1rem 1.05rem;\n  font-weight: 700;\n  letter-spacing: 0.03em;\n  color: #1c130f;\n  background:\n    linear-gradient(\n      95deg,\n      var(--accent),\n      var(--accent-strong));\n  touch-action: manipulation;\n  cursor: pointer;\n  transition: transform 0.2s ease, filter 0.2s ease;\n}\n.submit-btn:hover {\n  transform: translateY(-2px);\n  filter: brightness(1.05);\n}\n.status {\n  padding: 0.64rem 0.75rem;\n  border-radius: 0.7rem;\n  border: 1px solid #8c3c33;\n  background: rgba(97, 33, 27, 0.55);\n  color: #ffd9d2;\n  font-size: 0.92rem;\n}\n.status.success {\n  border-color: rgba(113, 182, 118, 0.35);\n  background: rgba(22, 74, 38, 0.55);\n  color: #d4f7d8;\n}\n.form-hint {\n  margin: 0.35rem 0 0;\n  color: var(--ink-soft);\n  font-size: 0.88rem;\n}\n.text-link {\n  border: 0;\n  padding: 0;\n  margin-left: 0.3rem;\n  background: none;\n  color: var(--accent);\n  font: inherit;\n  cursor: pointer;\n}\n.text-link:hover {\n  color: var(--accent-strong);\n}\n@keyframes rise-in {\n  from {\n    opacity: 0;\n    transform: translateY(18px) scale(0.99);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0) scale(1);\n  }\n}\n@keyframes ticker-loop {\n  from {\n    transform: translate3d(100%, -50%, 0);\n  }\n  to {\n    transform: translate3d(-100%, -50%, 0);\n  }\n}\n@keyframes drift {\n  from {\n    transform: translate(0, 0);\n  }\n  to {\n    transform: translate(-22px, -22px);\n  }\n}\n@keyframes soft-switch {\n  from {\n    opacity: 0.72;\n    transform: translateY(4px);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0);\n  }\n}\n@keyframes form-slide-in {\n  from {\n    opacity: 0;\n    transform: translateX(10px);\n  }\n  to {\n    opacity: 1;\n    transform: translateX(0);\n  }\n}\n@media (max-width: 940px) {\n  .scene-layout {\n    grid-template-columns: 1fr;\n    padding: 1.25rem 0;\n  }\n  .login-panel {\n    max-width: 95%;\n    justify-self: stretch;\n  }\n  .mood-panel {\n    padding: 1rem 0.3rem 0;\n  }\n  .lede {\n    max-width: 46ch;\n  }\n}\n@media (max-width: 560px) {\n  .auth-scene {\n    min-height: 100dvh;\n    padding: max(0.75rem, env(safe-area-inset-top)) 0 max(1rem, env(safe-area-inset-bottom));\n  }\n  .scene-layout {\n    width: min(100% - 1rem, 520px);\n    min-height: calc(100dvh - max(0.75rem, env(safe-area-inset-top)) - max(1rem, env(safe-area-inset-bottom)));\n    gap: 0.95rem;\n  }\n  .mood-panel {\n    padding: 0.25rem 0.2rem 0;\n  }\n  .kicker {\n    font-size: 0.68rem;\n    letter-spacing: 0.22em;\n  }\n  .mood-panel h1 {\n    font-size: clamp(1.8rem, 10vw, 2.8rem);\n  }\n  .lede {\n    margin-top: 0.95rem;\n    font-size: 0.94rem;\n    line-height: 1.48;\n  }\n  .login-panel {\n    padding: 1rem;\n    border-radius: 1rem;\n    -webkit-backdrop-filter: blur(5px);\n    backdrop-filter: blur(5px);\n    box-shadow: 0 16px 45px rgba(0, 0, 0, 0.38);\n  }\n  .mode-switch {\n    width: 100%;\n    justify-content: space-between;\n  }\n  .mode-chip {\n    flex: 1;\n    padding: 0.66rem 0.8rem;\n    font-size: 0.72rem;\n  }\n  .panel-copy {\n    margin-top: 0.85rem;\n  }\n  .ticker {\n    margin-top: 0.8rem;\n    padding: 0.48rem 0;\n  }\n  .ticker span {\n    font-size: 0.7rem;\n    letter-spacing: 0.16em;\n  }\n  .login-form {\n    gap: 0.62rem;\n  }\n  .login-form label {\n    font-size: 0.78rem;\n  }\n  .login-form input {\n    padding: 0.86rem 0.82rem;\n    border-radius: 0.75rem;\n  }\n  .password-wrap input {\n    padding-right: 5.75rem;\n  }\n  .toggle-visibility {\n    right: 0.38rem;\n    font-size: 0.62rem;\n    min-height: 1.9rem;\n  }\n  .submit-btn {\n    margin-top: 0.5rem;\n    min-height: 3.1rem;\n    font-size: 0.95rem;\n  }\n}\n@media (max-width: 420px) {\n  .scene-layout {\n    width: calc(100% - 0.7rem);\n  }\n  .mood-panel h1 {\n    font-size: clamp(1.58rem, 9.2vw, 2.2rem);\n  }\n  .lede {\n    display: none;\n  }\n  .ticker {\n    margin-top: 0.65rem;\n  }\n  .panel-head h2 {\n    font-size: 1.55rem;\n  }\n  .login-panel {\n    padding: 0.9rem;\n    border-radius: 0.9rem;\n  }\n  .status {\n    font-size: 0.86rem;\n  }\n}\n@media (prefers-reduced-motion: reduce) {\n  .noise-layer,\n  .ticker-track,\n  .mood-panel,\n  .login-panel,\n  .auth-form,\n  .login-panel.is-transitioning .panel-copy,\n  .login-panel.is-transitioning .panel-body {\n    animation: none;\n  }\n}\n/*# sourceMappingURL=login.css.map */\n'] }]
+</main>`, styles: ['/* src/app/pages/login/login.css */\n:host {\n  --ink: #f7f3eb;\n  --ink-soft: #cfbca2;\n  --line: #4f3f2f;\n  --panel-bg: rgba(33, 25, 18, 0.78);\n  --accent: #f8b84e;\n  --accent-strong: #ff8f3c;\n  --field-bg: rgba(12, 9, 7, 0.74);\n  display: block;\n  height: 100%;\n  min-height: 100dvh;\n}\n.auth-scene {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  min-height: 100dvh;\n  overflow: hidden;\n  color: var(--ink);\n  font-family:\n    "Space Grotesk",\n    "Segoe UI",\n    sans-serif;\n  background:\n    radial-gradient(\n      circle at 18% 12%,\n      rgba(255, 177, 89, 0.18),\n      transparent 38%),\n    radial-gradient(\n      circle at 78% 84%,\n      rgba(255, 120, 57, 0.16),\n      transparent 34%),\n    linear-gradient(\n      160deg,\n      #120f0a 0%,\n      #1d120f 44%,\n      #2c1911 100%);\n}\n.noise-layer {\n  position: absolute;\n  inset: 0;\n  pointer-events: none;\n  opacity: 0.2;\n  background-image:\n    linear-gradient(transparent 95%, rgba(255, 255, 255, 0.07) 95%),\n    linear-gradient(\n      90deg,\n      transparent 95%,\n      rgba(255, 255, 255, 0.05) 95%);\n  background-size: 22px 22px;\n  animation: drift 18s linear infinite;\n}\n.scene-layout {\n  position: relative;\n  z-index: 1;\n  flex: 1;\n  width: min(1100px, 100% - 2rem);\n  margin: 0 auto;\n  min-height: 100dvh;\n  padding-top: 1.2rem;\n  padding-bottom: 1rem;\n  display: grid;\n  align-items: center;\n  gap: 2rem;\n  grid-template-columns: minmax(0, 1.05fr) minmax(420px, 1fr);\n}\n.mood-panel {\n  padding: 2rem 1rem;\n  animation: rise-in 0.85s ease-out both;\n}\n.kicker {\n  margin: 0;\n  text-transform: uppercase;\n  letter-spacing: 0.28em;\n  font-size: 0.76rem;\n  color: var(--ink-soft);\n}\n.mood-panel h1 {\n  margin: 0.7rem 0 0;\n  font-size: clamp(2.1rem, 6vw, 4.7rem);\n  line-height: 0.95;\n  letter-spacing: -0.03em;\n  text-wrap: balance;\n}\n.mood-panel h1 span {\n  display: block;\n  color: var(--accent);\n}\n.lede {\n  margin: 1.35rem 0 0;\n  max-width: 34ch;\n  line-height: 1.55;\n  color: #f0e2cd;\n}\n.ticker {\n  margin-top: 1.9rem;\n  border-top: 1px solid rgba(255, 245, 224, 0.24);\n  border-bottom: 1px solid rgba(255, 245, 224, 0.24);\n  position: relative;\n  display: flex;\n  align-items: center;\n  overflow: hidden;\n  height: 2.2rem;\n  padding: 0.65rem 0;\n}\n.ticker-rail {\n  position: relative;\n  width: 100%;\n  height: 1rem;\n}\n.ticker-track {\n  position: absolute;\n  left: 0;\n  top: 50%;\n  display: flex;\n  align-items: center;\n  flex: 0 0 auto;\n  gap: 1rem;\n  width: max-content;\n  will-change: transform;\n  animation: ticker-loop 14s linear infinite;\n  transform: translate3d(100%, -50%, 0);\n}\n.ticker-track:last-child {\n  animation-delay: -7s;\n}\n.ticker span {\n  flex: 0 0 auto;\n  text-transform: uppercase;\n  font-size: 0.8rem;\n  letter-spacing: 0.18em;\n  white-space: nowrap;\n  color: #ffd18b;\n}\n.login-panel {\n  border: 1px solid rgba(255, 225, 178, 0.22);\n  background: var(--panel-bg);\n  -webkit-backdrop-filter: blur(8px);\n  backdrop-filter: blur(8px);\n  border-radius: 1.4rem;\n  width: 100%;\n  max-width: 540px;\n  justify-self: end;\n  padding: 2rem 2.15rem;\n  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);\n  animation: rise-in 0.75s ease-out 0.15s both;\n}\n.login-panel.is-transitioning .panel-copy,\n.login-panel.is-transitioning .panel-body {\n  animation: soft-switch 0.22s ease-out;\n}\n.panel-head {\n  margin-bottom: 1.25rem;\n}\n.mode-switch {\n  display: inline-flex;\n  width: 100%;\n  gap: 0.55rem;\n  padding: 0.35rem;\n  border-radius: 999px;\n  border: 1px solid rgba(255, 225, 178, 0.18);\n  background: rgba(14, 10, 7, 0.52);\n}\n.mode-chip {\n  flex: 1;\n  border: 0;\n  border-radius: 999px;\n  padding: 0.72rem 0.95rem;\n  background: transparent;\n  color: var(--ink-soft);\n  font-size: 0.8rem;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n  text-align: center;\n  white-space: nowrap;\n  cursor: pointer;\n  transition:\n    background 0.2s ease,\n    color 0.2s ease,\n    transform 0.2s ease;\n}\n.mode-chip.active {\n  color: #1b110a;\n  background:\n    linear-gradient(\n      90deg,\n      #ffcc7a,\n      #ff9d52);\n}\n.panel-copy {\n  position: relative;\n  display: flex;\n  width: 100%;\n  align-items: start;\n  justify-content: flex-end;\n  overflow: hidden;\n  margin-top: 1rem;\n}\n.panel-page {\n  flex: 0 0 100%;\n  min-width: 0;\n  text-align: right;\n}\n.panel-copy.swap-left {\n  transform: none;\n}\n.panel-note {\n  margin: 0.35rem 0 0;\n  color: var(--ink-soft);\n  line-height: 1.45;\n  font-size: 0.92rem;\n}\n.panel-body {\n  overflow: hidden;\n  margin-top: 0.8rem;\n}\n.auth-form {\n  animation: form-slide-in 0.24s ease-out;\n}\n.eyebrow {\n  margin: 0;\n  color: var(--ink-soft);\n  text-transform: uppercase;\n  letter-spacing: 0.2em;\n  font-size: 0.72rem;\n}\n.panel-head h2 {\n  margin: 0.35rem 0 0;\n  font-size: clamp(1.8rem, 3vw, 2.2rem);\n  letter-spacing: -0.02em;\n}\n.login-form {\n  display: grid;\n  gap: 0.45rem;\n}\n.login-form label {\n  color: #f4dcc2;\n  font-size: 0.88rem;\n  letter-spacing: 0.05em;\n  text-transform: uppercase;\n  margin-bottom: 0.15rem;\n}\n.login-form input {\n  width: 100%;\n  border-radius: 0.85rem;\n  border: 1px solid var(--line);\n  background: var(--field-bg);\n  color: var(--ink);\n  font-size: 1rem;\n  padding: 0.8rem 0.9rem;\n  transition: border-color 0.25s ease, transform 0.2s ease;\n}\n.login-form input:focus {\n  outline: none;\n  border-color: var(--accent);\n  transform: translateY(-1px);\n}\n.password-wrap {\n  position: relative;\n}\n.password-wrap input {\n  padding-right: 5.5rem;\n}\n.toggle-visibility {\n  position: absolute;\n  top: 50%;\n  right: 0.5rem;\n  transform: translateY(-50%);\n  border: 0;\n  border-radius: 0.55rem;\n  min-height: 2rem;\n  padding: 0.4rem 0.65rem;\n  text-transform: uppercase;\n  letter-spacing: 0.08em;\n  font-size: 0.67rem;\n  color: #1b110a;\n  background:\n    linear-gradient(\n      90deg,\n      #ffcc7a,\n      #ff9d52);\n  touch-action: manipulation;\n  cursor: pointer;\n}\n.submit-btn {\n  margin-top: 0.6rem;\n  border: none;\n  border-radius: 0.95rem;\n  min-height: 3.1rem;\n  padding: 0.95rem 1.05rem;\n  font-weight: 700;\n  letter-spacing: 0.03em;\n  color: #1c130f;\n  background:\n    linear-gradient(\n      95deg,\n      var(--accent),\n      var(--accent-strong));\n  touch-action: manipulation;\n  cursor: pointer;\n  transition: transform 0.2s ease, filter 0.2s ease;\n}\n.submit-btn:hover {\n  transform: translateY(-2px);\n  filter: brightness(1.05);\n}\n.status {\n  margin-top: 0.1rem;\n  padding: 0.55rem 0.7rem;\n  border-radius: 0.7rem;\n  border: 1px solid #8c3c33;\n  background: rgba(97, 33, 27, 0.55);\n  color: #ffd9d2;\n  font-size: 0.92rem;\n}\n.status.success {\n  border-color: rgba(113, 182, 118, 0.35);\n  background: rgba(22, 74, 38, 0.55);\n  color: #d4f7d8;\n}\n.form-hint {\n  margin: 0.35rem 0 0;\n  color: var(--ink-soft);\n  font-size: 0.88rem;\n}\n.text-link {\n  border: 0;\n  padding: 0;\n  margin-left: 0.3rem;\n  background: none;\n  color: var(--accent);\n  font: inherit;\n  cursor: pointer;\n}\n.text-link:hover {\n  color: var(--accent-strong);\n}\n@keyframes rise-in {\n  from {\n    opacity: 0;\n    transform: translateY(18px) scale(0.99);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0) scale(1);\n  }\n}\n@keyframes ticker-loop {\n  from {\n    transform: translate3d(100%, -50%, 0);\n  }\n  to {\n    transform: translate3d(-100%, -50%, 0);\n  }\n}\n@keyframes drift {\n  from {\n    transform: translate(0, 0);\n  }\n  to {\n    transform: translate(-22px, -22px);\n  }\n}\n@keyframes soft-switch {\n  from {\n    opacity: 0.72;\n    transform: translateY(4px);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0);\n  }\n}\n@keyframes form-slide-in {\n  from {\n    opacity: 0;\n    transform: translateX(10px);\n  }\n  to {\n    opacity: 1;\n    transform: translateX(0);\n  }\n}\n@media (max-width: 940px) {\n  .scene-layout {\n    grid-template-columns: 1fr;\n    min-height: auto;\n    padding-top: 1.1rem;\n    padding: 1.25rem 0;\n  }\n  .login-panel {\n    max-width: 95%;\n    justify-self: stretch;\n  }\n  .mood-panel {\n    padding: 1rem 0.3rem 0;\n  }\n  .lede {\n    max-width: 46ch;\n  }\n}\n@media (max-width: 560px) {\n  .auth-scene {\n    min-height: 100dvh;\n    padding: max(0.9rem, env(safe-area-inset-top)) 0 max(1rem, env(safe-area-inset-bottom));\n  }\n  .scene-layout {\n    width: min(100% - 1rem, 520px);\n    min-height: calc(100dvh - max(0.75rem, env(safe-area-inset-top)) - max(1rem, env(safe-area-inset-bottom)));\n    gap: 0.95rem;\n    padding-top: 0.8rem;\n  }\n  .mood-panel {\n    padding: 0.25rem 0.2rem 0;\n  }\n  .kicker {\n    font-size: 0.68rem;\n    letter-spacing: 0.22em;\n  }\n  .mood-panel h1 {\n    font-size: clamp(1.8rem, 10vw, 2.8rem);\n  }\n  .lede {\n    margin-top: 0.95rem;\n    font-size: 0.94rem;\n    line-height: 1.48;\n  }\n  .login-panel {\n    padding: 1rem;\n    border-radius: 1rem;\n    -webkit-backdrop-filter: blur(5px);\n    backdrop-filter: blur(5px);\n    box-shadow: 0 16px 45px rgba(0, 0, 0, 0.38);\n  }\n  .mode-switch {\n    width: 100%;\n    justify-content: space-between;\n  }\n  .mode-chip {\n    flex: 1;\n    padding: 0.66rem 0.8rem;\n    font-size: 0.72rem;\n  }\n  .panel-copy {\n    margin-top: 0.85rem;\n  }\n  .ticker {\n    margin-top: 0.8rem;\n    padding: 0.48rem 0;\n  }\n  .ticker span {\n    font-size: 0.7rem;\n    letter-spacing: 0.16em;\n  }\n  .login-form {\n    gap: 0.62rem;\n  }\n  .login-form label {\n    font-size: 0.78rem;\n  }\n  .login-form input {\n    padding: 0.86rem 0.82rem;\n    border-radius: 0.75rem;\n  }\n  .password-wrap input {\n    padding-right: 5.75rem;\n  }\n  .toggle-visibility {\n    right: 0.38rem;\n    font-size: 0.62rem;\n    min-height: 1.9rem;\n  }\n  .submit-btn {\n    margin-top: 0.5rem;\n    min-height: 3.1rem;\n    font-size: 0.95rem;\n  }\n}\n@media (max-width: 420px) {\n  .scene-layout {\n    width: calc(100% - 0.7rem);\n  }\n  .mood-panel h1 {\n    font-size: clamp(1.58rem, 9.2vw, 2.2rem);\n  }\n  .lede {\n    display: none;\n  }\n  .ticker {\n    margin-top: 0.65rem;\n  }\n  .panel-head h2 {\n    font-size: 1.55rem;\n  }\n  .login-panel {\n    padding: 0.9rem;\n    border-radius: 0.9rem;\n  }\n  .status {\n    font-size: 0.86rem;\n  }\n}\n@media (prefers-reduced-motion: reduce) {\n  .noise-layer,\n  .ticker-track,\n  .mood-panel,\n  .login-panel,\n  .auth-form,\n  .login-panel.is-transitioning .panel-copy,\n  .login-panel.is-transitioning .panel-body {\n    animation: none;\n  }\n}\n/*# sourceMappingURL=login.css.map */\n'] }]
   }], null, null);
 })();
 (() => {
@@ -44141,14 +46644,32 @@ function ComentarioPage_section_7_p_6_Template(rf, ctx) {
     \u0275\u0275elementEnd();
   }
 }
+function ComentarioPage_section_7_div_7_article_1_Conditional_4_Template(rf, ctx) {
+  if (rf & 1) {
+    \u0275\u0275elementStart(0, "span");
+    \u0275\u0275text(1);
+    \u0275\u0275elementEnd();
+  }
+  if (rf & 2) {
+    const comment_r2 = \u0275\u0275nextContext().$implicit;
+    \u0275\u0275advance();
+    \u0275\u0275textInterpolate1("", comment_r2.likes, " / 5");
+  }
+}
+function ComentarioPage_section_7_div_7_article_1_Conditional_5_Template(rf, ctx) {
+  if (rf & 1) {
+    \u0275\u0275elementStart(0, "span");
+    \u0275\u0275text(1, "comentario");
+    \u0275\u0275elementEnd();
+  }
+}
 function ComentarioPage_section_7_div_7_article_1_Template(rf, ctx) {
   if (rf & 1) {
     \u0275\u0275elementStart(0, "article", 26)(1, "div", 27)(2, "strong");
     \u0275\u0275text(3);
     \u0275\u0275elementEnd();
-    \u0275\u0275elementStart(4, "span");
-    \u0275\u0275text(5);
-    \u0275\u0275elementEnd()();
+    \u0275\u0275conditionalCreate(4, ComentarioPage_section_7_div_7_article_1_Conditional_4_Template, 2, 1, "span")(5, ComentarioPage_section_7_div_7_article_1_Conditional_5_Template, 2, 0, "span");
+    \u0275\u0275elementEnd();
     \u0275\u0275elementStart(6, "p");
     \u0275\u0275text(7);
     \u0275\u0275elementEnd()();
@@ -44157,9 +46678,9 @@ function ComentarioPage_section_7_div_7_article_1_Template(rf, ctx) {
     const comment_r2 = ctx.$implicit;
     \u0275\u0275advance(3);
     \u0275\u0275textInterpolate(comment_r2.username);
-    \u0275\u0275advance(2);
-    \u0275\u0275textInterpolate1("", comment_r2.likes, " likes");
-    \u0275\u0275advance(2);
+    \u0275\u0275advance();
+    \u0275\u0275conditional(comment_r2.hasRating ? 4 : 5);
+    \u0275\u0275advance(3);
     \u0275\u0275textInterpolate(comment_r2.content);
   }
 }
@@ -44242,40 +46763,51 @@ var ComentarioPage = class _ComentarioPage {
     this.errorMessage = "";
     this.detail = null;
     this.relatedComments = [];
-    this.comentarioService.getComentario(commentId).pipe(timeout(8e3), catchError(() => this.comentarioService.getComentarios().pipe(timeout(8e3), map((comments) => comments.find((item) => Number(item.id) === commentId)), catchError(() => of(void 0)))), switchMap((comment) => {
+    this.comentarioService.getComentarios().pipe(timeout(8e3), map((comments) => comments.find((item) => Number(item.id) === commentId)), catchError(() => of(void 0)), switchMap((comment) => {
+      if (comment) {
+        return of(comment);
+      }
+      return this.comentarioService.getComentario(commentId).pipe(timeout(6e3), catchError(() => of(void 0)));
+    }), switchMap((comment) => {
       if (!comment) {
         return of({
           comment: null,
           book: null,
+          books: [],
           users: []
         });
       }
       const c = comment;
       const userId = c.UsuarioId ?? c.usuario_id;
       const bookId = c.BookId ?? c.libro_id;
+      const bookTitle = String(c.libro ?? c.libroTitulo ?? c.titulo ?? "").trim();
       const hasEmbeddedUsername = Boolean(c.usuario?.nombre || c.usuarioNombre || c.username);
       return forkJoin({
         comment: of(comment),
         book: bookId != null ? this.bookService.getBook(Number(bookId)).pipe(timeout(6e3), catchError(() => of(null))) : of(null),
+        books: bookId == null && bookTitle.length > 0 ? this.bookService.getBooks().pipe(timeout(6e3), catchError(() => of([]))) : of([]),
         users: !hasEmbeddedUsername && userId != null ? this.usuarioService.getUsuarios().pipe(timeout(6e3), catchError(() => of([]))) : of([])
       });
     }), catchError(() => of({
       comment: null,
       book: null,
+      books: [],
       users: []
     })), finalize(() => {
       this.isLoading = false;
       this.cdr.markForCheck();
     })).subscribe({
-      next: ({ comment, book, users }) => {
+      next: (result) => {
+        const { comment, book, books, users } = result;
         if (!comment) {
           this.errorMessage = "No se encontr\xF3 ese comentario...";
           this.isLoadingRelated = false;
           this.cdr.markForCheck();
           return;
         }
-        this.detail = this.mapCommentDetail(comment, book, users);
-        this.loadRelatedComments(this.detail.bookId, comment.id, users);
+        const resolvedBook = this.resolveBookFromComment(comment, book, books);
+        this.detail = this.mapCommentDetail(comment, resolvedBook, users);
+        this.loadRelatedComments(this.detail.bookId, this.detail.bookTitleRaw, comment.id, users);
         this.cdr.markForCheck();
       },
       error: () => {
@@ -44285,8 +46817,8 @@ var ComentarioPage = class _ComentarioPage {
       }
     });
   }
-  loadRelatedComments(bookId, currentCommentId, users) {
-    if (bookId == null) {
+  loadRelatedComments(bookId, bookTitle, currentCommentId, users) {
+    if (bookId == null && bookTitle.trim().length === 0) {
       this.relatedComments = [];
       this.isLoadingRelated = false;
       this.cdr.markForCheck();
@@ -44294,30 +46826,51 @@ var ComentarioPage = class _ComentarioPage {
     }
     this.isLoadingRelated = true;
     forkJoin({
-      relatedComments: this.comentarioService.getComentariosByBookId(bookId, currentCommentId).pipe(timeout(8e3), catchError(() => of([]))),
+      relatedComments: this.comentarioService.getComentariosByBookId(bookId ?? -1, currentCommentId, bookTitle).pipe(timeout(8e3), catchError(() => of([]))),
       users: users.length > 0 ? of(users) : this.usuarioService.getUsuarios().pipe(timeout(6e3), catchError(() => of([])))
     }).pipe(finalize(() => {
       this.isLoadingRelated = false;
       this.cdr.markForCheck();
-    })).subscribe(({ relatedComments, users: relatedUsers }) => {
+    })).subscribe((result) => {
+      const { relatedComments, users: relatedUsers } = result;
       this.relatedComments = this.mapRelatedComments(relatedComments, relatedUsers);
       this.cdr.markForCheck();
     });
+  }
+  resolveBookFromComment(comment, loadedBook, books) {
+    if (loadedBook) {
+      return loadedBook;
+    }
+    const c = comment;
+    const bookTitle = String(c.libro ?? c.libroData?.titulo ?? c.libroTitulo ?? c.titulo ?? "").trim().toLowerCase();
+    if (!bookTitle) {
+      return null;
+    }
+    return books.find((item) => item.titulo.trim().toLowerCase() === bookTitle) ?? null;
   }
   mapCommentDetail(comment, book, users) {
     const c = comment;
     const userId = c.UsuarioId ?? c.usuario_id;
     const user = users.find((item) => item.id === Number(userId));
     const bookId = c.BookId ?? c.libro_id;
+    const rawTitle = String(c.libro ?? c.libroTitulo ?? c.title ?? c.titulo ?? book?.titulo ?? "").trim();
+    const normalizedLikes = this.resolveCommentLikes(comment);
+    const ratingStats = this.getBookRatingStats(book);
+    const ratingValue = ratingStats.count > 0 ? ratingStats.average : normalizedLikes;
     return {
       id: comment.id,
-      bookId: bookId != null ? Number(bookId) : null,
-      username: c.usuario?.nombre || c.usuarioNombre || c.username || user?.nombre || "Usuario desconocido",
-      bookTitle: c.libro?.titulo || c.libroTitulo || c.title || c.titulo || book?.titulo || "Libro sin titulo",
+      bookId: bookId != null ? Number(bookId) : book?.id ?? null,
+      bookTitleRaw: rawTitle,
+      username: c.user || c.nombre || c.usuario?.nombre || c.usuarioNombre || c.username || user?.nombre || "Usuario desconocido",
+      bookTitle: rawTitle || "Libro sin titulo",
       author: book?.autor || "Autor no disponible",
-      content: comment.contenido,
-      likes: comment.likes,
-      coverUrl: book?.portada || "/prueba.webp"
+      content: c.contenido ?? c.comentario ?? c.comment ?? "",
+      likes: normalizedLikes,
+      ratingValue: Number.isFinite(ratingValue) ? ratingValue : 0,
+      ratingCount: ratingStats.count,
+      reviewCount: ratingStats.total,
+      hasBookRating: ratingStats.count > 0,
+      coverUrl: this.normalizeCoverPath(c.portada || book?.portada)
     };
   }
   mapRelatedComments(comments, users) {
@@ -44327,11 +46880,48 @@ var ComentarioPage = class _ComentarioPage {
       const user = users.find((item) => item.id === Number(userId));
       return {
         id: comment.id,
-        username: c.usuario?.nombre || c.usuarioNombre || c.username || user?.nombre || "Usuario desconocido",
-        content: comment.contenido,
-        likes: comment.likes
+        username: c.user || c.nombre || c.usuario?.nombre || c.usuarioNombre || c.username || user?.nombre || "Usuario desconocido",
+        content: c.contenido ?? c.comentario ?? c.comment ?? "",
+        likes: this.resolveCommentLikes(comment),
+        hasRating: this.resolveCommentLikes(comment) > 0
       };
     });
+  }
+  buildReviewLikesMap(book) {
+    return /* @__PURE__ */ new Map();
+  }
+  resolveCommentLikes(comment) {
+    const c = comment;
+    const rawLikes = c.likes ?? c.likes_count ?? c.rating ?? 0;
+    const likes = Number(rawLikes);
+    return Number.isFinite(likes) ? likes : 0;
+  }
+  getBookRatingStats(book) {
+    const reviews = book?.reviews ?? [];
+    const ratings = reviews.map((review) => review.rating).filter((value) => value != null).map((value) => Number(value)).filter((value) => Number.isFinite(value));
+    if (ratings.length === 0) {
+      return { average: 0, count: 0, total: reviews.length };
+    }
+    const total = ratings.reduce((sum, value) => sum + value, 0);
+    return {
+      average: Number((total / ratings.length).toFixed(1)),
+      count: ratings.length,
+      total: reviews.length
+    };
+  }
+  normalizeCoverPath(rawCover) {
+    const raw = String(rawCover ?? "").trim();
+    if (!raw) {
+      return "/prueba.webp";
+    }
+    const lowered = raw.toLowerCase();
+    if (lowered === "default.png" || lowered === "default.jpg" || lowered === "/default.jpg" || lowered === "/default.png") {
+      return "/default.png";
+    }
+    if (/^https?:\/\//i.test(raw) || raw.startsWith("/")) {
+      return raw;
+    }
+    return `/${raw}`;
   }
   trackByRelatedCommentId(index, comment) {
     return comment.id;
@@ -44364,75 +46954,79 @@ var ComentarioPage = class _ComentarioPage {
       \u0275\u0275advance();
       \u0275\u0275property("ngIf", !ctx.isLoading && ctx.detail);
     }
-  }, dependencies: [CommonModule, NgForOf, NgIf], styles: ['\n\n.comment-view[_ngcontent-%COMP%] {\n  --book-bg-image: url(/prueba.webp);\n  position: relative;\n  min-height: 100dvh;\n  display: grid;\n  place-items: center;\n  padding: 1.2rem;\n  overflow: hidden;\n  background: #0a1017;\n}\n.comment-view[_ngcontent-%COMP%]::before {\n  content: "";\n  position: absolute;\n  inset: -12%;\n  background-image: var(--book-bg-image);\n  background-size: cover;\n  background-position: center;\n  transform: scale(1.2);\n  filter: blur(12px) saturate(1.08);\n  opacity: 0.42;\n}\n.comment-view[_ngcontent-%COMP%]::after {\n  content: "";\n  position: absolute;\n  inset: 0;\n  background:\n    radial-gradient(\n      circle at 20% 15%,\n      rgba(235, 246, 255, 0.16),\n      transparent 45%),\n    linear-gradient(\n      160deg,\n      rgba(4, 9, 14, 0.7),\n      rgba(10, 16, 23, 0.88));\n}\n.comment-shell[_ngcontent-%COMP%] {\n  position: relative;\n  z-index: 1;\n  width: min(1024px, 100%);\n  display: grid;\n  gap: 1rem;\n}\n.back-link[_ngcontent-%COMP%] {\n  width: fit-content;\n  color: #d5e8ff;\n  text-decoration: none;\n  border: 1px solid rgba(195, 224, 255, 0.35);\n  background: rgba(10, 17, 26, 0.64);\n  border-radius: 999px;\n  padding: 0.45rem 0.95rem;\n  font-weight: 700;\n  cursor: pointer;\n}\n.back-link[_ngcontent-%COMP%]:hover {\n  background: rgba(15, 28, 42, 0.88);\n}\n.comment-card[_ngcontent-%COMP%] {\n  display: grid;\n  grid-template-columns: 300px minmax(0, 1fr);\n  gap: 1.3rem;\n  border-radius: 1rem;\n  padding: 1rem;\n  background: rgba(10, 16, 24, 0.76);\n  border: 1px solid rgba(152, 190, 226, 0.26);\n}\n.cover-column[_ngcontent-%COMP%] {\n  border-radius: 0.8rem;\n  overflow: hidden;\n  border: 1px solid rgba(200, 227, 255, 0.3);\n  background: #0f1620;\n  aspect-ratio: 2 / 3;\n}\n.cover-column[_ngcontent-%COMP%]   img[_ngcontent-%COMP%] {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.content-column[_ngcontent-%COMP%] {\n  display: grid;\n  align-content: center;\n  gap: 1.1rem;\n  color: #f3f8ff;\n}\n.eyebrow[_ngcontent-%COMP%] {\n  margin: 0;\n  text-transform: uppercase;\n  letter-spacing: 0.09em;\n  font-size: 0.78rem;\n  color: #b5cde7;\n}\n.content-column[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%] {\n  margin: 0.1rem 0 0;\n  font-size: clamp(1.7rem, 3.2vw, 2.8rem);\n  letter-spacing: -0.03em;\n}\n.meta[_ngcontent-%COMP%] {\n  margin: 0.35rem 0 0;\n  color: #c6d9ee;\n}\n.comment-copy[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: clamp(1.05rem, 1.6vw, 1.25rem);\n  line-height: 1.7;\n  color: #ecf4ff;\n}\n.likes[_ngcontent-%COMP%] {\n  display: inline-flex;\n  align-items: center;\n  background: rgba(40, 150, 89, 0.3);\n  border: 1px solid rgba(78, 220, 143, 0.5);\n  border-radius: 999px;\n  color: #cbffe2;\n  padding: 0.33rem 0.8rem;\n  font-weight: 700;\n}\n.status[_ngcontent-%COMP%] {\n  margin: 0;\n  padding: 0.65rem 0.75rem;\n  border-radius: 0.6rem;\n  background: rgba(13, 23, 33, 0.82);\n  border: 1px solid rgba(61, 80, 100, 0.8);\n  color: #d9e6f3;\n}\n.status.error[_ngcontent-%COMP%] {\n  background: rgba(54, 22, 30, 0.84);\n  border-color: rgba(130, 58, 74, 0.9);\n  color: #ffd2dc;\n}\n.related-section[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.9rem;\n  padding: 1rem;\n  border-radius: 1rem;\n  background: rgba(10, 16, 24, 0.72);\n  border: 1px solid rgba(152, 190, 226, 0.2);\n}\n.related-loading[_ngcontent-%COMP%] {\n  margin: 0;\n  padding: 0.85rem 0.95rem;\n  border-radius: 0.75rem;\n  border: 1px solid rgba(152, 190, 226, 0.2);\n  background: rgba(13, 20, 29, 0.6);\n  color: #c4d7e8;\n}\n.related-head[_ngcontent-%COMP%] {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  gap: 0.75rem;\n  padding-bottom: 0.8rem;\n  border-bottom: 1px solid rgba(152, 190, 226, 0.18);\n  color: #d8e7f7;\n}\n.related-head[_ngcontent-%COMP%]   h2[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: 1.1rem;\n  letter-spacing: -0.02em;\n}\n.related-head[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n  font-size: 0.9rem;\n  color: #9fb8cf;\n}\n.related-list[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.8rem;\n}\n.related-card[_ngcontent-%COMP%] {\n  padding: 0.9rem 1rem;\n  border-radius: 0.85rem;\n  border: 1px solid rgba(152, 190, 226, 0.16);\n  background: rgba(13, 20, 29, 0.82);\n  color: #edf5ff;\n}\n.related-card-head[_ngcontent-%COMP%] {\n  display: flex;\n  justify-content: space-between;\n  gap: 0.8rem;\n  align-items: center;\n  margin-bottom: 0.45rem;\n}\n.related-card-head[_ngcontent-%COMP%]   strong[_ngcontent-%COMP%] {\n  font-size: 0.98rem;\n}\n.related-card-head[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n  white-space: nowrap;\n  font-size: 0.82rem;\n  color: #c4d7e8;\n  border: 1px solid rgba(78, 220, 143, 0.38);\n  background: rgba(40, 150, 89, 0.22);\n  padding: 0.22rem 0.6rem;\n  border-radius: 999px;\n}\n.related-card[_ngcontent-%COMP%]   p[_ngcontent-%COMP%] {\n  margin: 0;\n  line-height: 1.55;\n  color: #dbe7f2;\n}\n.related-empty[_ngcontent-%COMP%] {\n  margin: 0;\n  padding: 0.95rem 1rem;\n  border-radius: 0.8rem;\n  border: 1px dashed rgba(152, 190, 226, 0.24);\n  color: #aabed0;\n  background: rgba(10, 16, 24, 0.58);\n}\n@media (max-width: 760px) {\n  .comment-view[_ngcontent-%COMP%] {\n    padding: 0.8rem;\n  }\n  .comment-shell[_ngcontent-%COMP%] {\n    gap: 0.85rem;\n  }\n  .comment-card[_ngcontent-%COMP%] {\n    grid-template-columns: 1fr;\n    gap: 1rem;\n    padding: 0.9rem;\n  }\n  .cover-column[_ngcontent-%COMP%] {\n    max-width: 210px;\n    width: 100%;\n  }\n  .content-column[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%] {\n    font-size: clamp(1.55rem, 8vw, 2.1rem);\n  }\n  .comment-copy[_ngcontent-%COMP%] {\n    font-size: 1rem;\n    line-height: 1.6;\n  }\n  .meta[_ngcontent-%COMP%] {\n    font-size: 0.95rem;\n  }\n  .related-section[_ngcontent-%COMP%] {\n    padding: 0.9rem;\n  }\n  .related-head[_ngcontent-%COMP%] {\n    align-items: flex-start;\n    flex-direction: column;\n  }\n  .related-card[_ngcontent-%COMP%] {\n    padding: 0.85rem;\n  }\n}\n/*# sourceMappingURL=Comentario.css.map */'] });
+  }, dependencies: [CommonModule, NgForOf, NgIf], styles: ['\n\n.comment-view[_ngcontent-%COMP%] {\n  --book-bg-image: url(/prueba.webp);\n  position: relative;\n  min-height: 100dvh;\n  display: grid;\n  place-items: center;\n  padding: 1.2rem;\n  overflow: hidden;\n  background:\n    radial-gradient(\n      circle at 18% 12%,\n      rgba(255, 177, 89, 0.13),\n      transparent 34%),\n    radial-gradient(\n      circle at 82% 88%,\n      rgba(255, 120, 57, 0.1),\n      transparent 28%),\n    linear-gradient(\n      160deg,\n      #120f0a 0%,\n      #1d120f 44%,\n      #2c1911 100%);\n}\n.comment-view[_ngcontent-%COMP%]::before {\n  content: "";\n  position: absolute;\n  inset: -12%;\n  background-image: var(--book-bg-image);\n  background-size: cover;\n  background-position: center;\n  transform: scale(1.2);\n  filter: blur(12px) saturate(1.08);\n  opacity: 0.42;\n}\n.comment-view[_ngcontent-%COMP%]::after {\n  content: "";\n  position: absolute;\n  inset: 0;\n  background:\n    radial-gradient(\n      circle at 20% 15%,\n      rgba(255, 225, 178, 0.12),\n      transparent 42%),\n    linear-gradient(\n      160deg,\n      rgba(10, 7, 5, 0.7),\n      rgba(19, 12, 9, 0.9));\n}\n.comment-shell[_ngcontent-%COMP%] {\n  position: relative;\n  z-index: 1;\n  width: min(1024px, 100%);\n  display: grid;\n  gap: 1rem;\n}\n.back-link[_ngcontent-%COMP%] {\n  width: fit-content;\n  color: #f7f3eb;\n  text-decoration: none;\n  border: 1px solid rgba(255, 225, 178, 0.22);\n  background: rgba(33, 25, 18, 0.78);\n  border-radius: 999px;\n  padding: 0.45rem 0.95rem;\n  font-weight: 700;\n  cursor: pointer;\n}\n.back-link[_ngcontent-%COMP%]:hover {\n  background: rgba(44, 25, 17, 0.88);\n}\n.comment-card[_ngcontent-%COMP%] {\n  display: grid;\n  grid-template-columns: 300px minmax(0, 1fr);\n  gap: 1.3rem;\n  border-radius: 1rem;\n  padding: 1rem;\n  background: rgba(33, 25, 18, 0.78);\n  border: 1px solid rgba(255, 225, 178, 0.18);\n  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);\n}\n.cover-column[_ngcontent-%COMP%] {\n  border-radius: 0.8rem;\n  overflow: hidden;\n  border: 1px solid rgba(255, 225, 178, 0.18);\n  background: rgba(12, 9, 7, 0.72);\n  aspect-ratio: 2 / 3;\n}\n.cover-column[_ngcontent-%COMP%]   img[_ngcontent-%COMP%] {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.content-column[_ngcontent-%COMP%] {\n  display: grid;\n  align-content: center;\n  gap: 1.1rem;\n  color: #f7f3eb;\n}\n.eyebrow[_ngcontent-%COMP%] {\n  margin: 0;\n  text-transform: uppercase;\n  letter-spacing: 0.09em;\n  font-size: 0.78rem;\n  color: #ffd18b;\n}\n.content-column[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%] {\n  margin: 0.1rem 0 0;\n  font-size: clamp(1.7rem, 3.2vw, 2.8rem);\n  letter-spacing: -0.03em;\n}\n.meta[_ngcontent-%COMP%] {\n  margin: 0.35rem 0 0;\n  color: #f4dcc2;\n}\n.comment-copy[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: clamp(1.05rem, 1.6vw, 1.25rem);\n  line-height: 1.7;\n  color: #f4dcc2;\n}\n.likes[_ngcontent-%COMP%] {\n  display: inline-flex;\n  align-items: center;\n  background:\n    linear-gradient(\n      90deg,\n      rgba(255, 204, 122, 0.16),\n      rgba(255, 157, 82, 0.14));\n  border: 1px solid rgba(255, 204, 122, 0.35);\n  border-radius: 999px;\n  color: #ffd18b;\n  padding: 0.33rem 0.8rem;\n  font-weight: 700;\n}\n.status[_ngcontent-%COMP%] {\n  margin: 0;\n  padding: 0.65rem 0.75rem;\n  border-radius: 0.6rem;\n  background: rgba(14, 10, 7, 0.58);\n  border: 1px solid rgba(255, 225, 178, 0.16);\n  color: #f0e2cd;\n}\n.status.error[_ngcontent-%COMP%] {\n  background: rgba(97, 33, 27, 0.55);\n  border-color: rgba(140, 60, 51, 0.9);\n  color: #ffd9d2;\n}\n.related-section[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.9rem;\n  padding: 1rem;\n  border-radius: 1rem;\n  background: rgba(33, 25, 18, 0.76);\n  border: 1px solid rgba(255, 225, 178, 0.16);\n}\n.related-loading[_ngcontent-%COMP%] {\n  margin: 0;\n  padding: 0.85rem 0.95rem;\n  border-radius: 0.75rem;\n  border: 1px solid rgba(255, 225, 178, 0.14);\n  background: rgba(14, 10, 7, 0.58);\n  color: #f0e2cd;\n}\n.related-head[_ngcontent-%COMP%] {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  gap: 0.75rem;\n  padding-bottom: 0.8rem;\n  border-bottom: 1px solid rgba(255, 225, 178, 0.14);\n  color: #f7f3eb;\n}\n.related-head[_ngcontent-%COMP%]   h2[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: 1.1rem;\n  letter-spacing: -0.02em;\n}\n.related-head[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n  font-size: 0.9rem;\n  color: #cfbca2;\n}\n.related-list[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.8rem;\n}\n.related-card[_ngcontent-%COMP%] {\n  padding: 0.9rem 1rem;\n  border-radius: 0.85rem;\n  border: 1px solid rgba(255, 225, 178, 0.14);\n  background: rgba(14, 10, 7, 0.66);\n  color: #f7f3eb;\n}\n.related-card-head[_ngcontent-%COMP%] {\n  display: flex;\n  justify-content: space-between;\n  gap: 0.8rem;\n  align-items: center;\n  margin-bottom: 0.45rem;\n}\n.related-card-head[_ngcontent-%COMP%]   strong[_ngcontent-%COMP%] {\n  font-size: 0.98rem;\n  color: #ffd18b;\n}\n.related-card-head[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n  white-space: nowrap;\n  font-size: 0.82rem;\n  color: #ffd18b;\n  border: 1px solid rgba(255, 204, 122, 0.28);\n  background: rgba(255, 157, 82, 0.12);\n  padding: 0.22rem 0.6rem;\n  border-radius: 999px;\n}\n.related-card[_ngcontent-%COMP%]   p[_ngcontent-%COMP%] {\n  margin: 0;\n  line-height: 1.55;\n  color: #f4dcc2;\n}\n.related-empty[_ngcontent-%COMP%] {\n  margin: 0;\n  padding: 0.95rem 1rem;\n  border-radius: 0.8rem;\n  border: 1px dashed rgba(255, 225, 178, 0.22);\n  color: #cfbca2;\n  background: rgba(14, 10, 7, 0.5);\n}\n@media (max-width: 760px) {\n  .comment-view[_ngcontent-%COMP%] {\n    padding: 0.8rem;\n  }\n  .comment-shell[_ngcontent-%COMP%] {\n    gap: 0.85rem;\n  }\n  .comment-card[_ngcontent-%COMP%] {\n    grid-template-columns: 1fr;\n    gap: 1rem;\n    padding: 0.9rem;\n  }\n  .cover-column[_ngcontent-%COMP%] {\n    max-width: 210px;\n    width: 100%;\n  }\n  .content-column[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%] {\n    font-size: clamp(1.55rem, 8vw, 2.1rem);\n  }\n  .comment-copy[_ngcontent-%COMP%] {\n    font-size: 1rem;\n    line-height: 1.6;\n  }\n  .meta[_ngcontent-%COMP%] {\n    font-size: 0.95rem;\n  }\n  .related-section[_ngcontent-%COMP%] {\n    padding: 0.9rem;\n  }\n  .related-head[_ngcontent-%COMP%] {\n    align-items: flex-start;\n    flex-direction: column;\n  }\n  .related-card[_ngcontent-%COMP%] {\n    padding: 0.85rem;\n  }\n}\n/*# sourceMappingURL=Comentario.css.map */'] });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(ComentarioPage, [{
     type: Component,
-    args: [{ selector: "app-comentario-page", standalone: true, imports: [CommonModule], template: `<main\r
-	class="comment-view"\r
-	[style.--book-bg-image]="'url(' + (detail?.coverUrl || '/prueba.webp') + ')'"\r
->\r
-	<section class="comment-shell">\r
-		<button class="back-link" type="button" (click)="goHome()">Volver a Home</button>\r
-\r
-		<p class="status" *ngIf="isLoading">Cargando comentario...</p>\r
-		<p class="status error" *ngIf="errorMessage">{{ errorMessage }}</p>\r
-\r
-		<article class="comment-card" *ngIf="!isLoading && detail">\r
-			<div class="cover-column">\r
-                @if(!detail.coverUrl ) {\r
-                    <img src="/prueba.webp" alt="Portada no disponible" loading="lazy" />\r
-                } @else {\r
-                    <img [src]="detail.coverUrl" [alt]="detail.bookTitle" loading="lazy" />\r
-                }\r
-				\r
-			</div>\r
-\r
-			<div class="content-column">\r
-				<header>\r
-					<p class="eyebrow">Comentario destacado</p>\r
-					<h1>{{ detail.bookTitle }}</h1>\r
-					<p class="meta">{{ detail.author }} \xB7 {{ detail.username }}</p>\r
-				</header>\r
-\r
-				<p class="comment-copy">{{ detail.content }}</p>\r
-\r
-				<footer>\r
-					<span class="likes">{{ detail.likes }} likes</span>\r
-				</footer>\r
-			</div>\r
-		</article>\r
-\r
-		<section class="related-section" *ngIf="!isLoading && detail">\r
-			<header class="related-head">\r
-				<h2>Comentarios de este libro</h2>\r
-				<span>{{ relatedComments.length }} comentarios</span>\r
-			</header>\r
-\r
-			<p class="related-loading" *ngIf="isLoadingRelated">Cargando m\xE1s comentarios...</p>\r
-\r
-			<div class="related-list" *ngIf="!isLoadingRelated && relatedComments.length > 0; else noRelatedComments">\r
-				<article class="related-card" *ngFor="let comment of relatedComments; trackBy: trackByRelatedCommentId">\r
-					<div class="related-card-head">\r
-						<strong>{{ comment.username }}</strong>\r
-						<span>{{ comment.likes }} likes</span>\r
-					</div>\r
-\r
-					<p>{{ comment.content }}</p>\r
-				</article>\r
-			</div>\r
-\r
-			<ng-template #noRelatedComments>\r
-				<p class="related-empty" *ngIf="!isLoadingRelated">Todav\xEDa no hay m\xE1s comentarios para este libro.</p>\r
-			</ng-template>\r
-		</section>\r
-	</section>\r
-</main>`, styles: ['/* src/app/pages/Comentarios/Comentario.css */\n.comment-view {\n  --book-bg-image: url(/prueba.webp);\n  position: relative;\n  min-height: 100dvh;\n  display: grid;\n  place-items: center;\n  padding: 1.2rem;\n  overflow: hidden;\n  background: #0a1017;\n}\n.comment-view::before {\n  content: "";\n  position: absolute;\n  inset: -12%;\n  background-image: var(--book-bg-image);\n  background-size: cover;\n  background-position: center;\n  transform: scale(1.2);\n  filter: blur(12px) saturate(1.08);\n  opacity: 0.42;\n}\n.comment-view::after {\n  content: "";\n  position: absolute;\n  inset: 0;\n  background:\n    radial-gradient(\n      circle at 20% 15%,\n      rgba(235, 246, 255, 0.16),\n      transparent 45%),\n    linear-gradient(\n      160deg,\n      rgba(4, 9, 14, 0.7),\n      rgba(10, 16, 23, 0.88));\n}\n.comment-shell {\n  position: relative;\n  z-index: 1;\n  width: min(1024px, 100%);\n  display: grid;\n  gap: 1rem;\n}\n.back-link {\n  width: fit-content;\n  color: #d5e8ff;\n  text-decoration: none;\n  border: 1px solid rgba(195, 224, 255, 0.35);\n  background: rgba(10, 17, 26, 0.64);\n  border-radius: 999px;\n  padding: 0.45rem 0.95rem;\n  font-weight: 700;\n  cursor: pointer;\n}\n.back-link:hover {\n  background: rgba(15, 28, 42, 0.88);\n}\n.comment-card {\n  display: grid;\n  grid-template-columns: 300px minmax(0, 1fr);\n  gap: 1.3rem;\n  border-radius: 1rem;\n  padding: 1rem;\n  background: rgba(10, 16, 24, 0.76);\n  border: 1px solid rgba(152, 190, 226, 0.26);\n}\n.cover-column {\n  border-radius: 0.8rem;\n  overflow: hidden;\n  border: 1px solid rgba(200, 227, 255, 0.3);\n  background: #0f1620;\n  aspect-ratio: 2 / 3;\n}\n.cover-column img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.content-column {\n  display: grid;\n  align-content: center;\n  gap: 1.1rem;\n  color: #f3f8ff;\n}\n.eyebrow {\n  margin: 0;\n  text-transform: uppercase;\n  letter-spacing: 0.09em;\n  font-size: 0.78rem;\n  color: #b5cde7;\n}\n.content-column h1 {\n  margin: 0.1rem 0 0;\n  font-size: clamp(1.7rem, 3.2vw, 2.8rem);\n  letter-spacing: -0.03em;\n}\n.meta {\n  margin: 0.35rem 0 0;\n  color: #c6d9ee;\n}\n.comment-copy {\n  margin: 0;\n  font-size: clamp(1.05rem, 1.6vw, 1.25rem);\n  line-height: 1.7;\n  color: #ecf4ff;\n}\n.likes {\n  display: inline-flex;\n  align-items: center;\n  background: rgba(40, 150, 89, 0.3);\n  border: 1px solid rgba(78, 220, 143, 0.5);\n  border-radius: 999px;\n  color: #cbffe2;\n  padding: 0.33rem 0.8rem;\n  font-weight: 700;\n}\n.status {\n  margin: 0;\n  padding: 0.65rem 0.75rem;\n  border-radius: 0.6rem;\n  background: rgba(13, 23, 33, 0.82);\n  border: 1px solid rgba(61, 80, 100, 0.8);\n  color: #d9e6f3;\n}\n.status.error {\n  background: rgba(54, 22, 30, 0.84);\n  border-color: rgba(130, 58, 74, 0.9);\n  color: #ffd2dc;\n}\n.related-section {\n  display: grid;\n  gap: 0.9rem;\n  padding: 1rem;\n  border-radius: 1rem;\n  background: rgba(10, 16, 24, 0.72);\n  border: 1px solid rgba(152, 190, 226, 0.2);\n}\n.related-loading {\n  margin: 0;\n  padding: 0.85rem 0.95rem;\n  border-radius: 0.75rem;\n  border: 1px solid rgba(152, 190, 226, 0.2);\n  background: rgba(13, 20, 29, 0.6);\n  color: #c4d7e8;\n}\n.related-head {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  gap: 0.75rem;\n  padding-bottom: 0.8rem;\n  border-bottom: 1px solid rgba(152, 190, 226, 0.18);\n  color: #d8e7f7;\n}\n.related-head h2 {\n  margin: 0;\n  font-size: 1.1rem;\n  letter-spacing: -0.02em;\n}\n.related-head span {\n  font-size: 0.9rem;\n  color: #9fb8cf;\n}\n.related-list {\n  display: grid;\n  gap: 0.8rem;\n}\n.related-card {\n  padding: 0.9rem 1rem;\n  border-radius: 0.85rem;\n  border: 1px solid rgba(152, 190, 226, 0.16);\n  background: rgba(13, 20, 29, 0.82);\n  color: #edf5ff;\n}\n.related-card-head {\n  display: flex;\n  justify-content: space-between;\n  gap: 0.8rem;\n  align-items: center;\n  margin-bottom: 0.45rem;\n}\n.related-card-head strong {\n  font-size: 0.98rem;\n}\n.related-card-head span {\n  white-space: nowrap;\n  font-size: 0.82rem;\n  color: #c4d7e8;\n  border: 1px solid rgba(78, 220, 143, 0.38);\n  background: rgba(40, 150, 89, 0.22);\n  padding: 0.22rem 0.6rem;\n  border-radius: 999px;\n}\n.related-card p {\n  margin: 0;\n  line-height: 1.55;\n  color: #dbe7f2;\n}\n.related-empty {\n  margin: 0;\n  padding: 0.95rem 1rem;\n  border-radius: 0.8rem;\n  border: 1px dashed rgba(152, 190, 226, 0.24);\n  color: #aabed0;\n  background: rgba(10, 16, 24, 0.58);\n}\n@media (max-width: 760px) {\n  .comment-view {\n    padding: 0.8rem;\n  }\n  .comment-shell {\n    gap: 0.85rem;\n  }\n  .comment-card {\n    grid-template-columns: 1fr;\n    gap: 1rem;\n    padding: 0.9rem;\n  }\n  .cover-column {\n    max-width: 210px;\n    width: 100%;\n  }\n  .content-column h1 {\n    font-size: clamp(1.55rem, 8vw, 2.1rem);\n  }\n  .comment-copy {\n    font-size: 1rem;\n    line-height: 1.6;\n  }\n  .meta {\n    font-size: 0.95rem;\n  }\n  .related-section {\n    padding: 0.9rem;\n  }\n  .related-head {\n    align-items: flex-start;\n    flex-direction: column;\n  }\n  .related-card {\n    padding: 0.85rem;\n  }\n}\n/*# sourceMappingURL=Comentario.css.map */\n'] }]
+    args: [{ selector: "app-comentario-page", standalone: true, imports: [CommonModule], template: `<main
+	class="comment-view"
+	[style.--book-bg-image]="'url(' + (detail?.coverUrl || '/prueba.webp') + ')'"
+>
+	<section class="comment-shell">
+		<button class="back-link" type="button" (click)="goHome()">Volver a Home</button>
+
+		<p class="status" *ngIf="isLoading">Cargando comentario...</p>
+		<p class="status error" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+		<article class="comment-card" *ngIf="!isLoading && detail">
+			<div class="cover-column">
+                @if(!detail.coverUrl ) {
+                    <img src="/prueba.webp" alt="Portada no disponible" loading="lazy" />
+                } @else {
+                    <img [src]="detail.coverUrl" [alt]="detail.bookTitle" loading="lazy" />
+                }
+				
+			</div>
+
+			<div class="content-column">
+				<header>
+					<p class="eyebrow">Comentario destacado</p>
+					<h1>{{ detail.bookTitle }}</h1>
+					<p class="meta">{{ detail.author }} \xB7 {{ detail.username }}</p>
+				</header>
+
+				<p class="comment-copy">{{ detail.content }}</p>
+
+				<footer>
+					<span class="likes">{{ detail.likes }} likes</span>
+				</footer>
+			</div>
+		</article>
+
+		<section class="related-section" *ngIf="!isLoading && detail">
+			<header class="related-head">
+				<h2>Comentarios de este libro</h2>
+				<span>{{ relatedComments.length }} comentarios</span>
+			</header>
+
+			<p class="related-loading" *ngIf="isLoadingRelated">Cargando m\xE1s comentarios...</p>
+
+			<div class="related-list" *ngIf="!isLoadingRelated && relatedComments.length > 0; else noRelatedComments">
+				<article class="related-card" *ngFor="let comment of relatedComments; trackBy: trackByRelatedCommentId">
+					<div class="related-card-head">
+						<strong>{{ comment.username }}</strong>
+						@if(comment.hasRating) {
+							<span>{{ comment.likes }} / 5</span>
+						} @else {
+							<span>comentario</span>
+						}
+					</div>
+
+					<p>{{ comment.content }}</p>
+				</article>
+			</div>
+
+			<ng-template #noRelatedComments>
+				<p class="related-empty" *ngIf="!isLoadingRelated">Todav\xEDa no hay m\xE1s comentarios para este libro.</p>
+			</ng-template>
+		</section>
+	</section>
+</main>`, styles: ['/* src/app/pages/Comentarios/Comentario.css */\n.comment-view {\n  --book-bg-image: url(/prueba.webp);\n  position: relative;\n  min-height: 100dvh;\n  display: grid;\n  place-items: center;\n  padding: 1.2rem;\n  overflow: hidden;\n  background:\n    radial-gradient(\n      circle at 18% 12%,\n      rgba(255, 177, 89, 0.13),\n      transparent 34%),\n    radial-gradient(\n      circle at 82% 88%,\n      rgba(255, 120, 57, 0.1),\n      transparent 28%),\n    linear-gradient(\n      160deg,\n      #120f0a 0%,\n      #1d120f 44%,\n      #2c1911 100%);\n}\n.comment-view::before {\n  content: "";\n  position: absolute;\n  inset: -12%;\n  background-image: var(--book-bg-image);\n  background-size: cover;\n  background-position: center;\n  transform: scale(1.2);\n  filter: blur(12px) saturate(1.08);\n  opacity: 0.42;\n}\n.comment-view::after {\n  content: "";\n  position: absolute;\n  inset: 0;\n  background:\n    radial-gradient(\n      circle at 20% 15%,\n      rgba(255, 225, 178, 0.12),\n      transparent 42%),\n    linear-gradient(\n      160deg,\n      rgba(10, 7, 5, 0.7),\n      rgba(19, 12, 9, 0.9));\n}\n.comment-shell {\n  position: relative;\n  z-index: 1;\n  width: min(1024px, 100%);\n  display: grid;\n  gap: 1rem;\n}\n.back-link {\n  width: fit-content;\n  color: #f7f3eb;\n  text-decoration: none;\n  border: 1px solid rgba(255, 225, 178, 0.22);\n  background: rgba(33, 25, 18, 0.78);\n  border-radius: 999px;\n  padding: 0.45rem 0.95rem;\n  font-weight: 700;\n  cursor: pointer;\n}\n.back-link:hover {\n  background: rgba(44, 25, 17, 0.88);\n}\n.comment-card {\n  display: grid;\n  grid-template-columns: 300px minmax(0, 1fr);\n  gap: 1.3rem;\n  border-radius: 1rem;\n  padding: 1rem;\n  background: rgba(33, 25, 18, 0.78);\n  border: 1px solid rgba(255, 225, 178, 0.18);\n  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);\n}\n.cover-column {\n  border-radius: 0.8rem;\n  overflow: hidden;\n  border: 1px solid rgba(255, 225, 178, 0.18);\n  background: rgba(12, 9, 7, 0.72);\n  aspect-ratio: 2 / 3;\n}\n.cover-column img {\n  width: 100%;\n  height: 100%;\n  object-fit: cover;\n  display: block;\n}\n.content-column {\n  display: grid;\n  align-content: center;\n  gap: 1.1rem;\n  color: #f7f3eb;\n}\n.eyebrow {\n  margin: 0;\n  text-transform: uppercase;\n  letter-spacing: 0.09em;\n  font-size: 0.78rem;\n  color: #ffd18b;\n}\n.content-column h1 {\n  margin: 0.1rem 0 0;\n  font-size: clamp(1.7rem, 3.2vw, 2.8rem);\n  letter-spacing: -0.03em;\n}\n.meta {\n  margin: 0.35rem 0 0;\n  color: #f4dcc2;\n}\n.comment-copy {\n  margin: 0;\n  font-size: clamp(1.05rem, 1.6vw, 1.25rem);\n  line-height: 1.7;\n  color: #f4dcc2;\n}\n.likes {\n  display: inline-flex;\n  align-items: center;\n  background:\n    linear-gradient(\n      90deg,\n      rgba(255, 204, 122, 0.16),\n      rgba(255, 157, 82, 0.14));\n  border: 1px solid rgba(255, 204, 122, 0.35);\n  border-radius: 999px;\n  color: #ffd18b;\n  padding: 0.33rem 0.8rem;\n  font-weight: 700;\n}\n.status {\n  margin: 0;\n  padding: 0.65rem 0.75rem;\n  border-radius: 0.6rem;\n  background: rgba(14, 10, 7, 0.58);\n  border: 1px solid rgba(255, 225, 178, 0.16);\n  color: #f0e2cd;\n}\n.status.error {\n  background: rgba(97, 33, 27, 0.55);\n  border-color: rgba(140, 60, 51, 0.9);\n  color: #ffd9d2;\n}\n.related-section {\n  display: grid;\n  gap: 0.9rem;\n  padding: 1rem;\n  border-radius: 1rem;\n  background: rgba(33, 25, 18, 0.76);\n  border: 1px solid rgba(255, 225, 178, 0.16);\n}\n.related-loading {\n  margin: 0;\n  padding: 0.85rem 0.95rem;\n  border-radius: 0.75rem;\n  border: 1px solid rgba(255, 225, 178, 0.14);\n  background: rgba(14, 10, 7, 0.58);\n  color: #f0e2cd;\n}\n.related-head {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  gap: 0.75rem;\n  padding-bottom: 0.8rem;\n  border-bottom: 1px solid rgba(255, 225, 178, 0.14);\n  color: #f7f3eb;\n}\n.related-head h2 {\n  margin: 0;\n  font-size: 1.1rem;\n  letter-spacing: -0.02em;\n}\n.related-head span {\n  font-size: 0.9rem;\n  color: #cfbca2;\n}\n.related-list {\n  display: grid;\n  gap: 0.8rem;\n}\n.related-card {\n  padding: 0.9rem 1rem;\n  border-radius: 0.85rem;\n  border: 1px solid rgba(255, 225, 178, 0.14);\n  background: rgba(14, 10, 7, 0.66);\n  color: #f7f3eb;\n}\n.related-card-head {\n  display: flex;\n  justify-content: space-between;\n  gap: 0.8rem;\n  align-items: center;\n  margin-bottom: 0.45rem;\n}\n.related-card-head strong {\n  font-size: 0.98rem;\n  color: #ffd18b;\n}\n.related-card-head span {\n  white-space: nowrap;\n  font-size: 0.82rem;\n  color: #ffd18b;\n  border: 1px solid rgba(255, 204, 122, 0.28);\n  background: rgba(255, 157, 82, 0.12);\n  padding: 0.22rem 0.6rem;\n  border-radius: 999px;\n}\n.related-card p {\n  margin: 0;\n  line-height: 1.55;\n  color: #f4dcc2;\n}\n.related-empty {\n  margin: 0;\n  padding: 0.95rem 1rem;\n  border-radius: 0.8rem;\n  border: 1px dashed rgba(255, 225, 178, 0.22);\n  color: #cfbca2;\n  background: rgba(14, 10, 7, 0.5);\n}\n@media (max-width: 760px) {\n  .comment-view {\n    padding: 0.8rem;\n  }\n  .comment-shell {\n    gap: 0.85rem;\n  }\n  .comment-card {\n    grid-template-columns: 1fr;\n    gap: 1rem;\n    padding: 0.9rem;\n  }\n  .cover-column {\n    max-width: 210px;\n    width: 100%;\n  }\n  .content-column h1 {\n    font-size: clamp(1.55rem, 8vw, 2.1rem);\n  }\n  .comment-copy {\n    font-size: 1rem;\n    line-height: 1.6;\n  }\n  .meta {\n    font-size: 0.95rem;\n  }\n  .related-section {\n    padding: 0.9rem;\n  }\n  .related-head {\n    align-items: flex-start;\n    flex-direction: column;\n  }\n  .related-card {\n    padding: 0.85rem;\n  }\n}\n/*# sourceMappingURL=Comentario.css.map */\n'] }]
   }], null, null);
 })();
 (() => {
-  (typeof ngDevMode === "undefined" || ngDevMode) && \u0275setClassDebugInfo(ComentarioPage, { className: "ComentarioPage", filePath: "src/app/pages/Comentarios/Comentario.ts", lineNumber: 38 });
+  (typeof ngDevMode === "undefined" || ngDevMode) && \u0275setClassDebugInfo(ComentarioPage, { className: "ComentarioPage", filePath: "src/app/pages/Comentarios/Comentario.ts", lineNumber: 44 });
 })();
 
 // src/app/pages/mi_libreria/mi_libreria.ts
@@ -44646,17 +47240,33 @@ var routes = [
   { path: "**", redirectTo: "" }
 ];
 
+// src/app/interceptors/auth.interceptor.ts
+var authInterceptor = (request, next) => {
+  const token = localStorage.getItem("token");
+  if (!token) {
+    return next(request);
+  }
+  if (request.url.includes("/login") || request.url.includes("/register")) {
+    return next(request);
+  }
+  return next(request.clone({
+    setHeaders: {
+      Authorization: `Bearer ${token}`
+    }
+  }));
+};
+
 // src/app/app.config.ts
 var appConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes),
-    provideHttpClient()
+    provideHttpClient(withInterceptors([authInterceptor]))
   ]
 };
 
 // src/app/components/site-header/site-header.ts
-var _c0 = () => ({ exact: true });
+var _c02 = () => ({ exact: true });
 function SiteHeaderComponent_a_9_Template(rf, ctx) {
   if (rf & 1) {
     \u0275\u0275elementStart(0, "a", 14);
@@ -44665,7 +47275,7 @@ function SiteHeaderComponent_a_9_Template(rf, ctx) {
   }
   if (rf & 2) {
     const item_r1 = ctx.$implicit;
-    \u0275\u0275property("routerLink", item_r1.path)("routerLinkActiveOptions", \u0275\u0275pureFunction0(3, _c0));
+    \u0275\u0275property("routerLink", item_r1.path)("routerLinkActiveOptions", \u0275\u0275pureFunction0(3, _c02));
     \u0275\u0275advance();
     \u0275\u0275textInterpolate1(" ", item_r1.label, " ");
   }
@@ -44700,12 +47310,12 @@ var SiteHeaderComponent = class _SiteHeaderComponent {
       \u0275\u0275advance(9);
       \u0275\u0275property("ngForOf", ctx.navItems);
     }
-  }, dependencies: [CommonModule, NgForOf, RouterLink, RouterLinkActive], styles: ['\n\n[_nghost-%COMP%] {\n  display: block;\n  position: sticky;\n  top: 0;\n  z-index: 30;\n}\n.site-header[_ngcontent-%COMP%] {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 1rem;\n  padding: 0.9rem 1.25rem;\n  background: rgba(12, 16, 21, 0.96);\n  -webkit-backdrop-filter: blur(14px);\n  backdrop-filter: blur(14px);\n  border-bottom: 1px solid rgba(70, 82, 98, 0.5);\n  color: #edf3f7;\n}\n.brand[_ngcontent-%COMP%] {\n  display: inline-flex;\n  align-items: center;\n  gap: 0.85rem;\n  text-decoration: none;\n  color: inherit;\n  white-space: nowrap;\n}\n.brand-dots[_ngcontent-%COMP%] {\n  display: inline-flex;\n  align-items: center;\n  gap: 0.25rem;\n}\n.dot[_ngcontent-%COMP%] {\n  width: 1.15rem;\n  height: 1.15rem;\n  border-radius: 999px;\n  display: inline-block;\n}\n.dot-orange[_ngcontent-%COMP%] {\n  background: #ff7a18;\n}\n.dot-cyan[_ngcontent-%COMP%] {\n  background: #22d3ee;\n}\n.dot-green[_ngcontent-%COMP%] {\n  background: #34d399;\n}\n.brand-name[_ngcontent-%COMP%] {\n  font-size: 1.55rem;\n  font-weight: 800;\n  letter-spacing: -0.04em;\n}\n.nav[_ngcontent-%COMP%] {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 1rem;\n  flex: 1;\n  min-width: 0;\n  flex-wrap: wrap;\n}\n.nav-link[_ngcontent-%COMP%] {\n  text-decoration: none;\n  color: #b5c2cf;\n  font-size: 0.88rem;\n  font-weight: 700;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n  padding: 0.3rem 0;\n  border-bottom: 2px solid transparent;\n}\n.nav-link.active[_ngcontent-%COMP%] {\n  color: #f1f7fb;\n  border-bottom-color: #1fd760;\n}\n.actions[_ngcontent-%COMP%] {\n  display: flex;\n  align-items: center;\n  gap: 0.7rem;\n}\n.icon-button[_ngcontent-%COMP%] {\n  width: 2.2rem;\n  height: 2.2rem;\n  border-radius: 999px;\n  border: 1px solid rgba(90, 104, 120, 0.9);\n  background: rgba(26, 34, 44, 0.95);\n  color: #dce5ed;\n  display: grid;\n  place-items: center;\n  cursor: pointer;\n  font-size: 1rem;\n}\n.avatar-link[_ngcontent-%COMP%] {\n  width: 2.5rem;\n  height: 2.5rem;\n  border-radius: 999px;\n  border: 1px solid rgba(92, 106, 122, 0.9);\n  background:\n    linear-gradient(\n      180deg,\n      #384454,\n      #253140);\n  display: grid;\n  place-items: center;\n  text-decoration: none;\n}\n.avatar-icon[_ngcontent-%COMP%] {\n  width: 1.35rem;\n  height: 1.35rem;\n  position: relative;\n  display: block;\n}\n.avatar-icon[_ngcontent-%COMP%]::before, \n.avatar-icon[_ngcontent-%COMP%]::after {\n  content: "";\n  position: absolute;\n  left: 50%;\n  transform: translateX(-50%);\n  background: #9fb0c1;\n}\n.avatar-icon[_ngcontent-%COMP%]::before {\n  top: 0;\n  width: 0.62rem;\n  height: 0.62rem;\n  border-radius: 999px;\n}\n.avatar-icon[_ngcontent-%COMP%]::after {\n  bottom: 0;\n  width: 1.2rem;\n  height: 0.7rem;\n  border-radius: 0.7rem 0.7rem 0.2rem 0.2rem;\n}\n@media (max-width: 720px) {\n  .site-header[_ngcontent-%COMP%] {\n    padding: 0.85rem 0.9rem;\n    gap: 0.75rem;\n    align-items: flex-start;\n    flex-wrap: wrap;\n  }\n  .brand-name[_ngcontent-%COMP%] {\n    font-size: 1.3rem;\n  }\n  .nav[_ngcontent-%COMP%] {\n    order: 3;\n    justify-content: flex-start;\n    overflow-x: auto;\n    padding-bottom: 0.15rem;\n    scrollbar-width: none;\n  }\n  .nav[_ngcontent-%COMP%]::-webkit-scrollbar {\n    display: none;\n  }\n  .actions[_ngcontent-%COMP%] {\n    margin-left: auto;\n  }\n  .nav-link[_ngcontent-%COMP%] {\n    font-size: 0.82rem;\n  }\n  .icon-button[_ngcontent-%COMP%] {\n    width: 2.35rem;\n    height: 2.35rem;\n  }\n  .avatar-link[_ngcontent-%COMP%] {\n    width: 2.35rem;\n    height: 2.35rem;\n  }\n}\n/*# sourceMappingURL=site-header.css.map */'] });
+  }, dependencies: [CommonModule, NgForOf, RouterLink, RouterLinkActive], styles: ['\n\n[_nghost-%COMP%] {\n  display: block;\n  position: sticky;\n  top: 0;\n  z-index: 30;\n}\n.site-header[_ngcontent-%COMP%] {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 1rem;\n  padding: 0.9rem 1.25rem;\n  background: rgba(33, 25, 18, 0.9);\n  -webkit-backdrop-filter: blur(14px);\n  backdrop-filter: blur(14px);\n  border-bottom: 1px solid rgba(255, 225, 178, 0.2);\n  color: #f7f3eb;\n}\n.brand[_ngcontent-%COMP%] {\n  display: inline-flex;\n  align-items: center;\n  gap: 0.85rem;\n  text-decoration: none;\n  color: inherit;\n  white-space: nowrap;\n}\n.brand-dots[_ngcontent-%COMP%] {\n  display: inline-flex;\n  align-items: center;\n  gap: 0.25rem;\n}\n.dot[_ngcontent-%COMP%] {\n  width: 1.15rem;\n  height: 1.15rem;\n  border-radius: 999px;\n  display: inline-block;\n}\n.dot-orange[_ngcontent-%COMP%] {\n  background: #ff8f3c;\n}\n.dot-cyan[_ngcontent-%COMP%] {\n  background: #ffb14c;\n}\n.dot-green[_ngcontent-%COMP%] {\n  background: #f6d36b;\n}\n.brand-name[_ngcontent-%COMP%] {\n  font-size: 1.55rem;\n  font-weight: 800;\n  letter-spacing: -0.04em;\n}\n.nav[_ngcontent-%COMP%] {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 1rem;\n  flex: 1;\n  min-width: 0;\n  flex-wrap: wrap;\n}\n.nav-link[_ngcontent-%COMP%] {\n  text-decoration: none;\n  color: #cfbca2;\n  font-size: 0.88rem;\n  font-weight: 700;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n  padding: 0.3rem 0;\n  border-bottom: 2px solid transparent;\n}\n.nav-link.active[_ngcontent-%COMP%] {\n  color: #ffd18b;\n  border-bottom-color: #ffb14c;\n}\n.actions[_ngcontent-%COMP%] {\n  display: flex;\n  align-items: center;\n  gap: 0.7rem;\n}\n.icon-button[_ngcontent-%COMP%] {\n  width: 2.2rem;\n  height: 2.2rem;\n  border-radius: 999px;\n  border: 1px solid rgba(255, 225, 178, 0.22);\n  background: rgba(14, 10, 7, 0.72);\n  color: #f4dcc2;\n  display: grid;\n  place-items: center;\n  cursor: pointer;\n  font-size: 1rem;\n}\n.avatar-link[_ngcontent-%COMP%] {\n  width: 2.5rem;\n  height: 2.5rem;\n  border-radius: 999px;\n  border: 1px solid rgba(255, 225, 178, 0.28);\n  background:\n    linear-gradient(\n      180deg,\n      rgba(255, 177, 89, 0.26),\n      rgba(255, 120, 57, 0.2));\n  display: grid;\n  place-items: center;\n  text-decoration: none;\n}\n.avatar-icon[_ngcontent-%COMP%] {\n  width: 1.35rem;\n  height: 1.35rem;\n  position: relative;\n  display: block;\n}\n.avatar-icon[_ngcontent-%COMP%]::before, \n.avatar-icon[_ngcontent-%COMP%]::after {\n  content: "";\n  position: absolute;\n  left: 50%;\n  transform: translateX(-50%);\n  background: #ffd18b;\n}\n.avatar-icon[_ngcontent-%COMP%]::before {\n  top: 0;\n  width: 0.62rem;\n  height: 0.62rem;\n  border-radius: 999px;\n}\n.avatar-icon[_ngcontent-%COMP%]::after {\n  bottom: 0;\n  width: 1.2rem;\n  height: 0.7rem;\n  border-radius: 0.7rem 0.7rem 0.2rem 0.2rem;\n}\n@media (max-width: 720px) {\n  .site-header[_ngcontent-%COMP%] {\n    padding: 0.75rem 0.85rem;\n    gap: 0.6rem;\n    align-items: center;\n    flex-wrap: wrap;\n  }\n  .brand[_ngcontent-%COMP%] {\n    gap: 0.6rem;\n    min-width: 0;\n  }\n  .brand-dots[_ngcontent-%COMP%] {\n    gap: 0.18rem;\n  }\n  .dot[_ngcontent-%COMP%] {\n    width: 0.9rem;\n    height: 0.9rem;\n  }\n  .brand-name[_ngcontent-%COMP%] {\n    font-size: 1.12rem;\n    line-height: 1;\n  }\n  .nav[_ngcontent-%COMP%] {\n    order: 3;\n    justify-content: flex-start;\n    overflow-x: auto;\n    padding: 0.15rem 0 0.05rem;\n    gap: 0.55rem;\n    flex-basis: 100%;\n    scrollbar-width: none;\n  }\n  .nav-link[_ngcontent-%COMP%] {\n    font-size: 0.76rem;\n    padding: 0.2rem 0;\n    letter-spacing: 0.06em;\n    white-space: nowrap;\n  }\n  .actions[_ngcontent-%COMP%] {\n    margin-left: auto;\n    gap: 0.45rem;\n  }\n  .icon-button[_ngcontent-%COMP%] {\n    width: 2.1rem;\n    height: 2.1rem;\n    font-size: 0.95rem;\n  }\n  .avatar-link[_ngcontent-%COMP%] {\n    width: 2.2rem;\n    height: 2.2rem;\n  }\n  .avatar-icon[_ngcontent-%COMP%] {\n    width: 1.1rem;\n    height: 1.1rem;\n  }\n  .avatar-icon[_ngcontent-%COMP%]::before {\n    width: 0.52rem;\n    height: 0.52rem;\n  }\n  .avatar-icon[_ngcontent-%COMP%]::after {\n    width: 0.95rem;\n    height: 0.55rem;\n  }\n  .nav[_ngcontent-%COMP%]::-webkit-scrollbar {\n    display: none;\n  }\n  .actions[_ngcontent-%COMP%] {\n    margin-left: auto;\n  }\n  .brand-name[_ngcontent-%COMP%] {\n    font-size: 1.1rem;\n  }\n  .site-header[_ngcontent-%COMP%] {\n    align-items: center;\n  }\n  .nav[_ngcontent-%COMP%] {\n    padding-bottom: 0.05rem;\n    scrollbar-width: none;\n  }\n}\n@media (max-width: 480px) {\n  .site-header[_ngcontent-%COMP%] {\n    padding: 0.7rem 0.75rem;\n    gap: 0.45rem;\n  }\n  .brand[_ngcontent-%COMP%] {\n    gap: 0.5rem;\n  }\n  .brand-name[_ngcontent-%COMP%] {\n    font-size: 1rem;\n    max-width: 9.5rem;\n    overflow: hidden;\n    text-overflow: ellipsis;\n  }\n  .nav[_ngcontent-%COMP%] {\n    gap: 0.45rem;\n  }\n  .nav-link[_ngcontent-%COMP%] {\n    font-size: 0.72rem;\n  }\n  .actions[_ngcontent-%COMP%] {\n    gap: 0.35rem;\n  }\n  .icon-button[_ngcontent-%COMP%], \n   .avatar-link[_ngcontent-%COMP%] {\n    width: 2rem;\n    height: 2rem;\n  }\n  .avatar-icon[_ngcontent-%COMP%] {\n    width: 1rem;\n    height: 1rem;\n  }\n  .avatar-icon[_ngcontent-%COMP%]::before {\n    width: 0.46rem;\n    height: 0.46rem;\n  }\n  .avatar-icon[_ngcontent-%COMP%]::after {\n    width: 0.84rem;\n    height: 0.5rem;\n  }\n}\n/*# sourceMappingURL=site-header.css.map */'] });
 };
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(SiteHeaderComponent, [{
     type: Component,
-    args: [{ selector: "app-site-header", standalone: true, imports: [CommonModule, RouterLink, RouterLinkActive], template: '<header class="site-header">\r\n	<a class="brand" routerLink="/" aria-label="Ir a inicio">\r\n		<span class="brand-dots" aria-hidden="true">\r\n			<span class="dot dot-orange"></span>\r\n			<span class="dot dot-cyan"></span>\r\n			<span class="dot dot-green"></span>\r\n		</span>\r\n		<span class="brand-name">Bookshell</span>\r\n	</a>\r\n\r\n	<nav class="nav" aria-label="Navegaci\xF3n principal">\r\n		<a\r\n			*ngFor="let item of navItems"\r\n			class="nav-link"\r\n			[routerLink]="item.path"\r\n			routerLinkActive="active"\r\n			[routerLinkActiveOptions]="{ exact: true }">\r\n			{{ item.label }}\r\n		</a>\r\n	</nav>\r\n\r\n	<div class="actions">\r\n		<button class="icon-button" type="button" aria-label="Buscar">\r\n			<span aria-hidden="true">\u2315</span>\r\n		</button>\r\n\r\n		<a class="avatar-link" routerLink="/usuario" aria-label="Ir al perfil de usuario">\r\n			<span class="avatar-icon" aria-hidden="true"></span>\r\n		</a>\r\n	</div>\r\n</header>', styles: ['/* src/app/components/site-header/site-header.css */\n:host {\n  display: block;\n  position: sticky;\n  top: 0;\n  z-index: 30;\n}\n.site-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 1rem;\n  padding: 0.9rem 1.25rem;\n  background: rgba(12, 16, 21, 0.96);\n  -webkit-backdrop-filter: blur(14px);\n  backdrop-filter: blur(14px);\n  border-bottom: 1px solid rgba(70, 82, 98, 0.5);\n  color: #edf3f7;\n}\n.brand {\n  display: inline-flex;\n  align-items: center;\n  gap: 0.85rem;\n  text-decoration: none;\n  color: inherit;\n  white-space: nowrap;\n}\n.brand-dots {\n  display: inline-flex;\n  align-items: center;\n  gap: 0.25rem;\n}\n.dot {\n  width: 1.15rem;\n  height: 1.15rem;\n  border-radius: 999px;\n  display: inline-block;\n}\n.dot-orange {\n  background: #ff7a18;\n}\n.dot-cyan {\n  background: #22d3ee;\n}\n.dot-green {\n  background: #34d399;\n}\n.brand-name {\n  font-size: 1.55rem;\n  font-weight: 800;\n  letter-spacing: -0.04em;\n}\n.nav {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 1rem;\n  flex: 1;\n  min-width: 0;\n  flex-wrap: wrap;\n}\n.nav-link {\n  text-decoration: none;\n  color: #b5c2cf;\n  font-size: 0.88rem;\n  font-weight: 700;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n  padding: 0.3rem 0;\n  border-bottom: 2px solid transparent;\n}\n.nav-link.active {\n  color: #f1f7fb;\n  border-bottom-color: #1fd760;\n}\n.actions {\n  display: flex;\n  align-items: center;\n  gap: 0.7rem;\n}\n.icon-button {\n  width: 2.2rem;\n  height: 2.2rem;\n  border-radius: 999px;\n  border: 1px solid rgba(90, 104, 120, 0.9);\n  background: rgba(26, 34, 44, 0.95);\n  color: #dce5ed;\n  display: grid;\n  place-items: center;\n  cursor: pointer;\n  font-size: 1rem;\n}\n.avatar-link {\n  width: 2.5rem;\n  height: 2.5rem;\n  border-radius: 999px;\n  border: 1px solid rgba(92, 106, 122, 0.9);\n  background:\n    linear-gradient(\n      180deg,\n      #384454,\n      #253140);\n  display: grid;\n  place-items: center;\n  text-decoration: none;\n}\n.avatar-icon {\n  width: 1.35rem;\n  height: 1.35rem;\n  position: relative;\n  display: block;\n}\n.avatar-icon::before,\n.avatar-icon::after {\n  content: "";\n  position: absolute;\n  left: 50%;\n  transform: translateX(-50%);\n  background: #9fb0c1;\n}\n.avatar-icon::before {\n  top: 0;\n  width: 0.62rem;\n  height: 0.62rem;\n  border-radius: 999px;\n}\n.avatar-icon::after {\n  bottom: 0;\n  width: 1.2rem;\n  height: 0.7rem;\n  border-radius: 0.7rem 0.7rem 0.2rem 0.2rem;\n}\n@media (max-width: 720px) {\n  .site-header {\n    padding: 0.85rem 0.9rem;\n    gap: 0.75rem;\n    align-items: flex-start;\n    flex-wrap: wrap;\n  }\n  .brand-name {\n    font-size: 1.3rem;\n  }\n  .nav {\n    order: 3;\n    justify-content: flex-start;\n    overflow-x: auto;\n    padding-bottom: 0.15rem;\n    scrollbar-width: none;\n  }\n  .nav::-webkit-scrollbar {\n    display: none;\n  }\n  .actions {\n    margin-left: auto;\n  }\n  .nav-link {\n    font-size: 0.82rem;\n  }\n  .icon-button {\n    width: 2.35rem;\n    height: 2.35rem;\n  }\n  .avatar-link {\n    width: 2.35rem;\n    height: 2.35rem;\n  }\n}\n/*# sourceMappingURL=site-header.css.map */\n'] }]
+    args: [{ selector: "app-site-header", standalone: true, imports: [CommonModule, RouterLink, RouterLinkActive], template: '<header class="site-header">\n	<a class="brand" routerLink="/" aria-label="Ir a inicio">\n		<span class="brand-dots" aria-hidden="true">\n			<span class="dot dot-orange"></span>\n			<span class="dot dot-cyan"></span>\n			<span class="dot dot-green"></span>\n		</span>\n		<span class="brand-name">Bookshell</span>\n	</a>\n\n	<nav class="nav" aria-label="Navegaci\xF3n principal">\n		<a\n			*ngFor="let item of navItems"\n			class="nav-link"\n			[routerLink]="item.path"\n			routerLinkActive="active"\n			[routerLinkActiveOptions]="{ exact: true }">\n			{{ item.label }}\n		</a>\n	</nav>\n\n	<div class="actions">\n		<button class="icon-button" type="button" aria-label="Buscar">\n			<span aria-hidden="true">\u2315</span>\n		</button>\n\n		<a class="avatar-link" routerLink="/usuario" aria-label="Ir al perfil de usuario">\n			<span class="avatar-icon" aria-hidden="true"></span>\n		</a>\n	</div>\n</header>', styles: ['/* src/app/components/site-header/site-header.css */\n:host {\n  display: block;\n  position: sticky;\n  top: 0;\n  z-index: 30;\n}\n.site-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: 1rem;\n  padding: 0.9rem 1.25rem;\n  background: rgba(33, 25, 18, 0.9);\n  -webkit-backdrop-filter: blur(14px);\n  backdrop-filter: blur(14px);\n  border-bottom: 1px solid rgba(255, 225, 178, 0.2);\n  color: #f7f3eb;\n}\n.brand {\n  display: inline-flex;\n  align-items: center;\n  gap: 0.85rem;\n  text-decoration: none;\n  color: inherit;\n  white-space: nowrap;\n}\n.brand-dots {\n  display: inline-flex;\n  align-items: center;\n  gap: 0.25rem;\n}\n.dot {\n  width: 1.15rem;\n  height: 1.15rem;\n  border-radius: 999px;\n  display: inline-block;\n}\n.dot-orange {\n  background: #ff8f3c;\n}\n.dot-cyan {\n  background: #ffb14c;\n}\n.dot-green {\n  background: #f6d36b;\n}\n.brand-name {\n  font-size: 1.55rem;\n  font-weight: 800;\n  letter-spacing: -0.04em;\n}\n.nav {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 1rem;\n  flex: 1;\n  min-width: 0;\n  flex-wrap: wrap;\n}\n.nav-link {\n  text-decoration: none;\n  color: #cfbca2;\n  font-size: 0.88rem;\n  font-weight: 700;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n  padding: 0.3rem 0;\n  border-bottom: 2px solid transparent;\n}\n.nav-link.active {\n  color: #ffd18b;\n  border-bottom-color: #ffb14c;\n}\n.actions {\n  display: flex;\n  align-items: center;\n  gap: 0.7rem;\n}\n.icon-button {\n  width: 2.2rem;\n  height: 2.2rem;\n  border-radius: 999px;\n  border: 1px solid rgba(255, 225, 178, 0.22);\n  background: rgba(14, 10, 7, 0.72);\n  color: #f4dcc2;\n  display: grid;\n  place-items: center;\n  cursor: pointer;\n  font-size: 1rem;\n}\n.avatar-link {\n  width: 2.5rem;\n  height: 2.5rem;\n  border-radius: 999px;\n  border: 1px solid rgba(255, 225, 178, 0.28);\n  background:\n    linear-gradient(\n      180deg,\n      rgba(255, 177, 89, 0.26),\n      rgba(255, 120, 57, 0.2));\n  display: grid;\n  place-items: center;\n  text-decoration: none;\n}\n.avatar-icon {\n  width: 1.35rem;\n  height: 1.35rem;\n  position: relative;\n  display: block;\n}\n.avatar-icon::before,\n.avatar-icon::after {\n  content: "";\n  position: absolute;\n  left: 50%;\n  transform: translateX(-50%);\n  background: #ffd18b;\n}\n.avatar-icon::before {\n  top: 0;\n  width: 0.62rem;\n  height: 0.62rem;\n  border-radius: 999px;\n}\n.avatar-icon::after {\n  bottom: 0;\n  width: 1.2rem;\n  height: 0.7rem;\n  border-radius: 0.7rem 0.7rem 0.2rem 0.2rem;\n}\n@media (max-width: 720px) {\n  .site-header {\n    padding: 0.75rem 0.85rem;\n    gap: 0.6rem;\n    align-items: center;\n    flex-wrap: wrap;\n  }\n  .brand {\n    gap: 0.6rem;\n    min-width: 0;\n  }\n  .brand-dots {\n    gap: 0.18rem;\n  }\n  .dot {\n    width: 0.9rem;\n    height: 0.9rem;\n  }\n  .brand-name {\n    font-size: 1.12rem;\n    line-height: 1;\n  }\n  .nav {\n    order: 3;\n    justify-content: flex-start;\n    overflow-x: auto;\n    padding: 0.15rem 0 0.05rem;\n    gap: 0.55rem;\n    flex-basis: 100%;\n    scrollbar-width: none;\n  }\n  .nav-link {\n    font-size: 0.76rem;\n    padding: 0.2rem 0;\n    letter-spacing: 0.06em;\n    white-space: nowrap;\n  }\n  .actions {\n    margin-left: auto;\n    gap: 0.45rem;\n  }\n  .icon-button {\n    width: 2.1rem;\n    height: 2.1rem;\n    font-size: 0.95rem;\n  }\n  .avatar-link {\n    width: 2.2rem;\n    height: 2.2rem;\n  }\n  .avatar-icon {\n    width: 1.1rem;\n    height: 1.1rem;\n  }\n  .avatar-icon::before {\n    width: 0.52rem;\n    height: 0.52rem;\n  }\n  .avatar-icon::after {\n    width: 0.95rem;\n    height: 0.55rem;\n  }\n  .nav::-webkit-scrollbar {\n    display: none;\n  }\n  .actions {\n    margin-left: auto;\n  }\n  .brand-name {\n    font-size: 1.1rem;\n  }\n  .site-header {\n    align-items: center;\n  }\n  .nav {\n    padding-bottom: 0.05rem;\n    scrollbar-width: none;\n  }\n}\n@media (max-width: 480px) {\n  .site-header {\n    padding: 0.7rem 0.75rem;\n    gap: 0.45rem;\n  }\n  .brand {\n    gap: 0.5rem;\n  }\n  .brand-name {\n    font-size: 1rem;\n    max-width: 9.5rem;\n    overflow: hidden;\n    text-overflow: ellipsis;\n  }\n  .nav {\n    gap: 0.45rem;\n  }\n  .nav-link {\n    font-size: 0.72rem;\n  }\n  .actions {\n    gap: 0.35rem;\n  }\n  .icon-button,\n  .avatar-link {\n    width: 2rem;\n    height: 2rem;\n  }\n  .avatar-icon {\n    width: 1rem;\n    height: 1rem;\n  }\n  .avatar-icon::before {\n    width: 0.46rem;\n    height: 0.46rem;\n  }\n  .avatar-icon::after {\n    width: 0.84rem;\n    height: 0.5rem;\n  }\n}\n/*# sourceMappingURL=site-header.css.map */\n'] }]
   }], null, null);
 })();
 (() => {
@@ -44765,7 +47375,7 @@ var App = class _App {
 (() => {
   (typeof ngDevMode === "undefined" || ngDevMode) && setClassMetadata(App, [{
     type: Component,
-    args: [{ selector: "app-root", standalone: true, imports: [RouterOutlet, SiteHeaderComponent, FormsModule], template: "@if (showHeader()) {\r\n	<app-site-header />\r\n}\r\n\r\n<router-outlet />\r\n" }]
+    args: [{ selector: "app-root", standalone: true, imports: [RouterOutlet, SiteHeaderComponent, FormsModule], template: "@if (showHeader()) {\n	<app-site-header />\n}\n\n<router-outlet />\n" }]
   }], () => [], null);
 })();
 (() => {

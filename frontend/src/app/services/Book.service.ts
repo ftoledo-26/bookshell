@@ -24,12 +24,39 @@ export class BookService {
 
     constructor(private http: HttpClient) {}
 
+    private normalizeCoverPath(portada?: string): string {
+        const raw = String(portada ?? '').trim();
+        if (!raw) {
+            return '/prueba.webp';
+        }
+
+        const lowered = raw.toLowerCase();
+
+        // Keep a single canonical default image path present in /public.
+        if (lowered === 'default.png' || lowered === 'default.jpg' || lowered === '/default.jpg' || lowered === '/default.png') {
+            return '/default.png';
+        }
+
+        if (/^https?:\/\//i.test(raw) || raw.startsWith('/')) {
+            return raw;
+        }
+
+        return `/${raw}`;
+    }
+
+    private normalizeBook(book: Book): Book {
+        return {
+            ...book,
+            portada: this.normalizeCoverPath(book.portada)
+        };
+    }
+
     getBooks(forceRefresh = false): Observable<Book[]> {
         if (!this.books$ || forceRefresh) {
             this.books$ = this.http
                 .get<ApiResponse<Book[]>>(this.apiUrl)
                 .pipe(
-                    map((response) => response.data ?? []),
+                    map((response) => (response.data ?? []).map((book) => this.normalizeBook(book))),
                     shareReplay(1)
                 );
         }
@@ -48,7 +75,7 @@ export class BookService {
         const request$ = this.http
             .get<ApiResponse<Book>>(`${this.apiUrl}/${id}`)
             .pipe(
-                map((response) => response.data),
+                map((response) => this.normalizeBook(response.data)),
                 shareReplay(1)
             );
 

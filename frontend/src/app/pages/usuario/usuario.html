@@ -40,7 +40,7 @@
 				<h1>{{ user.nombre }}</h1>
 				<button type="button" class="btn-edit" (click)="startEditing()">Modificar usuario</button>
 			</div>
-			<p class="hero-subtitle">Perfil de usuario estandar listo para personalizar.</p>
+			<p class="hero-subtitle">{{ user.email || 'Perfil sincronizado con la base de datos.' }}</p>
 		</div>
 
 		<div class="metric-strip">
@@ -69,7 +69,49 @@
 				<header class="panel-head">
 					<h2>Favorite books</h2>
 					<span>Selecciona tus lecturas favoritas.</span>
+					<button type="button" class="btn-edit panel-action" *ngIf="activeTab === 'Books'" (click)="openBookFinder()">
+						{{ bookSearchOpen ? 'Ocultar buscador' : 'Añadir libro' }}
+					</button>
 				</header>
+
+				<section class="book-finder" *ngIf="activeTab === 'Books' && bookSearchOpen">
+					<div class="finder-toolbar">
+						<input
+							type="text"
+							[(ngModel)]="bookSearchQuery"
+							name="bookSearchQuery"
+							placeholder="Busca por título o autor"
+							autocomplete="off"
+						/>
+						<button type="button" class="btn-save" (click)="searchBooks()" [disabled]="isSearchingBooks">
+							{{ isSearchingBooks ? 'Buscando...' : 'Buscar' }}
+						</button>
+						<button type="button" class="btn-cancel" (click)="closeBookFinder()">Cerrar</button>
+					</div>
+
+					<p class="finder-empty" *ngIf="!isSearchingBooks && bookSearchResults.length === 0 && bookSearchQuery.trim().length > 0">
+						No se encontraron libros con esa búsqueda.
+					</p>
+
+					<div class="finder-results" *ngIf="bookSearchResults.length > 0">
+						<article class="finder-result" *ngFor="let book of bookSearchResults">
+							<div class="finder-cover" aria-hidden="true"></div>
+							<div class="finder-copy">
+								<strong>{{ book.titulo }}</strong>
+								<p>{{ book.autor }}</p>
+								<span>{{ book.descripcion || 'Sin descripción' }}</span>
+							</div>
+							<button type="button" class="btn-edit finder-action" (click)="addBookToProfile(book)" [disabled]="isSavingBook">
+								Añadir
+							</button>
+						</article>
+					</div>
+				</section>
+
+				<p class="empty-state" *ngIf="activeTab === 'Books' && selectedBooks.length === 0 && metrics[0].value === '0'">
+					Todavía no tienes libros en tu perfil.
+					<button type="button" class="btn-edit inline-action" (click)="openBookFinder()">Buscar y añadir un libro</button>
+				</p>
 
 				<div class="book-grid">
 					<article *ngFor="let book of favoriteBooks" class="book-card">

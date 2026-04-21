@@ -24,8 +24,20 @@
 			<span aria-hidden="true">⌕</span>
 		</button>
 
-		<a class="avatar-link" routerLink="/usuario" aria-label="Ir al perfil de usuario">
-			<span class="avatar-icon" aria-hidden="true"></span>
-		</a>
+		<div class="avatar-menu-wrap">
+			<button
+				class="avatar-link"
+				type="button"
+				aria-label="Abrir menú de usuario"
+				[attr.aria-expanded]="isAvatarMenuOpen"
+				(click)="toggleAvatarMenu()">
+				<span class="avatar-icon" aria-hidden="true"></span>
+			</button>
+
+			<div class="avatar-menu" *ngIf="isAvatarMenuOpen" role="menu" aria-label="Menú de usuario">
+				<a class="avatar-menu-item" routerLink="/usuario" role="menuitem" (click)="closeAvatarMenu()">Ir a perfil</a>
+				<button class="avatar-menu-item logout" type="button" role="menuitem" (click)="logout()">Logout</button>
+			</div>
+		</div>
 	</div>
 </header>

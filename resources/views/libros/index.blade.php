@@ -18,8 +18,7 @@
                                 <p class="card-text">Sin valoraciones</p>
                             @endif
                             <a href="{{ route('libros.show', $libro->id) }}" class="btn btn-primary">Ver Detalles</a>
-                            <a href="{{ route('libros.comentarios.desc', $libro->id) }}" class="btn btn-info">Comentarios (Desc)</a>
-                            <a href="{{ route('libros.comentarios.asc', $libro->id) }}" class="btn btn-info">Comentarios (Asc)</a>
+                            <a href="{{ route('libros.comentarios', $libro->id) }}" class="btn btn-info">Ver Comentarios</a>
                         </div>
                     </div>
                 </div>
@@ -30,10 +29,3 @@
     @endif
 </div>
 @endsection
-
-
-        @endforeach
-
-    </main>
-</body>
-</html>

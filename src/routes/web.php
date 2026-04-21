@@ -20,6 +20,20 @@ Route::put('/usuarios/{id}', [UserController::class, 'update'])->name('usuarios.
 Route::delete('/usuarios/{id}', [UserController::class, 'destroy'])->name('usuarios.destroy');
 
 Route::get('/libros', [LibrosController::class, 'index'])->name('libros.index');
+Route::get('/libros/{id}', [LibrosController::class, 'show'])->name('libros.show');
+Route::get('/libros/create', [LibrosController::class, 'create'])->name('libros.create');
+Route::post('/libros', [LibrosController::class, 'store'])->name('libros.store');
+Route::get('/libros/{id}/edit', [LibrosController::class, 'edit'])->name('libros.edit');
+Route::put('/libros/{id}', [LibrosController::class, 'update'])->name('libros.update');
+Route::delete('/libros/{id}', [LibrosController::class, 'delete'])->name('libros.delete');
+
+Route::get('/libros/{id}/comentarios', [LibrosController::class, 'comentarios'])->name('libros.comentarios');
+Route::get('/libros/top-rated', [LibrosController::class, 'topRated'])->name('libros.topRated');
+
+Route::get('/libros/{id}/comentarios/desc', [LibrosController::class, 'comentariosDesc'])->name('libros.comentarios.desc');
+Route::get('/libros/{id}/comentarios/asc', [LibrosController::class, 'comentariosAsc'])->name('libros.comentarios.asc');
+
+Route::get('/libros', [LibrosController::class, 'index'])->name('libros.index');
 Route::get('/libros/create', [LibrosController::class, 'create'])->name('libros.create');
 Route::post('/libros', [LibrosController::class, 'store'])->name('libros.store');
 Route::get('/libros/{id}', [LibrosController::class, 'show'])->name('libros.show');

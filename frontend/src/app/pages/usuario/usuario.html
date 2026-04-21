@@ -1,5 +1,36 @@
 <main class="profile-shell">
-	<section class="profile-hero">
+	<p class="status" *ngIf="isLoading">Cargando perfil...</p>
+	<p class="status error" *ngIf="errorMessage">{{ errorMessage }}</p>
+	<p class="status success" *ngIf="successMessage">{{ successMessage }}</p>
+
+	<section class="edit-shell" *ngIf="!isLoading && isEditing">
+		<article class="edit-card">
+			<header class="edit-head">
+				<p class="edit-eyebrow">Configuracion de perfil</p>
+				<h1>Modificar usuario</h1>
+				<p>Actualiza tus datos y guarda los cambios.</p>
+			</header>
+
+			<form class="editor-form" (ngSubmit)="saveProfile()">
+				<label>
+					<span>Nombre</span>
+					<input type="text" [(ngModel)]="editDraft.nombre" name="nombre" autocomplete="name" />
+				</label>
+
+				<label>
+					<span>Email</span>
+					<input type="email" [(ngModel)]="editDraft.email" name="email" autocomplete="email" />
+				</label>
+
+				<div class="editor-actions">
+					<button type="submit" class="btn-save" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar cambios' }}</button>
+					<button type="button" class="btn-cancel" (click)="cancelEditing()">Cancelar</button>
+				</div>
+			</form>
+		</article>
+	</section>
+
+	<section class="profile-hero" *ngIf="!isLoading && !isEditing">
 		<div class="avatar-block" aria-hidden="true">
 			<span class="avatar-icon" aria-hidden="true"></span>
 		</div>
@@ -7,10 +38,9 @@
 		<div class="hero-copy">
 			<div class="hero-actions">
 				<h1>{{ user.nombre }}</h1>
-				<button type="button" class="primary-action">Editar perfil</button>
-				<button type="button" class="ghost-action" aria-label="Mas opciones">...</button>
+				<button type="button" class="btn-edit" (click)="startEditing()">Modificar usuario</button>
 			</div>
-			<p class="hero-subtitle">Perfil de usuario estandar listo para personalizar.</p>
+			<p class="hero-subtitle">{{ user.email || 'Perfil sincronizado con la base de datos.' }}</p>
 		</div>
 
 		<div class="metric-strip">
@@ -21,19 +51,67 @@
 		</div>
 	</section>
 
-	<nav class="profile-tabs" aria-label="Secciones del perfil">
-		<button *ngFor="let tab of profileTabs" type="button" class="tab-button" [class.active]="tab === 'Profile'">
+	<nav class="profile-tabs" aria-label="Secciones del perfil" *ngIf="!isLoading && !isEditing">
+		<button
+			*ngFor="let tab of profileTabs"
+			type="button"
+			class="tab-button"
+			[class.active]="tab === activeTab"
+			(click)="setActiveTab(tab)"
+		>
 			{{ tab }}
 		</button>
 	</nav>
 
-	<section class="profile-grid">
+	<section class="profile-grid" *ngIf="!isLoading && !isEditing">
 		<div class="main-column">
-			<section class="panel">
+			<section class="panel" *ngIf="activeTab === 'Profile' || activeTab === 'Books'">
 				<header class="panel-head">
 					<h2>Favorite books</h2>
 					<span>Selecciona tus lecturas favoritas.</span>
+					<button type="button" class="btn-edit panel-action" *ngIf="activeTab === 'Books'" (click)="openBookFinder()">
+						{{ bookSearchOpen ? 'Ocultar buscador' : 'Añadir libro' }}
+					</button>
 				</header>
+
+				<section class="book-finder" *ngIf="activeTab === 'Books' && bookSearchOpen">
+					<div class="finder-toolbar">
+						<input
+							type="text"
+							[(ngModel)]="bookSearchQuery"
+							name="bookSearchQuery"
+							placeholder="Busca por título o autor"
+							autocomplete="off"
+						/>
+						<button type="button" class="btn-save" (click)="searchBooks()" [disabled]="isSearchingBooks">
+							{{ isSearchingBooks ? 'Buscando...' : 'Buscar' }}
+						</button>
+						<button type="button" class="btn-cancel" (click)="closeBookFinder()">Cerrar</button>
+					</div>
+
+					<p class="finder-empty" *ngIf="!isSearchingBooks && bookSearchResults.length === 0 && bookSearchQuery.trim().length > 0">
+						No se encontraron libros con esa búsqueda.
+					</p>
+
+					<div class="finder-results" *ngIf="bookSearchResults.length > 0">
+						<article class="finder-result" *ngFor="let book of bookSearchResults">
+							<div class="finder-cover" aria-hidden="true"></div>
+							<div class="finder-copy">
+								<strong>{{ book.titulo }}</strong>
+								<p>{{ book.autor }}</p>
+								<span>{{ book.descripcion || 'Sin descripción' }}</span>
+							</div>
+							<button type="button" class="btn-edit finder-action" (click)="addBookToProfile(book)" [disabled]="isSavingBook">
+								Añadir
+							</button>
+						</article>
+					</div>
+				</section>
+
+				<p class="empty-state" *ngIf="activeTab === 'Books' && selectedBooks.length === 0 && metrics[0].value === '0'">
+					Todavía no tienes libros en tu perfil.
+					<button type="button" class="btn-edit inline-action" (click)="openBookFinder()">Buscar y añadir un libro</button>
+				</p>
 
 				<div class="book-grid">
 					<article *ngFor="let book of favoriteBooks" class="book-card">
@@ -50,10 +128,10 @@
 				</div>
 			</section>
 
-			<section class="panel">
+			<section class="panel" *ngIf="activeTab === 'Profile' || activeTab === 'Reviews'">
 				<header class="panel-head">
-					<h2>Recent activity</h2>
-					<span>Resumen de actividad reciente.</span>
+					<h2>Reviews</h2>
+					<span>Reseñas y actividad reciente.</span>
 				</header>
 
 				<div class="activity-list">
@@ -66,9 +144,17 @@
 					</article>
 				</div>
 			</section>
+
+			<section class="panel" *ngIf="activeTab === 'Likes'">
+				<header class="panel-head">
+					<h2>Likes</h2>
+					<span>Libros y reseñas que te gustaron.</span>
+				</header>
+				<p class="empty-state">Todavía no hay likes para mostrar.</p>
+			</section>
 		</div>
 
-		<aside class="side-column">
+		<aside class="side-column" *ngIf="activeTab === 'Profile'">
 			<section class="promo-card">
 				<p class="promo-eyebrow">Need an upgrade?</p>
 				<h2>Profile stats, filtering and watchlist alerts.</h2>

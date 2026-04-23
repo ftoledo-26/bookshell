@@ -1,0 +1,42 @@
+<main class="review-shell">
+  <section class="review-card">
+    <header class="review-head">
+      <p class="eyebrow">Nueva review</p>
+      <h1>Comparte tu opinion</h1>
+      <p>Selecciona un libro, puntua y deja tu reseña.</p>
+    </header>
+
+    <p class="status" *ngIf="isLoadingBooks">Cargando libros...</p>
+    <p class="status error" *ngIf="errorMessage">{{ errorMessage }}</p>
+    <p class="status success" *ngIf="successMessage">{{ successMessage }}</p>
+
+    <form class="review-form" (ngSubmit)="saveReview()" *ngIf="!isLoadingBooks">
+      <label>
+        <span>Libro</span>
+        <select [(ngModel)]="selectedBookId" name="selectedBookId" required>
+          <option [ngValue]="null">Selecciona un libro</option>
+          <option *ngFor="let book of books" [ngValue]="book.id">{{ book.titulo }} - {{ book.autor }}</option>
+        </select>
+      </label>
+
+      <div class="rating-wrap" aria-label="Valoracion">
+        <span>Puntuacion</span>
+        <div class="stars">
+          <button type="button" *ngFor="let star of [1,2,3,4,5]" (click)="setRating(star)" [class.active]="star <= rating" [attr.aria-label]="'Valorar con ' + star">
+            ★
+          </button>
+        </div>
+      </div>
+
+      <label>
+        <span>Comentario</span>
+        <textarea [(ngModel)]="comentario" name="comentario" rows="6" placeholder="Escribe tu review..."></textarea>
+      </label>
+
+      <div class="actions">
+        <button type="submit" class="btn-save" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar review' }}</button>
+        <button type="button" class="btn-cancel" (click)="cancel()">Cancelar</button>
+      </div>
+    </form>
+  </section>
+</main>

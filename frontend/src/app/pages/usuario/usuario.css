@@ -84,6 +84,19 @@
 	flex-wrap: wrap;
 }
 
+.readonly-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 0.45rem 0.75rem;
+	border-radius: 999px;
+	border: 1px solid rgba(255, 225, 178, 0.2);
+	background: rgba(14, 10, 7, 0.6);
+	color: #cfbca2;
+	font-size: 0.82rem;
+	font-weight: 700;
+	white-space: nowrap;
+}
+
 .panel-action {
 	margin-left: auto;
 	padding-inline: 0.95rem;
@@ -176,6 +189,11 @@
 	margin-left: 0.55rem;
 	padding: 0.42rem 0.8rem;
 	font-size: 0.92rem;
+}
+
+.read-only-note {
+	border-left: 3px solid rgba(255, 177, 89, 0.55);
+	padding-left: 0.9rem;
 }
 
 .preview-actions {

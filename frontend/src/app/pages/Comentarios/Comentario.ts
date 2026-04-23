@@ -255,7 +255,7 @@ export class ComentarioPage implements OnInit {
 
 	private resolveCommentLikes(comment: Comentario): number {
 		const c = comment as any;
-		const rawLikes = c.likes ?? c.likes_count ?? c.rating ?? 0;
+		const rawLikes = c.likes ?? c.likes_count ?? c.rating ?? c.valoracion ?? 0;
 		const likes = Number(rawLikes);
 		return Number.isFinite(likes) ? likes : 0;
 	}

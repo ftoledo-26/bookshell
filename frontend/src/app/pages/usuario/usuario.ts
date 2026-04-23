@@ -1,7 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { catchError, forkJoin, map, of, switchMap } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Book } from '../../models/Book';
 import { Comentario } from '../../models/Comentario';
 import { Usuario } from '../../models/Usuario';
@@ -43,7 +45,11 @@ export class UsuarioPage implements OnInit {
 	private readonly comentarioService = inject(ComentarioService);
 	private readonly bookService = inject(BookService);
 	private readonly cdr = inject(ChangeDetectorRef);
-	private currentUserId: number | null = null;
+	private readonly route = inject(ActivatedRoute);
+	private readonly router = inject(Router);
+	private readonly destroyRef = inject(DestroyRef);
+	private currentUserId: number | null = this.loginService.getUserId();
+	private viewedUserId: number | null = null;
 
 	user: Usuario = {
 		id: 0,
@@ -52,11 +58,15 @@ export class UsuarioPage implements OnInit {
 		password: '',
 		rol: 'usuario',
 		foto: '',
-		phone: ''
+		phone: '',
+		descripcion: '',
+		reviews: [],
+		likes: []
 	};
 	editDraft = {
 		nombre: '',
 		email: '',
+		descripcion: '',
 	};
 	isEditing = false;
 	isLoading = true;
@@ -87,38 +97,60 @@ export class UsuarioPage implements OnInit {
 	];
 
 	ngOnInit(): void {
-		this.loadProfile();
+		this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+			const rawId = params.get('id');
+			const targetUserId = rawId ? Number(rawId) : null;
+			this.loadProfile(Number.isFinite(targetUserId ?? NaN) ? targetUserId : null);
+		});
 	}
 
-	private loadProfile(): void {
+	private loadProfile(targetUserId: number | null): void {
 		this.isLoading = true;
 		this.errorMessage = '';
 		this.successMessage = '';
+		this.isEditing = false;
+		this.bookSearchOpen = false;
+		this.bookSearchQuery = '';
+		this.bookSearchResults = [];
+		this.selectedBooks = [];
+		this.profileComments = [];
+		this.profileBooks = [];
 
+		const authUserId = this.loginService.getUserId();
+		this.currentUserId = authUserId;
 		const storedUserId = this.loginService.getUserId();
 		const storedUsername = (this.loginService.getUsername() ?? '').trim().toLowerCase();
+		const requestedUserId = targetUserId ?? storedUserId;
+		this.viewedUserId = requestedUserId;
 
-		const user$ = storedUserId != null
-			? this.usuarioService.getUsuario(storedUserId).pipe(
+		const user$ = requestedUserId != null
+			? this.usuarioService.getUsuario(requestedUserId).pipe(
 				catchError(() => this.usuarioService.getUsuarios().pipe(
-					map((users) => users.find((item) => item.id === storedUserId) ?? null),
+					map((users) => users.find((item) => item.id === requestedUserId) ?? null),
 					catchError(() => of(null))
 				))
 			)
-			: this.usuarioService.getUsuarios().pipe(
-				map((users) => {
-					if (!storedUsername) {
-						return null;
-					}
+			: authUserId != null
+				? this.usuarioService.getUsuario(authUserId).pipe(
+					catchError(() => this.usuarioService.getUsuarios().pipe(
+						map((users) => users.find((item) => item.id === authUserId) ?? null),
+						catchError(() => of(null))
+					))
+				)
+				: this.usuarioService.getUsuarios().pipe(
+					map((users) => {
+						if (!storedUsername) {
+							return null;
+						}
 
-					return users.find((item) => {
-						const userName = String(item.nombre ?? '').trim().toLowerCase();
-						const userEmail = String(item.email ?? '').trim().toLowerCase();
-						return userName === storedUsername || userEmail === storedUsername;
-					}) ?? null;
-				}),
-				catchError(() => of(null))
-			);
+						return users.find((item) => {
+							const userName = String(item.nombre ?? '').trim().toLowerCase();
+							const userEmail = String(item.email ?? '').trim().toLowerCase();
+							return userName === storedUsername || userEmail === storedUsername;
+						}) ?? null;
+					}),
+					catchError(() => of(null))
+				);
 
 		user$.pipe(
 			switchMap((user) => {
@@ -126,8 +158,8 @@ export class UsuarioPage implements OnInit {
 					return of({ user: null, comments: [] as Comentario[], books: [] as Book[] });
 				}
 
-				this.currentUserId = user.id;
-				this.selectedBooks = this.loadSelectedBooks(user.id);
+				this.viewedUserId = user.id;
+				this.selectedBooks = this.canEditProfile() ? this.loadSelectedBooks(user.id) : [];
 
 				return this.comentarioService.getComentarios().pipe(
 					map((comments) => comments.filter((comment) => this.isCommentFromCurrentUser(comment, user))),
@@ -139,24 +171,25 @@ export class UsuarioPage implements OnInit {
 		).subscribe({
 			next: (result) => {
 				if (!result.user) {
-					this.errorMessage = 'No se pudo identificar el usuario autenticado.';
+					this.errorMessage = 'No se pudo identificar el perfil solicitado.';
 					this.isLoading = false;
 					this.cdr.detectChanges();
 					return;
 				}
 
 				this.user = result.user;
-				this.currentUserId = result.user.id;
+				this.viewedUserId = result.user.id;
 				this.editDraft = {
 					nombre: String(result.user.nombre ?? ''),
-					email: String(result.user.email ?? '')
+					email: String(result.user.email ?? ''),
+					descripcion: String(result.user.descripcion ?? '')
 				};
 				this.profileComments = result.comments;
 				this.profileBooks = result.books;
 				this.metrics = this.buildMetrics(this.profileComments);
 				this.favoriteBooks = this.buildFavoriteBooks(this.profileComments, this.profileBooks, this.selectedBooks);
 				this.activity = this.buildActivityFeed(this.profileComments, this.profileBooks);
-				this.bookSearchOpen = this.favoriteBooks.length === 1 && this.selectedBooks.length === 0;
+				this.bookSearchOpen = this.canEditProfile() && this.favoriteBooks.length === 1 && this.selectedBooks.length === 0;
 				this.isLoading = false;
 				this.cdr.detectChanges();
 			},
@@ -166,6 +199,10 @@ export class UsuarioPage implements OnInit {
 				this.cdr.detectChanges();
 			}
 		});
+	}
+
+	canEditProfile(): boolean {
+		return this.currentUserId != null && this.viewedUserId != null && Number(this.currentUserId) === Number(this.viewedUserId);
 	}
 
 	private loadBooksForComments(user: Usuario, comments: Comentario[]) {
@@ -296,6 +333,11 @@ export class UsuarioPage implements OnInit {
 	}
 
 	openBookFinder(): void {
+		if (!this.canEditProfile()) {
+			this.errorMessage = 'Solo puedes añadir libros a tu propio perfil.';
+			return;
+		}
+
 		this.bookSearchOpen = true;
 		this.activeTab = 'Books';
 		this.errorMessage = '';
@@ -341,8 +383,8 @@ export class UsuarioPage implements OnInit {
 	}
 
 	addBookToProfile(book: Book): void {
-		if (!this.currentUserId) {
-			this.errorMessage = 'No se pudo guardar el libro porque no hay un usuario autenticado.';
+		if (!this.canEditProfile() || !this.currentUserId) {
+			this.errorMessage = 'No puedes añadir libros a un perfil que no sea el tuyo.';
 			return;
 		}
 
@@ -393,14 +435,20 @@ export class UsuarioPage implements OnInit {
 
 	private resolveCommentLikes(comment: Comentario): number {
 		const raw = comment as any;
-		const likes = Number(raw.likes ?? raw.likes_count ?? raw.rating ?? 0);
+		const likes = Number(raw.likes ?? raw.likes_count ?? raw.rating ?? raw.valoracion ?? 0);
 		return Number.isFinite(likes) ? likes : 0;
 	}
 
 	startEditing(): void {
+		if (!this.canEditProfile()) {
+			this.errorMessage = 'Solo puedes editar tu propio perfil.';
+			return;
+		}
+
 		this.editDraft = {
 			nombre: String(this.user.nombre ?? ''),
-			email: String(this.user.email ?? '')
+			email: String(this.user.email ?? ''),
+			descripcion: String(this.user.descripcion ?? '')
 		};
 		this.errorMessage = '';
 		this.successMessage = '';
@@ -414,7 +462,8 @@ export class UsuarioPage implements OnInit {
 		this.successMessage = '';
 		this.editDraft = {
 			nombre: String(this.user.nombre ?? ''),
-			email: String(this.user.email ?? '')
+			email: String(this.user.email ?? ''),
+			descripcion: String(this.user.descripcion ?? '')
 		};
 		this.cdr.detectChanges();
 	}
@@ -422,6 +471,7 @@ export class UsuarioPage implements OnInit {
 	saveProfile(): void {
 		const nombre = this.editDraft.nombre.trim();
 		const email = this.editDraft.email.trim();
+		const descripcion = this.editDraft.descripcion?.trim() ?? '';
 
 		if (!nombre || !email) {
 			this.errorMessage = 'Nombre y email son obligatorios.';
@@ -429,8 +479,8 @@ export class UsuarioPage implements OnInit {
 		}
 
 		const userId = this.currentUserId ?? this.user.id;
-		if (!userId) {
-			this.errorMessage = 'No se pudo actualizar el perfil porque no hay un usuario autenticado.';
+		if (!userId || !this.canEditProfile()) {
+			this.errorMessage = 'No se pudo actualizar el perfil porque no tienes permiso para editarlo.';
 			return;
 		}
 
@@ -438,10 +488,11 @@ export class UsuarioPage implements OnInit {
 		this.errorMessage = '';
 		this.successMessage = '';
 
-		this.usuarioService.updateUsuario(userId, { nombre, email }).subscribe({
+		this.usuarioService.updateUsuario(userId, { nombre, email, descripcion }).subscribe({
 			next: (updatedUser) => {
 				this.user = updatedUser;
 				this.currentUserId = updatedUser.id;
+				this.viewedUserId = updatedUser.id;
 				localStorage.setItem('username', updatedUser.nombre);
 				this.isEditing = false;
 				this.successMessage = 'Perfil actualizado correctamente.';
@@ -458,5 +509,14 @@ export class UsuarioPage implements OnInit {
 
 	setActiveTab(tab: ProfileTab): void {
 		this.activeTab = tab;
+	}
+
+	goToCreateReview(): void {
+		if (!this.loginService.getToken()) {
+			this.router.navigate(['/login']);
+			return;
+		}
+
+		this.router.navigate(['/reviews/nueva']);
 	}
 }

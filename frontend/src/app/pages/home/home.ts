@@ -140,7 +140,7 @@ export class Home implements OnInit {
         (bookId != null ? String(bookId) : 'Sin titulo');
 
       const commentText = c.contenido ?? c.comentario ?? c.comment ?? '';
-      const likes = Number(c.likes ?? c.rating ?? 0);
+      const likes = Number(c.likes ?? c.rating ?? c.valoracion ?? 0);
       const cover = c.portada || c.libro?.portada || '';
 
       return {
@@ -197,6 +197,17 @@ export class Home implements OnInit {
 
   openReviewDetail(reviewId: number): void {
     this.router.navigate(['/comentarios', reviewId]);
+  }
+
+  goToCreateReview(): void {
+    const hasToken = localStorage.getItem('token');
+
+    if (!hasToken) {
+      this.router.navigate(['/login']);
+      return;
+    }
+
+    this.router.navigate(['/reviews/nueva']);
   }
 
   trackByBookId(index: number, book: RecommendedBook): number {

@@ -20,9 +20,45 @@
 	</nav>
 
 	<div class="actions">
-		<button class="icon-button" type="button" aria-label="Buscar">
+		<button class="icon-button" type="button" aria-label="Buscar usuarios" [attr.aria-expanded]="isSearchOpen" (click)="toggleSearch()">
 			<span aria-hidden="true">⌕</span>
 		</button>
+
+		<div class="search-popover" *ngIf="isSearchOpen">
+			<div class="search-field">
+				<span class="search-input-icon" aria-hidden="true">⌕</span>
+				<input
+					type="search"
+					[(ngModel)]="searchQuery"
+					name="searchQuery"
+					placeholder="Buscar usuarios"
+					autocomplete="off"
+					(ngModelChange)="onSearchInputChange()"
+					(keyup.enter)="searchUsers()"
+				/>
+				<button type="button" class="search-button" (click)="searchUsers()" [disabled]="isSearchingUsers">
+					{{ isSearchingUsers ? 'Buscando...' : 'Buscar' }}
+				</button>
+			</div>
+
+			<div class="search-loading" *ngIf="isSearchingUsers" aria-hidden="true"></div>
+
+			<p class="search-message" *ngIf="searchError">{{ searchError }}</p>
+
+			<div class="search-results" *ngIf="searchResults.length > 0">
+				<button type="button" class="search-result" *ngFor="let user of searchResults" (click)="openUserProfile(user.id)">
+					<span class="search-avatar" aria-hidden="true"></span>
+					<span class="search-copy">
+						<strong>{{ user.nombre }}</strong>
+						<small>{{ user.descripcion || 'Sin descripción' }}</small>
+					</span>
+				</button>
+			</div>
+
+			<p class="search-message muted" *ngIf="!isSearchingUsers && searchResults.length === 0 && searchQuery.trim().length > 0 && !searchError">
+				No hay usuarios para esa búsqueda.
+			</p>
+		</div>
 
 		<div class="avatar-menu-wrap">
 			<button

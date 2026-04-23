@@ -21,7 +21,10 @@
 					<span>Email</span>
 					<input type="email" [(ngModel)]="editDraft.email" name="email" autocomplete="email" />
 				</label>
-
+			<label>
+				<span>Descripcion</span>
+				<textarea [(ngModel)]="editDraft.descripcion" name="descripcion" placeholder="Cuentanos sobre ti..." rows="4"></textarea>
+			</label>
 				<div class="editor-actions">
 					<button type="submit" class="btn-save" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar cambios' }}</button>
 					<button type="button" class="btn-cancel" (click)="cancelEditing()">Cancelar</button>
@@ -38,9 +41,9 @@
 		<div class="hero-copy">
 			<div class="hero-actions">
 				<h1>{{ user.nombre }}</h1>
-				<button type="button" class="btn-edit" (click)="startEditing()">Modificar usuario</button>
+				<button type="button" class="btn-edit" *ngIf="canEditProfile()" (click)="startEditing()">Modificar usuario</button>
 			</div>
-			<p class="hero-subtitle">{{ user.email || 'Perfil sincronizado con la base de datos.' }}</p>
+			<p class="hero-subtitle">{{ user.descripcion || 'Sin descripción disponible.' }}</p>
 		</div>
 
 		<div class="metric-strip">
@@ -69,12 +72,12 @@
 				<header class="panel-head">
 					<h2>Favorite books</h2>
 					<span>Selecciona tus lecturas favoritas.</span>
-					<button type="button" class="btn-edit panel-action" *ngIf="activeTab === 'Books'" (click)="openBookFinder()">
+					<button type="button" class="btn-edit panel-action" *ngIf="activeTab === 'Books' && canEditProfile()" (click)="openBookFinder()">
 						{{ bookSearchOpen ? 'Ocultar buscador' : 'Añadir libro' }}
 					</button>
 				</header>
 
-				<section class="book-finder" *ngIf="activeTab === 'Books' && bookSearchOpen">
+				<section class="book-finder" *ngIf="activeTab === 'Books' && bookSearchOpen && canEditProfile()">
 					<div class="finder-toolbar">
 						<input
 							type="text"
@@ -101,16 +104,20 @@
 								<p>{{ book.autor }}</p>
 								<span>{{ book.descripcion || 'Sin descripción' }}</span>
 							</div>
-							<button type="button" class="btn-edit finder-action" (click)="addBookToProfile(book)" [disabled]="isSavingBook">
+							<button type="button" class="btn-edit finder-action" (click)="addBookToProfile(book)" [disabled]="isSavingBook || !canEditProfile()">
 								Añadir
 							</button>
 						</article>
 					</div>
 				</section>
 
-				<p class="empty-state" *ngIf="activeTab === 'Books' && selectedBooks.length === 0 && metrics[0].value === '0'">
+				<p class="empty-state" *ngIf="activeTab === 'Books' && selectedBooks.length === 0 && metrics[0].value === '0' && canEditProfile()">
 					Todavía no tienes libros en tu perfil.
 					<button type="button" class="btn-edit inline-action" (click)="openBookFinder()">Buscar y añadir un libro</button>
+				</p>
+
+				<p class="empty-state read-only-note" *ngIf="activeTab === 'Books' && !canEditProfile()">
+					Este perfil pertenece a otro usuario. Puedes consultar sus libros y actividad, pero no añadir contenido.
 				</p>
 
 				<div class="book-grid">
@@ -132,6 +139,9 @@
 				<header class="panel-head">
 					<h2>Reviews</h2>
 					<span>Reseñas y actividad reciente.</span>
+					<button type="button" class="btn-edit panel-action" *ngIf="activeTab === 'Reviews' && canEditProfile()" (click)="goToCreateReview()">
+						Añadir review
+					</button>
 				</header>
 
 				<div class="activity-list">

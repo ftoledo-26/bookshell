@@ -19,6 +19,7 @@ type RawComment = {
   contenido?: string;
   comentario?: string;
   likes?: number;
+  valoracion?: number | null;
   user?: string;
   libro?: string;
   portada?: string;
@@ -39,7 +40,9 @@ export class ComentarioService {
   constructor(private http: HttpClient) {}
 
   private normalizeComment(input: RawComment): Comentario {
-    const normalizedLikes = input.likes ?? (input.rating != null ? Number(input.rating) : 0);
+    const normalizedRatingSource = input.rating ?? input.valoracion ?? input.likes;
+    const normalizedRating = Number(normalizedRatingSource);
+    const normalizedLikes = Number.isFinite(normalizedRating) ? normalizedRating : 0;
     const normalizedContent = input.contenido ?? input.comentario ?? input.comment ?? '';
 
     return {
@@ -52,7 +55,7 @@ export class ComentarioService {
       user: input.user ?? input.usuario?.nombre,
       libro: input.libro ?? input.libroData?.titulo,
       portada: input.portada ?? input.libroData?.portada,
-      rating: input.rating ?? null,
+      rating: Number.isFinite(normalizedRating) ? Number(normalizedRating) : null,
       comment: input.comment ?? null
     };
   }
@@ -115,8 +118,17 @@ export class ComentarioService {
   }
 
   createComentario(comentario: Comentario): Observable<Comentario> {
+    const apiPayload = {
+      libro_id: comentario.BookId,
+      user_id: comentario.UsuarioId,
+      rating: comentario.rating ?? comentario.likes ?? 0,
+      comentario: comentario.comentario ?? comentario.contenido ?? ''
+    };
+
     return this.http
-      .post<ApiResponse<Comentario>>(this.apiUrl, comentario)
-      .pipe(map((response: ApiResponse<Comentario>) => response.data));
+      .post<ApiResponse<RawComment> | RawComment>(this.apiUrl, apiPayload)
+      .pipe(
+        map((response: any) => this.normalizeComment(response?.data ?? response))
+      );
   }
 }

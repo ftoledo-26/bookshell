@@ -36,8 +36,105 @@ export class ComentarioService {
   private apiUrl = environment.API_URL + 'reviews';
   private comments$?: Observable<Comentario[]>;
   private readonly commentByIdCache = new Map<number, Observable<Comentario>>();
+  private readonly commentLikeCountsKey = 'commentLikeCounts';
 
   constructor(private http: HttpClient) {}
+
+  private readJson<T>(key: string, fallback: T): T {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) {
+        return fallback;
+      }
+
+      return JSON.parse(raw) as T;
+    } catch {
+      return fallback;
+    }
+  }
+
+  private writeJson(key: string, value: unknown): void {
+    localStorage.setItem(key, JSON.stringify(value));
+  }
+
+  private likedCommentIdsKey(userId: number): string {
+    return `commentLikes:${userId}`;
+  }
+
+  private readLikedCommentIds(userId: number): number[] {
+    const raw = this.readJson<number[]>(this.likedCommentIdsKey(userId), []);
+    return Array.isArray(raw)
+      ? raw.map((value) => Number(value)).filter((value) => Number.isFinite(value))
+      : [];
+  }
+
+  private writeLikedCommentIds(userId: number, ids: number[]): void {
+    this.writeJson(this.likedCommentIdsKey(userId), Array.from(new Set(ids)));
+  }
+
+  private readLikeCounts(): Record<string, number> {
+    return this.readJson<Record<string, number>>(this.commentLikeCountsKey, {});
+  }
+
+  private writeLikeCounts(counts: Record<string, number>): void {
+    this.writeJson(this.commentLikeCountsKey, counts);
+  }
+
+  getCommentLikeCount(comment: Pick<Comentario, 'id' | 'likes'>): number {
+    const counts = this.readLikeCounts();
+    const storedCount = counts[String(comment.id)];
+    if (Number.isFinite(Number(storedCount))) {
+      return Number(storedCount);
+    }
+
+    const fallback = Number(comment.likes ?? 0);
+    return Number.isFinite(fallback) ? fallback : 0;
+  }
+
+  isCommentLikedByUser(commentId: number, userId: number | null): boolean {
+    if (userId == null) {
+      return false;
+    }
+
+    return this.readLikedCommentIds(userId).includes(Number(commentId));
+  }
+
+  getLikedCommentIds(userId: number | null): number[] {
+    if (userId == null) {
+      return [];
+    }
+
+    return this.readLikedCommentIds(userId);
+  }
+
+  toggleCommentLike(comment: Pick<Comentario, 'id' | 'likes'>, userId: number | null): { liked: boolean; likes: number } {
+    if (userId == null) {
+      return { liked: false, likes: this.getCommentLikeCount(comment) };
+    }
+
+    const commentId = Number(comment.id);
+    const likedIds = new Set(this.readLikedCommentIds(userId));
+    const counts = this.readLikeCounts();
+    const currentCount = this.getCommentLikeCount(comment);
+    const isLiked = likedIds.has(commentId);
+
+    const nextCount = isLiked ? Math.max(0, currentCount - 1) : currentCount + 1;
+
+    if (isLiked) {
+      likedIds.delete(commentId);
+    } else {
+      likedIds.add(commentId);
+    }
+
+    counts[String(commentId)] = nextCount;
+    this.writeLikedCommentIds(userId, Array.from(likedIds));
+    this.writeLikeCounts(counts);
+
+    return {
+      liked: !isLiked,
+      likes: nextCount
+    };
+  }
 
   private normalizeComment(input: RawComment): Comentario {
     const normalizedRatingSource = input.rating ?? input.valoracion ?? input.likes;
@@ -118,17 +215,61 @@ export class ComentarioService {
   }
 
   createComentario(comentario: Comentario): Observable<Comentario> {
+    const ratingValue = comentario.rating ?? comentario.likes ?? 0;
+    const textValue = comentario.comentario ?? comentario.contenido ?? comentario.comment ?? '';
+
     const apiPayload = {
       libro_id: comentario.BookId,
+      BookId: comentario.BookId,
       user_id: comentario.UsuarioId,
-      rating: comentario.rating ?? comentario.likes ?? 0,
-      comentario: comentario.comentario ?? comentario.contenido ?? ''
+      usuario_id: comentario.UsuarioId,
+      UsuarioId: comentario.UsuarioId,
+      rating: ratingValue,
+      valoracion: ratingValue,
+      likes: ratingValue,
+      comment: textValue,
+      comentario: textValue,
+      contenido: textValue
     };
 
     return this.http
       .post<ApiResponse<RawComment> | RawComment>(this.apiUrl, apiPayload)
       .pipe(
-        map((response: any) => this.normalizeComment(response?.data ?? response))
+        map((response: any) => {
+          // Invalidate comments cache so next load will fetch fresh data
+          this.comments$ = undefined;
+          this.commentByIdCache.clear();
+          return this.normalizeComment(response?.data ?? response);
+        })
+      );
+  }
+
+  updateComentario(id: number, comentario: Comentario): Observable<Comentario> {
+    const ratingValue = comentario.rating ?? comentario.likes ?? 0;
+    const textValue = comentario.comentario ?? comentario.contenido ?? comentario.comment ?? '';
+
+    const apiPayload = {
+      libro_id: comentario.BookId,
+      BookId: comentario.BookId,
+      user_id: comentario.UsuarioId,
+      usuario_id: comentario.UsuarioId,
+      UsuarioId: comentario.UsuarioId,
+      rating: ratingValue,
+      valoracion: ratingValue,
+      likes: ratingValue,
+      comment: textValue,
+      comentario: textValue,
+      contenido: textValue
+    };
+
+    return this.http
+      .put<ApiResponse<RawComment> | RawComment>(`${this.apiUrl}/${id}`, apiPayload)
+      .pipe(
+        map((response: any) => {
+          this.comments$ = undefined;
+          this.commentByIdCache.clear();
+          return this.normalizeComment(response?.data ?? response);
+        })
       );
   }
 }

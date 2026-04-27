@@ -41,17 +41,21 @@
 
 .create-review-fab {
 	position: absolute;
+	text-align: center;
 	top: 0.4rem;
 	right: 0.25rem;
+	display: grid;
+	place-items: center;
 	width: 3rem;
 	height: 3rem;
+	padding: 0;
 	border-radius: 999px;
 	border: 1px solid rgba(255, 204, 122, 0.55);
 	background: linear-gradient(150deg, #f8b84e, #ff8f3c);
 	color: #1c130f;
 	font-size: 1.8rem;
 	font-weight: 700;
-	line-height: 1;
+	line-height: 0;
 	cursor: pointer;
 	box-shadow: 0 14px 28px rgba(0, 0, 0, 0.34);
 	transition: transform 120ms ease, box-shadow 120ms ease;

@@ -7,6 +7,7 @@ import { Comentario } from '../../models/Comentario';
 import { Usuario } from '../../models/Usuario';
 import { BookService } from '../../services/Book.service';
 import { ComentarioService } from '../../services/Comentario.service';
+import { LoginService } from '../../services/Login.service';
 import { UsuarioService } from '../../services/Usuario.service';
 
 
@@ -19,6 +20,7 @@ type CommentDetailView = {
 	author: string;
 	content: string;
 	likes: number;
+	likedByCurrentUser: boolean;
 	ratingValue: number;
 	ratingCount: number;
 	reviewCount: number;
@@ -31,6 +33,8 @@ type RelatedCommentView = {
 	username: string;
 	content: string;
 	likes: number;
+	ratingValue: number;
+	likedByCurrentUser: boolean;
 	hasRating: boolean;
 };
 
@@ -43,6 +47,7 @@ type RelatedCommentView = {
 })
 export class ComentarioPage implements OnInit {
      private readonly cdr = inject(ChangeDetectorRef);
+	private readonly loginService = inject(LoginService);
 	detail: CommentDetailView | null = null;
 	relatedComments: RelatedCommentView[] = [];
 	isLoading = true;
@@ -54,6 +59,7 @@ export class ComentarioPage implements OnInit {
 	private readonly comentarioService = inject(ComentarioService);
 	private readonly bookService = inject(BookService);
 	private readonly usuarioService = inject(UsuarioService);
+	private currentUserId: number | null = this.loginService.getUserId();
 
 	ngOnInit(): void {
 		window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
@@ -214,7 +220,7 @@ export class ComentarioPage implements OnInit {
 		const rawTitle = String(c.libro ?? c.libroTitulo ?? c.title ?? c.titulo ?? book?.titulo ?? '').trim();
 		const normalizedLikes = this.resolveCommentLikes(comment);
 		const ratingStats = this.getBookRatingStats(book);
-		const ratingValue = ratingStats.count > 0 ? ratingStats.average : normalizedLikes;
+		const ratingValue = ratingStats.count > 0 ? ratingStats.average : this.resolveCommentRating(comment);
 
 		return {
 			id: comment.id,
@@ -225,6 +231,7 @@ export class ComentarioPage implements OnInit {
 			author: book?.autor || 'Autor no disponible',
 			content: c.contenido ?? c.comentario ?? c.comment ?? '',
 			likes: normalizedLikes,
+			likedByCurrentUser: this.comentarioService.isCommentLikedByUser(comment.id, this.currentUserId),
 			ratingValue: Number.isFinite(ratingValue) ? ratingValue : 0,
 			ratingCount: ratingStats.count,
 			reviewCount: ratingStats.total,
@@ -244,7 +251,9 @@ export class ComentarioPage implements OnInit {
 				username: c.user || c.nombre || c.usuario?.nombre || c.usuarioNombre || c.username || user?.nombre || 'Usuario desconocido',
 				content: c.contenido ?? c.comentario ?? c.comment ?? '',
 				likes: this.resolveCommentLikes(comment),
-				hasRating: this.resolveCommentLikes(comment) > 0
+				ratingValue: this.resolveCommentRating(comment),
+				likedByCurrentUser: this.comentarioService.isCommentLikedByUser(comment.id, this.currentUserId),
+				hasRating: this.resolveCommentRating(comment) > 0
 			};
 		});
 	}
@@ -254,10 +263,53 @@ export class ComentarioPage implements OnInit {
 	}
 
 	private resolveCommentLikes(comment: Comentario): number {
+		return this.comentarioService.getCommentLikeCount(comment);
+	}
+
+	private resolveCommentRating(comment: Comentario): number {
 		const c = comment as any;
-		const rawLikes = c.likes ?? c.likes_count ?? c.rating ?? c.valoracion ?? 0;
-		const likes = Number(rawLikes);
-		return Number.isFinite(likes) ? likes : 0;
+		const rawRating = c.rating ?? c.valoracion;
+		const rating = Number(rawRating);
+		return Number.isFinite(rating) ? rating : 0;
+	}
+
+	toggleLike(commentId: number, isRelated = false): void {
+		const targetComment = isRelated
+			? this.relatedComments.find((comment) => comment.id === commentId)
+			: this.detail;
+
+		if (!targetComment) {
+			return;
+		}
+
+		const nextState = this.comentarioService.toggleCommentLike(
+			{ id: targetComment.id, likes: targetComment.likes },
+			this.currentUserId
+		);
+
+		if (!isRelated && this.detail) {
+			this.detail = {
+				...this.detail,
+				likes: nextState.likes,
+				likedByCurrentUser: nextState.liked
+			};
+		}
+
+		if (isRelated) {
+			this.relatedComments = this.relatedComments.map((comment) =>
+				comment.id === commentId
+					? { ...comment, likes: nextState.likes, likedByCurrentUser: nextState.liked }
+					: comment
+			);
+		} else {
+			this.relatedComments = this.relatedComments.map((comment) =>
+				comment.id === commentId
+					? { ...comment, likes: nextState.likes, likedByCurrentUser: nextState.liked }
+					: comment
+			);
+		}
+
+		this.cdr.markForCheck();
 	}
 
 	private getBookRatingStats(book: Book | null): { average: number; count: number; total: number } {

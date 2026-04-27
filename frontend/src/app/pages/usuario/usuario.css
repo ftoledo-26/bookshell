@@ -191,6 +191,79 @@
 	font-size: 0.92rem;
 }
 
+.liked-list {
+	display: grid;
+	gap: 0.8rem;
+}
+
+.liked-card {
+	display: grid;
+	grid-template-columns: 64px minmax(0, 1fr) auto;
+	gap: 0.85rem;
+	align-items: center;
+	padding: 0.8rem;
+	border-radius: 0.9rem;
+	border: 1px solid rgba(255, 225, 178, 0.14);
+	background: rgba(14, 10, 7, 0.58);
+}
+
+.liked-cover {
+	width: 64px;
+	height: 92px;
+	border-radius: 0.65rem;
+	overflow: hidden;
+	background: linear-gradient(160deg, rgba(255, 177, 89, 0.25), rgba(255, 120, 57, 0.18));
+	border: 1px solid rgba(255, 225, 178, 0.18);
+}
+
+.liked-cover img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+.liked-copy {
+	display: grid;
+	gap: 0.25rem;
+	min-width: 0;
+}
+
+.liked-head {
+	display: flex;
+	justify-content: space-between;
+	gap: 0.7rem;
+	align-items: center;
+}
+
+.liked-head strong {
+	font-size: 1rem;
+}
+
+.liked-head span {
+	white-space: nowrap;
+	font-size: 0.82rem;
+	color: #ffd18b;
+	border: 1px solid rgba(255, 204, 122, 0.28);
+	background: rgba(255, 157, 82, 0.12);
+	padding: 0.2rem 0.55rem;
+	border-radius: 999px;
+}
+
+.liked-copy p,
+.liked-copy span {
+	margin: 0;
+	color: #cfbca2;
+	font-size: 0.92rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.liked-action {
+	white-space: nowrap;
+}
+
 .read-only-note {
 	border-left: 3px solid rgba(255, 177, 89, 0.55);
 	padding-left: 0.9rem;
@@ -417,5 +490,14 @@
 
 	.finder-action {
 		width: 100%;
+	}
+
+	.liked-card {
+		grid-template-columns: 54px minmax(0, 1fr);
+	}
+
+	.liked-action {
+		grid-column: 1 / -1;
+		justify-self: start;
 	}
 }

@@ -25,10 +25,20 @@
 					<p class="meta">{{ detail.author }} · {{ detail.username }}</p>
 				</header>
 
+				<p class="rating-pill" *ngIf="detail.ratingValue > 0">Puntuacion: {{ detail.ratingValue }} / 5</p>
+
 				<p class="comment-copy">{{ detail.content }}</p>
 
 				<footer>
-					<span class="likes">{{ detail.likes }} likes</span>
+					<button
+						type="button"
+						class="like-button"
+						[class.active]="detail.likedByCurrentUser"
+						(click)="toggleLike(detail.id)"
+					>
+						<span>{{ detail.likedByCurrentUser ? 'Liked' : 'Me gusta' }}</span>
+						<strong>{{ detail.likes }}</strong>
+					</button>
 				</footer>
 			</div>
 		</article>
@@ -45,11 +55,22 @@
 				<article class="related-card" *ngFor="let comment of relatedComments; trackBy: trackByRelatedCommentId">
 					<div class="related-card-head">
 						<strong>{{ comment.username }}</strong>
-						@if(comment.hasRating) {
-							<span>{{ comment.likes }} / 5</span>
-						} @else {
-							<span>comentario</span>
-						}
+						<div class="related-meta">
+							@if(comment.hasRating) {
+								<span class="rating-tag">{{ comment.ratingValue }} / 5</span>
+							} @else {
+								<span class="rating-tag muted">comentario</span>
+							}
+							<button
+								type="button"
+								class="like-button small"
+								[class.active]="comment.likedByCurrentUser"
+								(click)="toggleLike(comment.id, true)"
+							>
+								<span>{{ comment.likedByCurrentUser ? 'Liked' : 'Me gusta' }}</span>
+								<strong>{{ comment.likes }}</strong>
+							</button>
+						</div>
 					</div>
 
 					<p>{{ comment.content }}</p>

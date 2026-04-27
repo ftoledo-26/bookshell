@@ -158,9 +158,30 @@
 			<section class="panel" *ngIf="activeTab === 'Likes'">
 				<header class="panel-head">
 					<h2>Likes</h2>
-					<span>Libros y reseñas que te gustaron.</span>
+					<span>Comentarios y reseñas que marcaste con like.</span>
 				</header>
-				<p class="empty-state">Todavía no hay likes para mostrar.</p>
+				<p class="empty-state" *ngIf="!canEditProfile()">
+					Este apartado solo muestra los likes del propietario del perfil.
+				</p>
+				<p class="empty-state" *ngIf="canEditProfile() && likedComments.length === 0">
+					Todavía no has dado like a ningún comentario.
+				</p>
+				<div class="liked-list" *ngIf="canEditProfile() && likedComments.length > 0">
+					<article class="liked-card" *ngFor="let comment of likedComments">
+						<div class="liked-cover" aria-hidden="true">
+							<img [src]="comment.coverUrl" [alt]="comment.bookTitle" loading="lazy" />
+						</div>
+						<div class="liked-copy">
+							<div class="liked-head">
+								<strong>{{ comment.bookTitle }}</strong>
+								<span>{{ comment.likes }} likes</span>
+							</div>
+							<p>{{ comment.author }}</p>
+							<span>{{ comment.content }}</span>
+						</div>
+						<button type="button" class="btn-edit liked-action" (click)="openLikedComment(comment.id)">Ver comentario</button>
+					</article>
+				</div>
 			</section>
 		</div>
 

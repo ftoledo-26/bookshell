@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { catchError, forkJoin, map, of, switchMap } from 'rxjs';
+import { catchError, forkJoin, map, of, switchMap, distinctUntilChanged } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Book } from '../../models/Book';
 import { Comentario } from '../../models/Comentario';
@@ -28,6 +28,15 @@ type ProfileActivity = {
 	title: string;
 	detail: string;
 	time: string;
+};
+
+type LikedCommentView = {
+	id: number;
+	bookTitle: string;
+	author: string;
+	content: string;
+	likes: number;
+	coverUrl: string;
 };
 
 type ProfileTab = 'Profile' | 'Books' | 'Reviews' | 'Likes';
@@ -80,6 +89,7 @@ export class UsuarioPage implements OnInit {
 	isSavingBook = false;
 	bookSearchResults: Book[] = [];
 	selectedBooks: Book[] = [];
+	likedComments: LikedCommentView[] = [];
 	private profileComments: Comentario[] = [];
 	private profileBooks: Book[] = [];
 
@@ -100,11 +110,23 @@ export class UsuarioPage implements OnInit {
 		this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
 			const rawId = params.get('id');
 			const targetUserId = rawId ? Number(rawId) : null;
-			this.loadProfile(Number.isFinite(targetUserId ?? NaN) ? targetUserId : null);
+			this.loadProfile(Number.isFinite(targetUserId ?? NaN) ? targetUserId : null, false);
+		});
+
+		// Listen to query params to detect refresh from comment creation
+		this.route.queryParams.pipe(
+			map((params) => params['refresh']),
+			distinctUntilChanged(),
+			takeUntilDestroyed(this.destroyRef)
+		).subscribe(() => {
+			// Re-fetch comments with force refresh when redirected from review creation
+			const rawId = this.route.snapshot.paramMap.get('id');
+			const targetUserId = rawId ? Number(rawId) : null;
+			this.loadProfile(Number.isFinite(targetUserId ?? NaN) ? targetUserId : null, true);
 		});
 	}
 
-	private loadProfile(targetUserId: number | null): void {
+	private loadProfile(targetUserId: number | null, forceRefreshComments = false): void {
 		this.isLoading = true;
 		this.errorMessage = '';
 		this.successMessage = '';
@@ -113,6 +135,7 @@ export class UsuarioPage implements OnInit {
 		this.bookSearchQuery = '';
 		this.bookSearchResults = [];
 		this.selectedBooks = [];
+		this.likedComments = [];
 		this.profileComments = [];
 		this.profileBooks = [];
 
@@ -161,7 +184,7 @@ export class UsuarioPage implements OnInit {
 				this.viewedUserId = user.id;
 				this.selectedBooks = this.canEditProfile() ? this.loadSelectedBooks(user.id) : [];
 
-				return this.comentarioService.getComentarios().pipe(
+				return this.comentarioService.getComentarios(forceRefreshComments).pipe(
 					map((comments) => comments.filter((comment) => this.isCommentFromCurrentUser(comment, user))),
 					catchError(() => of([] as Comentario[])),
 					switchMap((comments) => this.loadBooksForComments(user, comments))
@@ -190,6 +213,9 @@ export class UsuarioPage implements OnInit {
 				this.favoriteBooks = this.buildFavoriteBooks(this.profileComments, this.profileBooks, this.selectedBooks);
 				this.activity = this.buildActivityFeed(this.profileComments, this.profileBooks);
 				this.bookSearchOpen = this.canEditProfile() && this.favoriteBooks.length === 1 && this.selectedBooks.length === 0;
+				if (this.activeTab === 'Likes') {
+					this.loadLikedComments(forceRefreshComments);
+				}
 				this.isLoading = false;
 				this.cdr.detectChanges();
 			},
@@ -434,9 +460,41 @@ export class UsuarioPage implements OnInit {
 	}
 
 	private resolveCommentLikes(comment: Comentario): number {
-		const raw = comment as any;
-		const likes = Number(raw.likes ?? raw.likes_count ?? raw.rating ?? raw.valoracion ?? 0);
-		return Number.isFinite(likes) ? likes : 0;
+		return this.comentarioService.getCommentLikeCount(comment);
+	}
+
+	private loadLikedComments(forceRefreshComments = false): void {
+		if (!this.canEditProfile() || this.currentUserId == null) {
+			this.likedComments = [];
+			this.cdr.detectChanges();
+			return;
+		}
+
+		this.comentarioService.getComentarios(forceRefreshComments).subscribe({
+			next: (comments) => {
+				const likedIds = new Set(this.comentarioService.getLikedCommentIds(this.currentUserId));
+
+				this.likedComments = comments
+					.filter((comment) => likedIds.has(comment.id))
+					.sort((left, right) => Number(right.id) - Number(left.id))
+					.map((comment) => {
+						const raw = comment as any;
+						return {
+							id: comment.id,
+							bookTitle: String(raw.libro ?? raw.libroData?.titulo ?? raw.libroTitulo ?? raw.titulo ?? 'Comentario liked'),
+							author: String(raw.user ?? raw.usuario?.nombre ?? raw.usuarioNombre ?? raw.username ?? 'Usuario desconocido'),
+							content: String(raw.contenido ?? raw.comentario ?? raw.comment ?? ''),
+							likes: this.comentarioService.getCommentLikeCount(comment),
+							coverUrl: this.normalizeCoverPath(raw.portada ?? raw.libroData?.portada)
+						} satisfies LikedCommentView;
+					});
+				this.cdr.detectChanges();
+			},
+			error: () => {
+				this.likedComments = [];
+				this.cdr.detectChanges();
+			}
+		});
 	}
 
 	startEditing(): void {
@@ -509,6 +567,31 @@ export class UsuarioPage implements OnInit {
 
 	setActiveTab(tab: ProfileTab): void {
 		this.activeTab = tab;
+		if (tab === 'Likes') {
+			this.loadLikedComments(false);
+		}
+	}
+
+	openLikedComment(commentId: number): void {
+		this.router.navigate(['/comentarios', commentId]);
+	}
+
+	private normalizeCoverPath(rawCover?: string): string {
+		const raw = String(rawCover ?? '').trim();
+		if (!raw) {
+			return '/prueba.webp';
+		}
+
+		const lowered = raw.toLowerCase();
+		if (lowered === 'default.png' || lowered === 'default.jpg' || lowered === '/default.jpg' || lowered === '/default.png') {
+			return '/default.png';
+		}
+
+		if (/^https?:\/\//i.test(raw) || raw.startsWith('/')) {
+			return raw;
+		}
+
+		return `/${raw}`;
 	}
 
 	goToCreateReview(): void {

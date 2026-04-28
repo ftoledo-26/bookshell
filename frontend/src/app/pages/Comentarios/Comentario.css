@@ -85,6 +85,7 @@
 
 .content-column {
 	display: grid;
+	min-width: 0;
 	align-content: center;
 	gap: 1.1rem;
 	color: #f7f3eb;
@@ -114,6 +115,10 @@
 	font-size: clamp(1.05rem, 1.6vw, 1.25rem);
 	line-height: 1.7;
 	color: #f4dcc2;
+	max-width: 100%;
+	white-space: normal;
+	word-break: break-word;
+	overflow-wrap: anywhere;
 }
 
 .rating-pill {
@@ -308,6 +313,22 @@
 	margin: 0;
 	line-height: 1.55;
 	color: #f4dcc2;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+}
+
+@media (max-width: 860px) {
+	.comment-card {
+		grid-template-columns: 1fr;
+	}
+
+	.content-column {
+		justify-items: start;
+	}
+
+	.comment-copy {
+		font-size: 1.02rem;
+	}
 }
 
 .related-empty {

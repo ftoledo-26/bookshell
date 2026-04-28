@@ -137,9 +137,9 @@ export class ComentarioService {
   }
 
   private normalizeComment(input: RawComment): Comentario {
-    const normalizedRatingSource = input.rating ?? input.valoracion ?? input.likes;
+    const normalizedRatingSource = input.rating ?? input.valoracion;
     const normalizedRating = Number(normalizedRatingSource);
-    const normalizedLikes = Number.isFinite(normalizedRating) ? normalizedRating : 0;
+    const normalizedLikes = Number(input.likes ?? 0);
     const normalizedContent = input.contenido ?? input.comentario ?? input.comment ?? '';
 
     return {
@@ -148,7 +148,7 @@ export class ComentarioService {
       BookId: input.BookId ?? input.libro_id,
       contenido: normalizedContent,
       comentario: normalizedContent,
-      likes: Number.isFinite(normalizedLikes) ? Number(normalizedLikes) : 0,
+      likes: Number.isFinite(normalizedLikes) ? normalizedLikes : 0,
       user: input.user ?? input.usuario?.nombre,
       libro: input.libro ?? input.libroData?.titulo,
       portada: input.portada ?? input.libroData?.portada,
@@ -217,6 +217,7 @@ export class ComentarioService {
   createComentario(comentario: Comentario): Observable<Comentario> {
     const ratingValue = comentario.rating ?? comentario.likes ?? 0;
     const textValue = comentario.comentario ?? comentario.contenido ?? comentario.comment ?? '';
+    const likesValue = Number(comentario.likes ?? 0);
 
     const apiPayload = {
       libro_id: comentario.BookId,
@@ -226,7 +227,7 @@ export class ComentarioService {
       UsuarioId: comentario.UsuarioId,
       rating: ratingValue,
       valoracion: ratingValue,
-      likes: ratingValue,
+      likes: Number.isFinite(likesValue) ? likesValue : 0,
       comment: textValue,
       comentario: textValue,
       contenido: textValue
@@ -247,6 +248,7 @@ export class ComentarioService {
   updateComentario(id: number, comentario: Comentario): Observable<Comentario> {
     const ratingValue = comentario.rating ?? comentario.likes ?? 0;
     const textValue = comentario.comentario ?? comentario.contenido ?? comentario.comment ?? '';
+    const likesValue = Number(comentario.likes ?? 0);
 
     const apiPayload = {
       libro_id: comentario.BookId,
@@ -256,7 +258,7 @@ export class ComentarioService {
       UsuarioId: comentario.UsuarioId,
       rating: ratingValue,
       valoracion: ratingValue,
-      likes: ratingValue,
+      likes: Number.isFinite(likesValue) ? likesValue : 0,
       comment: textValue,
       comentario: textValue,
       contenido: textValue
@@ -271,5 +273,14 @@ export class ComentarioService {
           return this.normalizeComment(response?.data ?? response);
         })
       );
+  }
+
+  deleteComentario(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.apiUrl}/${id}`).pipe(
+      map(() => {
+        this.comments$ = undefined;
+        this.commentByIdCache.clear();
+      })
+    );
   }
 }

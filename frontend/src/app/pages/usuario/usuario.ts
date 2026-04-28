@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { catchError, forkJoin, map, of, switchMap, distinctUntilChanged } from 'rxjs';
+import { Observable, catchError, forkJoin, map, of, switchMap, distinctUntilChanged } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Book } from '../../models/Book';
 import { Comentario } from '../../models/Comentario';
@@ -17,11 +17,36 @@ type ProfileMetric = {
 	label: string;
 };
 
+type BookState = 'favorito' | 'leido' | 'leyendo' | 'abandonado';
+
+type ProfileBookComment = {
+	id: number;
+	author: string;
+	content: string;
+	rating: number | null;
+	likes: number;
+};
+
+type ProfileBookEntry = Book & {
+	state: BookState;
+};
+
 type ProfileBook = {
+	id: number;
 	title: string;
 	author: string;
-	year: string;
-	rating: string;
+	description: string;
+	coverUrl: string;
+	state: BookState;
+	stateLabel: string;
+	commentCount: number;
+	averageRating?: string;
+	comments: ProfileBookComment[];
+};
+
+type ActionMenuState = {
+	kind: 'book' | 'comment';
+	id: number;
 };
 
 type ProfileActivity = {
@@ -60,6 +85,65 @@ export class UsuarioPage implements OnInit {
 	private currentUserId: number | null = this.loginService.getUserId();
 	private viewedUserId: number | null = null;
 
+	// ============ Centralized Helper Methods ============
+
+	private clearMessages(): void {
+		this.errorMessage = '';
+		this.successMessage = '';
+	}
+
+	private setMessage(type: 'error' | 'success', message: string, autoDetect = true): void {
+		if (type === 'error') {
+			this.errorMessage = message;
+			this.successMessage = '';
+		} else {
+			this.successMessage = message;
+			this.errorMessage = '';
+		}
+		if (autoDetect) this.cdr.detectChanges();
+	}
+
+	private requireEditPermission(action: string = 'hacer esto'): boolean {
+		if (!this.canEditProfile() || !this.currentUserId) {
+			this.setMessage('error', `No puedes ${action} en un perfil que no sea el tuyo.`);
+			return false;
+		}
+		return true;
+	}
+
+	private removeFromArray<T extends { id: number }>(array: T[], id: number): T[] {
+		return array.filter((item) => item.id !== id);
+	}
+
+	private removeNumberFromArray(array: number[], id: number): number[] {
+		return array.filter((item) => item !== id);
+	}
+
+	private updateInArray<T extends { id: number }>(array: T[], id: number, updater: (item: T) => T): T[] {
+		return array.map((item) => item.id === id ? updater(item) : item);
+	}
+
+	private withLoadingFlag<T>(flag: keyof this, operation: () => Observable<T>, onSuccess?: (result: any) => void, onError?: (err: any) => void): void {
+		const loadingFlagName = flag as string;
+		(this as any)[loadingFlagName] = true;
+		this.clearMessages();
+
+		operation().subscribe({
+			next: (result) => {
+				(this as any)[loadingFlagName] = false;
+				onSuccess?.(result);
+				this.cdr.detectChanges();
+			},
+			error: (err) => {
+				(this as any)[loadingFlagName] = false;
+				onError?.(err) || this.setMessage('error', 'Operación fallida', false);
+				this.cdr.detectChanges();
+			}
+		});
+	}
+
+	// ============ End Centralized Helpers ============
+
 	user: Usuario = {
 		id: 0,
 		nombre: 'Cargando...',
@@ -88,10 +172,27 @@ export class UsuarioPage implements OnInit {
 	isSearchingBooks = false;
 	isSavingBook = false;
 	bookSearchResults: Book[] = [];
-	selectedBooks: Book[] = [];
+	selectedBooks: ProfileBookEntry[] = [];
 	likedComments: LikedCommentView[] = [];
+	bookSearchStates: Record<number, BookState> = {};
+	activeActionMenu: ActionMenuState | null = null;
+	actionMenuVisible: ActionMenuState | null = null;
+	private actionMenuCloseTimer: ReturnType<typeof setTimeout> | null = null;
+	previewedBook: ProfileBook | null = null;
+	previewDrawerVisible = false;
+	previewMode: 'view' | 'edit' = 'view';
+	previewBookState: BookState = 'favorito';
+	hiddenProfileBookIds: number[] = [];
+	private previewCloseTimer: ReturnType<typeof setTimeout> | null = null;
 	private profileComments: Comentario[] = [];
+	private allComments: Comentario[] = [];
 	private profileBooks: Book[] = [];
+	readonly bookStateOptions: Array<{ value: BookState; label: string }> = [
+		{ value: 'favorito', label: 'Favorito' },
+		{ value: 'leido', label: 'Leído' },
+		{ value: 'leyendo', label: 'Leyendo' },
+		{ value: 'abandonado', label: 'Abandonado' }
+	];
 
 	readonly profileTabs: ProfileTab[] = ['Profile', 'Books', 'Reviews', 'Likes'];
 	metrics: ProfileMetric[] = [
@@ -100,7 +201,17 @@ export class UsuarioPage implements OnInit {
 		{ value: '0', label: 'Likes' }
 	];
 	favoriteBooks: ProfileBook[] = [
-		{ title: 'Sin libros todavía', author: 'Escribe tu primera review para empezar', year: 'Base de datos', rating: '--' }
+		{
+			id: 0,
+			title: 'Sin libros todavía',
+			author: 'Usa el buscador para añadir un libro',
+			description: '',
+			coverUrl: '/prueba.webp',
+			state: 'favorito',
+			stateLabel: 'Favorito',
+			commentCount: 0,
+			comments: []
+		}
 	];
 	activity: ProfileActivity[] = [
 		{ title: 'Sin actividad reciente', detail: 'Cuando publiques reviews aparecerán aquí.', time: 'Ahora' }
@@ -128,15 +239,31 @@ export class UsuarioPage implements OnInit {
 
 	private loadProfile(targetUserId: number | null, forceRefreshComments = false): void {
 		this.isLoading = true;
-		this.errorMessage = '';
-		this.successMessage = '';
+		this.clearMessages();
 		this.isEditing = false;
 		this.bookSearchOpen = false;
 		this.bookSearchQuery = '';
 		this.bookSearchResults = [];
 		this.selectedBooks = [];
 		this.likedComments = [];
+		this.bookSearchStates = {};
+		this.activeActionMenu = null;
+		this.actionMenuVisible = null;
+		this.previewedBook = null;
+		this.previewDrawerVisible = false;
+		this.previewMode = 'view';
+		this.previewBookState = 'favorito';
+		this.hiddenProfileBookIds = [];
+		if (this.previewCloseTimer) {
+			clearTimeout(this.previewCloseTimer);
+			this.previewCloseTimer = null;
+		}
+		if (this.actionMenuCloseTimer) {
+			clearTimeout(this.actionMenuCloseTimer);
+			this.actionMenuCloseTimer = null;
+		}
 		this.profileComments = [];
+		this.allComments = [];
 		this.profileBooks = [];
 
 		const authUserId = this.loginService.getUserId();
@@ -178,19 +305,30 @@ export class UsuarioPage implements OnInit {
 		user$.pipe(
 			switchMap((user) => {
 				if (!user) {
-					return of({ user: null, comments: [] as Comentario[], books: [] as Book[] });
+					return of({ user: null, comments: [] as Comentario[], books: [] as Book[], allComments: [] as Comentario[] });
 				}
 
 				this.viewedUserId = user.id;
 				this.selectedBooks = this.canEditProfile() ? this.loadSelectedBooks(user.id) : [];
+				this.hiddenProfileBookIds = this.canEditProfile() ? this.loadHiddenBookIds(user.id) : [];
 
 				return this.comentarioService.getComentarios(forceRefreshComments).pipe(
-					map((comments) => comments.filter((comment) => this.isCommentFromCurrentUser(comment, user))),
 					catchError(() => of([] as Comentario[])),
-					switchMap((comments) => this.loadBooksForComments(user, comments))
+					map((comments) => ({
+						allComments: comments,
+						comments: comments.filter((comment) => this.isCommentFromCurrentUser(comment, user))
+					})),
+					switchMap(({ allComments, comments }) =>
+						this.loadBooksForComments(user, comments).pipe(
+							map((result) => ({
+								...result,
+								allComments
+							}))
+						)
+					)
 				);
 			}),
-			catchError(() => of({ user: null, comments: [] as Comentario[], books: [] as Book[] }))
+			catchError(() => of({ user: null, comments: [] as Comentario[], books: [] as Book[], allComments: [] as Comentario[] }))
 		).subscribe({
 			next: (result) => {
 				if (!result.user) {
@@ -208,9 +346,10 @@ export class UsuarioPage implements OnInit {
 					descripcion: String(result.user.descripcion ?? '')
 				};
 				this.profileComments = result.comments;
+				this.allComments = result.allComments;
 				this.profileBooks = result.books;
 				this.metrics = this.buildMetrics(this.profileComments);
-				this.favoriteBooks = this.buildFavoriteBooks(this.profileComments, this.profileBooks, this.selectedBooks);
+				this.favoriteBooks = this.buildFavoriteBooks(this.allComments, this.profileBooks, this.selectedBooks, this.hiddenProfileBookIds);
 				this.activity = this.buildActivityFeed(this.profileComments, this.profileBooks);
 				this.bookSearchOpen = this.canEditProfile() && this.favoriteBooks.length === 1 && this.selectedBooks.length === 0;
 				if (this.activeTab === 'Likes') {
@@ -244,22 +383,56 @@ export class UsuarioPage implements OnInit {
 		);
 	}
 
-	private loadSelectedBooks(userId: number): Book[] {
+	private loadSelectedBooks(userId: number): ProfileBookEntry[] {
 		try {
 			const raw = localStorage.getItem(this.profileBooksStorageKey(userId));
 			if (!raw) {
 				return [];
 			}
 
-			const parsed = JSON.parse(raw) as Book[];
-			return Array.isArray(parsed) ? parsed : [];
+			const parsed = JSON.parse(raw) as Array<Partial<ProfileBookEntry>>;
+			if (!Array.isArray(parsed)) {
+				return [];
+			}
+
+			return parsed
+				.map((entry) => this.normalizeStoredBookEntry(entry))
+				.filter((entry): entry is ProfileBookEntry => entry !== null);
 		} catch {
 			return [];
 		}
 	}
 
-	private persistSelectedBooks(userId: number, books: Book[]): void {
+	private persistSelectedBooks(userId: number, books: ProfileBookEntry[]): void {
 		localStorage.setItem(this.profileBooksStorageKey(userId), JSON.stringify(books));
+	}
+
+	private loadHiddenBookIds(userId: number): number[] {
+		try {
+			const raw = localStorage.getItem(this.hiddenBooksStorageKey(userId));
+			if (!raw) {
+				return [];
+			}
+
+			const parsed = JSON.parse(raw) as unknown[];
+			if (!Array.isArray(parsed)) {
+				return [];
+			}
+
+			return parsed
+				.map((value) => Number(value))
+				.filter((value) => Number.isFinite(value));
+		} catch {
+			return [];
+		}
+	}
+
+	private persistHiddenBookIds(userId: number, bookIds: number[]): void {
+		localStorage.setItem(this.hiddenBooksStorageKey(userId), JSON.stringify(Array.from(new Set(bookIds))));
+	}
+
+	private hiddenBooksStorageKey(userId: number): string {
+		return `profileHiddenBooks:${userId}`;
 	}
 
 	private profileBooksStorageKey(userId: number): string {
@@ -308,24 +481,48 @@ export class UsuarioPage implements OnInit {
 		];
 	}
 
-	private buildFavoriteBooks(comments: Comentario[], books: Book[], profileBooks: Book[]): ProfileBook[] {
-		const sourceBooks = [...profileBooks];
+	private buildFavoriteBooks(allComments: Comentario[], books: Book[], profileBooks: ProfileBookEntry[], hiddenBookIds: number[]): ProfileBook[] {
+		const hiddenSet = new Set(hiddenBookIds.map((value) => Number(value)).filter((value) => Number.isFinite(value)));
+		const sourceBooks = new Map<number, ProfileBookEntry>();
 
 		for (const book of books) {
-			if (!sourceBooks.some((item) => item.id === book.id)) {
-				sourceBooks.push(book);
+			if (hiddenSet.has(book.id)) {
+				continue;
 			}
+
+			sourceBooks.set(book.id, {
+				...book,
+				state: 'favorito'
+			});
 		}
 
-		if (comments.length === 0 && sourceBooks.length === 0) {
+		for (const book of profileBooks) {
+			if (hiddenSet.has(book.id)) {
+				continue;
+			}
+
+			sourceBooks.set(book.id, book);
+		}
+
+		if (allComments.length === 0 && sourceBooks.size === 0) {
 			return [
-				{ title: 'Sin libros todavía', author: 'Usa el buscador para añadir un libro', year: 'Base de datos', rating: '--' }
+				{
+					id: 0,
+					title: 'Sin libros todavía',
+					author: 'Usa el buscador para añadir un libro',
+					description: '',
+					coverUrl: '/prueba.webp',
+					state: 'favorito',
+					stateLabel: this.getBookStateLabel('favorito'),
+					commentCount: 0,
+					comments: []
+				}
 			];
 		}
 
 		const commentsByBook = new Map<number, Comentario[]>();
 
-		for (const comment of comments) {
+		for (const comment of allComments) {
 			const raw = comment as any;
 			const rawBookId = raw.BookId ?? raw.libro_id;
 
@@ -338,36 +535,59 @@ export class UsuarioPage implements OnInit {
 				continue;
 			}
 
+			if (hiddenSet.has(normalizedBookId)) {
+				continue;
+			}
+
 			const current = commentsByBook.get(normalizedBookId) ?? [];
 			current.push(comment);
 			commentsByBook.set(normalizedBookId, current);
 		}
 
-		return sourceBooks.map((book) => {
+		return Array.from(sourceBooks.values()).map((book) => {
 			const bookComments = commentsByBook.get(book.id) ?? [];
-			const averageLikes = bookComments.length > 0
-				? bookComments.reduce((sum, comment) => sum + this.resolveCommentLikes(comment), 0) / bookComments.length
-				: 0;
+			const ratedComments = bookComments
+				.map((comment) => this.resolveCommentRating(comment))
+				.filter((value) => value > 0);
+			const averageRating = ratedComments.length > 0
+				? Number((ratedComments.reduce((sum, value) => sum + value, 0) / ratedComments.length).toFixed(1))
+				: null;
+			const sortedComments = [...bookComments]
+				.sort((left, right) => Number(right.id) - Number(left.id))
+				.map((comment) => {
+					const raw = comment as any;
+					return {
+						id: comment.id,
+						author: String(raw.user ?? raw.usuario?.nombre ?? raw.usuarioNombre ?? raw.username ?? 'Usuario desconocido'),
+						content: String(raw.contenido ?? raw.comentario ?? raw.comment ?? ''),
+						rating: this.resolveCommentRating(comment) > 0 ? this.resolveCommentRating(comment) : null,
+						likes: this.resolveCommentLikes(comment)
+					};
+				});
 
 			return {
+				id: book.id,
 				title: book.titulo,
 				author: book.autor,
-				year: `Libro #${book.id}`,
-				rating: `${bookComments.length} reviews · ${averageLikes.toFixed(1)} likes`
+				description: String(book.descripcion ?? ''),
+				coverUrl: this.normalizeCoverPath(book.portada),
+				state: book.state,
+				stateLabel: this.getBookStateLabel(book.state),
+				commentCount: bookComments.length,
+				averageRating: averageRating != null ? `${averageRating.toFixed(1)} / 5` : undefined,
+				comments: sortedComments
 			};
 		});
 	}
 
 	openBookFinder(): void {
-		if (!this.canEditProfile()) {
-			this.errorMessage = 'Solo puedes añadir libros a tu propio perfil.';
+		if (!this.requireEditPermission('añadir libros')) {
 			return;
 		}
 
 		this.bookSearchOpen = true;
 		this.activeTab = 'Books';
-		this.errorMessage = '';
-		this.successMessage = '';
+		this.clearMessages();
 		this.cdr.detectChanges();
 	}
 
@@ -382,52 +602,61 @@ export class UsuarioPage implements OnInit {
 		const query = this.bookSearchQuery.trim();
 
 		if (!query) {
-			this.errorMessage = 'Escribe al menos un título o autor para buscar.';
+			this.setMessage('error', 'Escribe al menos un título o autor para buscar.');
 			this.bookSearchResults = [];
 			return;
 		}
 
-		this.isSearchingBooks = true;
-		this.errorMessage = '';
-		this.successMessage = '';
-
-		this.bookService.searchBook(query).pipe(
-			catchError(() => of([] as Book[]))
-		).subscribe({
-			next: (results) => {
+		this.withLoadingFlag('isSearchingBooks', () =>
+			this.bookService.searchBook(query).pipe(
+				catchError(() => of([] as Book[]))
+			),
+			(results) => {
 				this.bookSearchResults = results;
-				this.isSearchingBooks = false;
-				this.cdr.detectChanges();
+				for (const book of results) {
+					if (this.bookSearchStates[book.id] == null) {
+						this.bookSearchStates[book.id] = 'favorito';
+					}
+				}
 			},
-			error: () => {
-				this.errorMessage = 'No se pudieron buscar libros.';
+			() => {
+				this.setMessage('error', 'No se pudieron buscar libros.', false);
 				this.bookSearchResults = [];
-				this.isSearchingBooks = false;
-				this.cdr.detectChanges();
 			}
-		});
+		);
 	}
 
-	addBookToProfile(book: Book): void {
-		if (!this.canEditProfile() || !this.currentUserId) {
-			this.errorMessage = 'No puedes añadir libros a un perfil que no sea el tuyo.';
+	addBookToProfile(book: Book, state: BookState = this.bookSearchStates[book.id] ?? 'favorito'): void {
+		if (!this.requireEditPermission('añadir libros')) {
 			return;
 		}
 
-		const alreadyAdded = this.selectedBooks.some((item) => item.id === book.id);
-		if (alreadyAdded) {
-			this.successMessage = 'Ese libro ya está en tu perfil.';
-			return;
-		}
+		const normalizedState = this.normalizeBookState(state);
+		const nextEntry: ProfileBookEntry = {
+			...book,
+			state: normalizedState
+		};
+		const existingIndex = this.selectedBooks.findIndex((item) => item.id === book.id);
 
 		this.isSavingBook = true;
-		this.errorMessage = '';
-		this.successMessage = '';
+		this.clearMessages();
 
-		this.selectedBooks = [book, ...this.selectedBooks];
-		this.persistSelectedBooks(this.currentUserId, this.selectedBooks);
-		this.favoriteBooks = this.buildFavoriteBooks(this.profileComments, this.profileBooks, this.selectedBooks);
-		this.successMessage = 'Libro añadido a tu perfil.';
+		if (existingIndex >= 0) {
+			this.selectedBooks = this.updateInArray(this.selectedBooks, book.id, () => nextEntry);
+			this.successMessage = 'Estado del libro actualizado.';
+		} else {
+			this.selectedBooks = [nextEntry, ...this.selectedBooks];
+			this.successMessage = 'Libro añadido a tu perfil.';
+		}
+
+		if (this.currentUserId) this.persistSelectedBooks(this.currentUserId, this.selectedBooks);
+		this.hiddenProfileBookIds = this.removeNumberFromArray(this.hiddenProfileBookIds, book.id);
+		if (this.currentUserId) this.persistHiddenBookIds(this.currentUserId, this.hiddenProfileBookIds);
+		this.favoriteBooks = this.buildFavoriteBooks(this.allComments, this.profileBooks, this.selectedBooks, this.hiddenProfileBookIds);
+		if (this.previewedBook?.id === book.id) {
+			this.previewedBook = null;
+		}
+		this.activeActionMenu = null;
 		this.isSavingBook = false;
 		this.bookSearchOpen = false;
 		this.bookSearchQuery = '';
@@ -463,6 +692,51 @@ export class UsuarioPage implements OnInit {
 		return this.comentarioService.getCommentLikeCount(comment);
 	}
 
+	private resolveCommentRating(comment: Comentario): number {
+		const raw = (comment as any).rating ?? (comment as any).valoracion;
+		const rating = Number(raw);
+		return Number.isFinite(rating) ? rating : 0;
+	}
+
+	private normalizeBookState(state: unknown): BookState {
+		const normalized = String(state ?? '').trim().toLowerCase();
+		if (normalized === 'leido' || normalized === 'leyendo' || normalized === 'abandonado' || normalized === 'favorito') {
+			return normalized;
+		}
+
+		return 'favorito';
+	}
+
+	private getBookStateLabel(state: BookState): string {
+		switch (state) {
+			case 'leido':
+				return 'Leído';
+			case 'leyendo':
+				return 'Leyendo';
+			case 'abandonado':
+				return 'Abandonado';
+			default:
+				return 'Favorito';
+		}
+	}
+
+	private normalizeStoredBookEntry(entry: Partial<ProfileBookEntry>): ProfileBookEntry | null {
+		if (entry.id == null || entry.titulo == null || entry.autor == null) {
+			return null;
+		}
+
+		return {
+			id: Number(entry.id),
+			titulo: String(entry.titulo),
+			autor: String(entry.autor),
+			descripcion: String(entry.descripcion ?? ''),
+			portada: String(entry.portada ?? ''),
+			genero: entry.genero,
+			reviews: entry.reviews,
+			state: this.normalizeBookState(entry.state)
+		};
+	}
+
 	private loadLikedComments(forceRefreshComments = false): void {
 		if (!this.canEditProfile() || this.currentUserId == null) {
 			this.likedComments = [];
@@ -470,10 +744,9 @@ export class UsuarioPage implements OnInit {
 			return;
 		}
 
-		this.comentarioService.getComentarios(forceRefreshComments).subscribe({
-			next: (comments) => {
+		this.withLoadingFlag('likedComments' as any, () => this.comentarioService.getComentarios(forceRefreshComments),
+			(comments: any[]) => {
 				const likedIds = new Set(this.comentarioService.getLikedCommentIds(this.currentUserId));
-
 				this.likedComments = comments
 					.filter((comment) => likedIds.has(comment.id))
 					.sort((left, right) => Number(right.id) - Number(left.id))
@@ -488,18 +761,15 @@ export class UsuarioPage implements OnInit {
 							coverUrl: this.normalizeCoverPath(raw.portada ?? raw.libroData?.portada)
 						} satisfies LikedCommentView;
 					});
-				this.cdr.detectChanges();
 			},
-			error: () => {
+			() => {
 				this.likedComments = [];
-				this.cdr.detectChanges();
 			}
-		});
+		);
 	}
 
 	startEditing(): void {
-		if (!this.canEditProfile()) {
-			this.errorMessage = 'Solo puedes editar tu propio perfil.';
+		if (!this.requireEditPermission('editar el perfil')) {
 			return;
 		}
 
@@ -508,16 +778,14 @@ export class UsuarioPage implements OnInit {
 			email: String(this.user.email ?? ''),
 			descripcion: String(this.user.descripcion ?? '')
 		};
-		this.errorMessage = '';
-		this.successMessage = '';
+		this.clearMessages();
 		this.isEditing = true;
 		this.cdr.detectChanges();
 	}
 
 	cancelEditing(): void {
 		this.isEditing = false;
-		this.errorMessage = '';
-		this.successMessage = '';
+		this.clearMessages();
 		this.editDraft = {
 			nombre: String(this.user.nombre ?? ''),
 			email: String(this.user.email ?? ''),
@@ -538,13 +806,12 @@ export class UsuarioPage implements OnInit {
 
 		const userId = this.currentUserId ?? this.user.id;
 		if (!userId || !this.canEditProfile()) {
-			this.errorMessage = 'No se pudo actualizar el perfil porque no tienes permiso para editarlo.';
+			this.setMessage('error', 'No se pudo actualizar el perfil porque no tienes permiso para editarlo.');
 			return;
 		}
 
 		this.isSaving = true;
-		this.errorMessage = '';
-		this.successMessage = '';
+		this.clearMessages();
 
 		this.usuarioService.updateUsuario(userId, { nombre, email, descripcion }).subscribe({
 			next: (updatedUser) => {
@@ -553,12 +820,12 @@ export class UsuarioPage implements OnInit {
 				this.viewedUserId = updatedUser.id;
 				localStorage.setItem('username', updatedUser.nombre);
 				this.isEditing = false;
-				this.successMessage = 'Perfil actualizado correctamente.';
+				this.setMessage('success', 'Perfil actualizado correctamente.', false);
 				this.isSaving = false;
 				this.cdr.detectChanges();
 			},
 			error: () => {
-				this.errorMessage = 'No se pudo actualizar el perfil.';
+				this.setMessage('error', 'No se pudo actualizar el perfil.', false);
 				this.isSaving = false;
 				this.cdr.detectChanges();
 			}
@@ -574,6 +841,10 @@ export class UsuarioPage implements OnInit {
 
 	openLikedComment(commentId: number): void {
 		this.router.navigate(['/comentarios', commentId]);
+	}
+
+	trackByBookCommentId(index: number, comment: ProfileBookComment): number {
+		return comment.id;
 	}
 
 	private normalizeCoverPath(rawCover?: string): string {
@@ -601,5 +872,182 @@ export class UsuarioPage implements OnInit {
 		}
 
 		this.router.navigate(['/reviews/nueva']);
+	}
+
+	private runDelayedClose(
+		currentTimer: ReturnType<typeof setTimeout> | null,
+		onClose: () => void,
+		delay: number
+	): ReturnType<typeof setTimeout> {
+		if (currentTimer) {
+			clearTimeout(currentTimer);
+		}
+
+		return setTimeout(() => {
+			onClose();
+			this.cdr.detectChanges();
+		}, delay);
+	}
+
+	toggleActionMenu(kind: 'book' | 'comment', id: number): void {
+		const isOpen = this.activeActionMenu?.kind === kind && this.activeActionMenu?.id === id;
+
+		if (isOpen) {
+			this.actionMenuVisible = { kind, id };
+			this.actionMenuCloseTimer = this.runDelayedClose(this.actionMenuCloseTimer, () => {
+				this.activeActionMenu = null;
+				this.actionMenuVisible = null;
+				this.actionMenuCloseTimer = null;
+			}, 140);
+			this.cdr.detectChanges();
+			return;
+		}
+
+		if (this.actionMenuCloseTimer) {
+			clearTimeout(this.actionMenuCloseTimer);
+			this.actionMenuCloseTimer = null;
+		}
+
+		this.activeActionMenu = { kind, id };
+		this.actionMenuVisible = { kind, id };
+		this.cdr.detectChanges();
+	}
+
+	isActionMenuOpen(kind: 'book' | 'comment', id: number): boolean {
+		return this.activeActionMenu?.kind === kind && this.activeActionMenu?.id === id;
+	}
+
+	closeActionMenus(): void {
+		const currentMenu = this.activeActionMenu;
+		if (!currentMenu) {
+			this.actionMenuVisible = null;
+			return;
+		}
+
+		this.actionMenuVisible = { ...currentMenu };
+		this.actionMenuCloseTimer = this.runDelayedClose(this.actionMenuCloseTimer, () => {
+			this.activeActionMenu = null;
+			this.actionMenuVisible = null;
+			this.actionMenuCloseTimer = null;
+		}, 140);
+	}
+
+	openBookPreview(book: ProfileBook, mode: 'view' | 'edit' = 'view'): void {
+		if (this.previewCloseTimer) {
+			clearTimeout(this.previewCloseTimer);
+			this.previewCloseTimer = null;
+		}
+
+		this.previewedBook = book;
+		this.previewMode = mode;
+		this.previewBookState = book.state;
+		this.previewDrawerVisible = true;
+		this.closeActionMenus();
+		this.cdr.detectChanges();
+	}
+
+	openBookPreviewFromComment(book: ProfileBook): void {
+		this.openBookPreview(book, 'view');
+	}
+
+	closeBookPreview(): void {
+		this.previewMode = 'view';
+		this.previewBookState = 'favorito';
+		this.previewDrawerVisible = false;
+		this.previewCloseTimer = this.runDelayedClose(this.previewCloseTimer, () => {
+			this.previewedBook = null;
+			this.previewCloseTimer = null;
+		}, 240);
+	}
+
+	applyPreviewBookState(): void {
+		if (!this.previewedBook || !this.currentUserId) {
+			return;
+		}
+
+		const normalizedState = this.normalizeBookState(this.previewBookState);
+		this.selectedBooks = this.updateInArray(this.selectedBooks, this.previewedBook.id, (book) => ({
+			...book,
+			state: normalizedState
+		}));
+		if (this.currentUserId) this.persistSelectedBooks(this.currentUserId, this.selectedBooks);
+		this.favoriteBooks = this.buildFavoriteBooks(this.allComments, this.profileBooks, this.selectedBooks, this.hiddenProfileBookIds);
+		this.previewedBook = this.favoriteBooks.find((book) => book.id === this.previewedBook?.id) ?? null;
+		if (this.previewedBook) {
+			this.previewBookState = this.previewedBook.state;
+		}
+		this.successMessage = 'Estado del libro actualizado.';
+		this.closeActionMenus();
+		this.cdr.detectChanges();
+	}
+
+	openCommentDetail(commentId: number): void {
+		this.closeActionMenus();
+		this.router.navigate(['/comentarios', commentId]);
+	}
+
+	getBookById(bookId: number): ProfileBook | null {
+		return this.favoriteBooks.find((book) => book.id === bookId) ?? null;
+	}
+
+	deleteBook(bookId: number): void {
+		if (!this.requireEditPermission('eliminar libros')) {
+			return;
+		}
+
+		if (!confirm('¿Estás seguro de que quieres eliminar este libro de tu perfil?')) {
+			return;
+		}
+
+		this.clearMessages();
+
+		// Remove the book from selectedBooks
+		this.selectedBooks = this.removeFromArray(this.selectedBooks, bookId);
+		this.hiddenProfileBookIds = [...new Set([...this.hiddenProfileBookIds, bookId])];
+		
+		// Persist the changes
+		if (this.currentUserId) {
+			this.persistSelectedBooks(this.currentUserId, this.selectedBooks);
+			this.persistHiddenBookIds(this.currentUserId, this.hiddenProfileBookIds);
+		}
+		
+		// Rebuild the favorite books list
+		this.favoriteBooks = this.buildFavoriteBooks(this.allComments, this.profileBooks, this.selectedBooks, this.hiddenProfileBookIds);
+		if (this.previewedBook?.id === bookId) {
+			this.closeBookPreview();
+		}
+		this.closeActionMenus();
+		
+		this.successMessage = 'Libro eliminado de tu perfil.';
+		this.cdr.detectChanges();
+	}
+
+	deleteComment(commentId: number): void {
+		if (!this.requireEditPermission('eliminar comentarios')) {
+			return;
+		}
+
+		if (!confirm('¿Estás seguro de que quieres eliminar este comentario?')) {
+			return;
+		}
+
+		this.clearMessages();
+
+		this.withLoadingFlag('isSaving' as any, () => this.comentarioService.deleteComentario(commentId),
+			() => {
+				// Remove the comment from allComments
+				this.allComments = this.removeFromArray(this.allComments, commentId);
+				this.profileComments = this.removeFromArray(this.profileComments, commentId);
+
+				// Rebuild the favorite books list
+				this.favoriteBooks = this.buildFavoriteBooks(this.allComments, this.profileBooks, this.selectedBooks, this.hiddenProfileBookIds);
+				this.closeActionMenus();
+
+				this.setMessage('success', 'Comentario eliminado correctamente.', false);
+			},
+			() => {
+				this.setMessage('error', 'No se pudo eliminar el comentario. Intenta de nuevo.', false);
+			}
+		);
 	}
 }

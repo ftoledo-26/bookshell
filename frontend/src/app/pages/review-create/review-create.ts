@@ -192,7 +192,7 @@ export class ReviewCreatePage implements OnInit {
       UsuarioId: Number(userId),
       BookId: bookId,
       rating: this.rating,
-      likes: this.rating,
+      likes: 0,
       user: this.loginService.getUsername() ?? undefined,
       comment: text,
       comentario: text,

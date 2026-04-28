@@ -140,13 +140,15 @@ export class Home implements OnInit {
         (bookId != null ? String(bookId) : 'Sin titulo');
 
       const commentText = c.contenido ?? c.comentario ?? c.comment ?? '';
-      const likes = Number(c.likes ?? c.rating ?? c.valoracion ?? 0);
+      const likes = this.comentarioService.getCommentLikeCount(comment);
+      const rating = Number(c.rating ?? c.valoracion ?? 0);
       const cover = c.portada || c.libro?.portada || '';
 
       return {
         ...comment,
         contenido: commentText,
-        likes: Number.isFinite(likes) ? likes : 0,
+        likes,
+        rating: Number.isFinite(rating) ? rating : 0,
         username: userName || (userId != null ? String(userId) : 'Sin usuario'),
         bookTitle: bookTitle || (bookId != null ? String(bookId) : 'Sin titulo'),
         cover
@@ -167,8 +169,9 @@ export class Home implements OnInit {
     const coverByBookId = new Map<number, string>(this.books.map((book) => [book.id, book.portada]));
 
     return shuffledItems.map((item) => {
-      const rawLikes = Number(item.likes ?? 0);
-      const hasRating = (item as any).rating != null || rawLikes > 0;
+      const rawRating = Number((item as any).rating ?? 0);
+      const rawLikes = this.comentarioService.getCommentLikeCount(item);
+      const hasRating = rawRating > 0 || (item as any).rating != null;
 
       return {
         id: item.id,
@@ -176,7 +179,7 @@ export class Home implements OnInit {
         year: '2026',
         username: item.username,
         likes: Number.isFinite(rawLikes) ? rawLikes : 0,
-        score: hasRating ? `${rawLikes.toFixed(1)} / 5` : 'Sin rating',
+        score: hasRating ? `${rawRating.toFixed(1)} / 5` : 'Sin rating',
         hasRating,
         content: item.contenido ?? item.comentario ?? item.comment ?? '',
         cover: coverByBookId.get(Number(item.BookId)) ?? item.cover ?? ''

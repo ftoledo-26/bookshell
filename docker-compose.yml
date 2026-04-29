@@ -52,7 +52,4 @@ services:
 
 volumes:
   node_modules:
-<<<<<<< HEAD
-=======
   db_data:
->>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a

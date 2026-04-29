@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Angular specific
 /dist/
 /out-tsc/
@@ -7,7 +6,6 @@
 /e2e/test-output/
 /.angular/
 .angular/
-vendor/
 storage/
 prueba/
 /node_modules/.bin/architect
@@ -40,7 +38,6 @@ yarn-error.log*
 *.njsproj
 *.sln
 *.sw?
-=======
 *.log
 .DS_Store
 .env
@@ -66,4 +63,3 @@ frontend/
 Homestead.json
 Homestead.yaml
 Thumbs.db
->>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a

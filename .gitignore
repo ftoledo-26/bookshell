@@ -61,7 +61,7 @@ yarn-error.log*
 /public/storage
 /storage/*.key
 /storage/pail
-/vendor
+
 frontend/
 Homestead.json
 Homestead.yaml

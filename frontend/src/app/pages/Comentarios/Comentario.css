@@ -121,6 +121,70 @@
 	overflow-wrap: anywhere;
 }
 
+.edit-panel {
+	display: grid;
+	gap: 0.9rem;
+	padding: 0.95rem;
+	border-radius: 0.9rem;
+	border: 1px solid rgba(255, 225, 178, 0.16);
+	background: rgba(14, 10, 7, 0.48);
+}
+
+.edit-panel label {
+	display: grid;
+	gap: 0.35rem;
+	color: #cfbca2;
+	font-size: 0.92rem;
+}
+
+.edit-panel select,
+.edit-panel textarea {
+	width: 100%;
+	border-radius: 0.8rem;
+	border: 1px solid rgba(255, 225, 178, 0.18);
+	background: rgba(12, 9, 7, 0.76);
+	color: #f7f3eb;
+	padding: 0.8rem 0.9rem;
+	font: inherit;
+}
+
+.edit-panel textarea {
+	min-height: 160px;
+	resize: vertical;
+}
+
+.edit-panel select:focus,
+.edit-panel textarea:focus {
+	outline: 2px solid #ffb14c;
+	outline-offset: 2px;
+}
+
+.edit-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	align-items: center;
+}
+
+.secondary-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0.42rem 0.9rem;
+	border-radius: 999px;
+	border: 1px solid rgba(255, 204, 122, 0.24);
+	background: rgba(14, 10, 7, 0.56);
+	color: #f4dcc2;
+	cursor: pointer;
+	font: inherit;
+	font-weight: 700;
+}
+
+.secondary-button:hover {
+	background: rgba(33, 25, 18, 0.84);
+	border-color: rgba(255, 204, 122, 0.4);
+}
+
 .rating-pill {
 	margin: 0;
 	display: inline-flex;
@@ -205,7 +269,9 @@
 
 .comment-card footer {
 	display: flex;
+	gap: 0.75rem;
 	justify-content: flex-start;
+	flex-wrap: wrap;
 }
 
 .likes {

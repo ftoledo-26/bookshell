@@ -7,6 +7,7 @@
 
 		<p class="status" *ngIf="isLoading">Cargando comentario...</p>
 		<p class="status error" *ngIf="errorMessage">{{ errorMessage }}</p>
+		<p class="status success" *ngIf="successMessage">{{ successMessage }}</p>
 
 		<article class="comment-card" *ngIf="!isLoading && detail">
 			<div class="cover-column">
@@ -27,9 +28,42 @@
 
 				<p class="rating-pill" *ngIf="detail.ratingValue > 0">Puntuacion: {{ detail.ratingValue }} / 5</p>
 
-				<p class="comment-copy">{{ detail.content }}</p>
+				<section class="edit-panel" *ngIf="isEditingComment">
+					<label>
+						<span>Puntuación</span>
+						<select [(ngModel)]="commentRatingDraft" name="commentRatingDraft">
+							<option [ngValue]="1">1</option>
+							<option [ngValue]="2">2</option>
+							<option [ngValue]="3">3</option>
+							<option [ngValue]="4">4</option>
+							<option [ngValue]="5">5</option>
+						</select>
+					</label>
+
+					<label>
+						<span>Comentario</span>
+						<textarea [(ngModel)]="commentDraft" name="commentDraft" rows="5" placeholder="Escribe tu comentario"></textarea>
+					</label>
+
+					<div class="edit-actions">
+						<button type="button" class="like-button" (click)="saveComment()" [disabled]="isSavingComment">
+							<span>{{ isSavingComment ? 'Guardando...' : 'Guardar cambios' }}</span>
+						</button>
+						<button type="button" class="secondary-button" (click)="cancelEditingComment()">Cancelar</button>
+					</div>
+				</section>
+
+				<p class="comment-copy" *ngIf="!isEditingComment">{{ detail.content }}</p>
 
 				<footer>
+					<button
+						type="button"
+						class="secondary-button"
+						*ngIf="detail && !isEditingComment && canEditCurrentComment"
+						(click)="startEditingComment()"
+					>
+						Editar comentario
+					</button>
 					<button
 						type="button"
 						class="like-button"

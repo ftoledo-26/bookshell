@@ -33,12 +33,17 @@ type RawComment = {
   providedIn: 'root'
 })
 export class ComentarioService {
+<<<<<<< HEAD
   private apiUrl = environment.API_URL + 'reviews';
+=======
+  private apiUrl = environment.API_URL + 'comentarios';
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
   private comments$?: Observable<Comentario[]>;
   private readonly commentByIdCache = new Map<number, Observable<Comentario>>();
 
   constructor(private http: HttpClient) {}
 
+<<<<<<< HEAD
   private normalizeComment(input: RawComment): Comentario {
     const normalizedRatingSource = input.rating ?? input.valoracion ?? input.likes;
     const normalizedRating = Number(normalizedRatingSource);
@@ -73,6 +78,21 @@ export class ComentarioService {
     return this.comments$;
   }
 
+=======
+  getComentarios(forceRefresh = false): Observable<Comentario[]> {
+    if (!this.comments$ || forceRefresh) {
+      this.comments$ = this.http
+        .get<ApiResponse<Comentario[]>>(this.apiUrl)
+        .pipe(
+          map((response) => response.data ?? []),
+          shareReplay(1)
+        );
+    }
+
+    return this.comments$;
+  }
+
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
   getComentario(id: number, forceRefresh = false): Observable<Comentario> {
     if (!forceRefresh) {
       const cached = this.commentByIdCache.get(id);
@@ -82,9 +102,15 @@ export class ComentarioService {
     }
 
     const request$ = this.http
+<<<<<<< HEAD
       .get<ApiResponse<RawComment>>(`${this.apiUrl}/${id}`)
       .pipe(
         map((response: ApiResponse<RawComment>) => this.normalizeComment(response.data)),
+=======
+      .get<ApiResponse<Comentario>>(`${this.apiUrl}/${id}`)
+      .pipe(
+        map((response) => response.data),
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
         shareReplay(1)
       );
 
@@ -92,6 +118,7 @@ export class ComentarioService {
     return request$;
   }
 
+<<<<<<< HEAD
   getComentariosByBookId(bookId: number, excludeCommentId?: number, bookTitle?: string): Observable<Comentario[]> {
     const normalizedTitle = (bookTitle ?? '').trim().toLowerCase();
 
@@ -104,6 +131,14 @@ export class ComentarioService {
           const sameBookByTitle = normalizedTitle.length > 0 && currentBookTitle === normalizedTitle;
 
           if (!sameBookById && !sameBookByTitle) {
+=======
+  getComentariosByBookId(bookId: number, excludeCommentId?: number): Observable<Comentario[]> {
+    return this.getComentarios().pipe(
+      map((comments) =>
+        comments.filter((item) => {
+          const currentBookId = Number(item.BookId ?? (item as any).libro_id);
+          if (currentBookId !== Number(bookId)) {
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
             return false;
           }
 

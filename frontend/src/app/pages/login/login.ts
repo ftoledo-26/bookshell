@@ -136,9 +136,14 @@ export class LoginComponent implements OnInit, OnDestroy {
 
     this.loginService.login(this.email, this.password).subscribe({
       next: (response) => {
+<<<<<<< HEAD
         const token = response.access_token ?? response.token;
 
         if (token) {
+=======
+        if (response.token) {
+          localStorage.setItem('token', response.token);
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
           this.router.navigate(['/']);
           return;
         }
@@ -177,6 +182,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       return;
     }
 
+<<<<<<< HEAD
     // Validar que el nombre de usuario no exista
     this.usuarioService.getUsuarios().subscribe({
       next: (users) => {
@@ -210,10 +216,18 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.usuarioService.createUsuario({ nombre, email, password, phone }).subscribe({
       next: () => {
         this.email = email;
+=======
+    this.usuarioService.createUsuario({ nombre, email, password, phone }).subscribe({
+      next: () => {
+        this.successMessage = 'Cuenta creada. Ahora inicia sesión con tus credenciales.';
+        this.email = email;
+        this.password = '';
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
         this.registerName = '';
         this.registerEmail = '';
         this.registerPassword = '';
         this.registerConfirmPassword = '';
+<<<<<<< HEAD
         this.registerPhone = '';
         this.errorMessage = '';
         this.successMessage = 'Cuenta creada correctamente. Iniciando sesión...';
@@ -240,6 +254,9 @@ export class LoginComponent implements OnInit, OnDestroy {
             this.setMode('login');
           }
         });
+=======
+        this.setMode('login');
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
       },
       error: () => {
         this.errorMessage = 'No se pudo crear la cuenta. Verifica el correo e intenta de nuevo.';

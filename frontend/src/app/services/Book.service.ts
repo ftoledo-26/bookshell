@@ -24,6 +24,7 @@ export class BookService {
 
     constructor(private http: HttpClient) {}
 
+<<<<<<< HEAD
     private normalizeCoverPath(portada?: string): string {
         const raw = String(portada ?? '').trim();
         if (!raw) {
@@ -64,6 +65,21 @@ export class BookService {
         return this.books$;
     }
 
+=======
+    getBooks(forceRefresh = false): Observable<Book[]> {
+        if (!this.books$ || forceRefresh) {
+            this.books$ = this.http
+                .get<ApiResponse<Book[]>>(this.apiUrl)
+                .pipe(
+                    map((response) => response.data ?? []),
+                    shareReplay(1)
+                );
+        }
+
+        return this.books$;
+    }
+
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
     getBook(id: number, forceRefresh = false): Observable<Book> {
         if (!forceRefresh) {
             const cached = this.bookByIdCache.get(id);
@@ -75,7 +91,11 @@ export class BookService {
         const request$ = this.http
             .get<ApiResponse<Book>>(`${this.apiUrl}/${id}`)
             .pipe(
+<<<<<<< HEAD
                 map((response) => this.normalizeBook(response.data)),
+=======
+                map((response) => response.data),
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
                 shareReplay(1)
             );
 

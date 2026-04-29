@@ -4,6 +4,7 @@ import { UsuarioPage } from './pages/usuario/usuario';
 import { LoginComponent } from './pages/login/login';
 import { ComentarioPage } from './pages/Comentarios/Comentario';
 import { MiLibreria } from './pages/mi_libreria/mi_libreria';
+<<<<<<< HEAD
 import { ReviewCreatePage } from './pages/review-create';
 import { authGuard } from './guards';
 
@@ -15,5 +16,14 @@ export const routes: Routes = [
 	{ path: 'reviews/nueva', component: ReviewCreatePage, canActivate: [authGuard] },
 	{ path: 'login', component: LoginComponent },
 	{ path: 'mi_libreria', component: MiLibreria, canActivate: [authGuard] },
+=======
+
+export const routes: Routes = [
+	{ path: '', component: Home },
+	{ path: 'comentarios/:id', component: ComentarioPage },
+	{ path: 'usuario', component: UsuarioPage },
+	{ path: 'login', component: LoginComponent },
+	{ path: 'mi_libreria', component: MiLibreria },
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
 	{ path: '**', redirectTo: '' }
 ];

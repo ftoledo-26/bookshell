@@ -183,8 +183,11 @@
 .reviews-scroll {
 	display: grid;
 	gap: 1rem;
+<<<<<<< HEAD
 	width: 100%;
 	max-width: 100%;
+=======
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
 }
 
 .review-card {
@@ -196,21 +199,35 @@
 	border: 1px solid rgba(255, 225, 178, 0.18);
 	border-radius: 1rem;
 	padding: 1.1rem;
+<<<<<<< HEAD
 	background:
 		radial-gradient(circle at 14% 14%, rgba(255, 177, 89, 0.08), transparent 26%),
 		linear-gradient(180deg, rgba(27, 18, 14, 0.8), rgba(18, 12, 9, 0.94));
 	cursor: pointer;
 	transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+=======
+	background: linear-gradient(180deg, #121c27, var(--bg-card));
+	cursor: pointer;
+	transition: transform 180ms ease, border-color 180ms ease;
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
 }
 
 .review-card:hover {
 	transform: translateY(-2px);
+<<<<<<< HEAD
 	border-color: rgba(255, 204, 122, 0.42);
 	box-shadow: 0 16px 36px rgba(0, 0, 0, 0.26);
 }
 
 .review-card:focus-visible {
 	outline: 2px solid #ffcc7a;
+=======
+	border-color: #3a5a77;
+}
+
+.review-card:focus-visible {
+	outline: 2px solid #9dc8ff;
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
 	outline-offset: 2px;
 }
 
@@ -314,6 +331,7 @@
 
 @media (max-width: 640px) {
 	.home-shell {
+<<<<<<< HEAD
 		padding: 0.6rem;
 		overflow-x: hidden;
 		background:
@@ -336,6 +354,13 @@
 		font-size: 1.55rem;
 		top: -0.1rem;
 		right: 0;
+=======
+		padding: 0.75rem;
+	}
+
+	.hero-head h1 {
+		font-size: clamp(1.8rem, 10vw, 2.3rem);
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
 	}
 
 	.hero-head p,
@@ -344,6 +369,7 @@
 		font-size: 0.96rem;
 	}
 
+<<<<<<< HEAD
 	.hero-head p {
 		max-width: 100%;
 		line-height: 1.5;
@@ -352,10 +378,15 @@
 	.section-head h2 {
 		font-size: 1.1rem;
 		letter-spacing: 0.06em;
+=======
+	.section-head h2 {
+		font-size: 1.1rem;
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
 	}
 
 	.recommended-zone,
 	.reviews-zone {
+<<<<<<< HEAD
 		padding: 0.75rem;
 		border-radius: 1rem;
 	}
@@ -386,6 +417,19 @@
 		min-width: 0;
 		gap: 0.7rem;
 		padding: 0.7rem;
+=======
+		padding: 0.8rem;
+	}
+
+	.recommended-strip {
+		grid-auto-columns: minmax(120px, 42vw);
+	}
+
+	.review-card {
+		grid-template-columns: 1fr;
+		gap: 0.9rem;
+		padding: 0.9rem;
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
 	}
 
 	.review-cover {
@@ -403,6 +447,7 @@
 	}
 
 	.review-body h3 {
+<<<<<<< HEAD
 		font-size: 1.08rem;
 		line-height: 1.15;
 		word-break: break-word;
@@ -431,5 +476,13 @@
 	.status {
 		font-size: 0.95rem;
 		line-height: 1.45;
+=======
+		font-size: 1.45rem;
+	}
+
+	.review-copy {
+		font-size: 1rem;
+		line-height: 1.55;
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
 	}
 }

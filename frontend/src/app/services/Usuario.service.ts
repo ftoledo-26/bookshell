@@ -9,21 +9,29 @@ interface ApiResponse<T> {
   data: T;
 }
 
+<<<<<<< HEAD
 type RawUsuario = Partial<Usuario> & { name?: string, reviews?: any[], likes?: any[], descripcion?: string };
 
+=======
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
 @Injectable({
   providedIn: 'root'
 })
 export class UsuarioService {
+<<<<<<< HEAD
   private apiUrlGet = environment.API_URL + 'usuarios';
   private apiUrlSearch = environment.API_URL + 'usuarios/buscar/';
   private apiUrlUpdate = environment.API_URL + 'users';
   private apiUrlCreate = environment.API_URL + 'register';
+=======
+  private apiUrl = environment.API_URL + 'usuarios';
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
   private users$?: Observable<Usuario[]>;
   private readonly userByIdCache = new Map<number, Observable<Usuario>>();
 
   constructor(private http: HttpClient) {}
 
+<<<<<<< HEAD
   private normalizeUsuario(input: RawUsuario | null | undefined): Usuario {
     const raw = input ?? {};
 
@@ -50,6 +58,14 @@ export class UsuarioService {
             const rawUsers: RawUsuario[] = response?.data ?? response ?? [];
             return Array.isArray(rawUsers) ? rawUsers.map((item) => this.normalizeUsuario(item)) : [];
           }),
+=======
+  getUsuarios(forceRefresh = false): Observable<Usuario[]> {
+    if (!this.users$ || forceRefresh) {
+      this.users$ = this.http
+        .get<ApiResponse<Usuario[]>>(this.apiUrl)
+        .pipe(
+          map((response) => response.data ?? []),
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
           shareReplay(1)
         );
     }
@@ -66,9 +82,15 @@ export class UsuarioService {
     }
 
     const request$ = this.http
+<<<<<<< HEAD
       .get<ApiResponse<RawUsuario> | RawUsuario>(`${this.apiUrlGet}/${id}`)
       .pipe(
         map((response: any) => this.normalizeUsuario(response?.data ?? response)),
+=======
+      .get<ApiResponse<Usuario>>(`${this.apiUrl}/${id}`)
+      .pipe(
+        map((response: any) => response?.data ?? response),
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
         shareReplay(1)
       );
 
@@ -76,6 +98,7 @@ export class UsuarioService {
     return request$;
   }
 
+<<<<<<< HEAD
   searchUsuarios(query: string): Observable<Usuario[]> {
     const term = query.trim();
 
@@ -124,6 +147,13 @@ export class UsuarioService {
       .put<ApiResponse<RawUsuario> | { data?: RawUsuario }>(`${this.apiUrlUpdate}/${id}`, apiPayload)
       .pipe(
         map((response: any) => this.normalizeUsuario(response?.data ?? response)),
+=======
+  updateUsuario(id: number, payload: Partial<Pick<Usuario, 'nombre' | 'email' | 'password' | 'foto' | 'rol'>>): Observable<Usuario> {
+    return this.http
+      .put<ApiResponse<Usuario> | { data?: Usuario }>(`${this.apiUrl}/${id}`, payload)
+      .pipe(
+        map((response: any) => response?.data ?? response),
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
         map((response) => {
           this.userByIdCache.delete(id);
           this.users$ = undefined;
@@ -133,6 +163,7 @@ export class UsuarioService {
   }
 
   createUsuario(payload: Pick<Usuario, 'nombre' | 'email' | 'password' | 'phone'>): Observable<Usuario> {
+<<<<<<< HEAD
     const apiPayload = {
       name: payload.nombre,
       email: payload.email,
@@ -144,6 +175,12 @@ export class UsuarioService {
       .post<ApiResponse<RawUsuario> | { data?: RawUsuario }>(this.apiUrlCreate, apiPayload)
       .pipe(
         map((response: any) => this.normalizeUsuario(response?.data ?? response)),
+=======
+    return this.http
+      .post<ApiResponse<Usuario> | { data?: Usuario }>(this.apiUrl, payload)
+      .pipe(
+        map((response: any) => response?.data ?? response),
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
         map((response) => {
           this.users$ = undefined;
           return response;

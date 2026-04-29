@@ -21,10 +21,14 @@
 					<span>Email</span>
 					<input type="email" [(ngModel)]="editDraft.email" name="email" autocomplete="email" />
 				</label>
+<<<<<<< HEAD
 			<label>
 				<span>Descripcion</span>
 				<textarea [(ngModel)]="editDraft.descripcion" name="descripcion" placeholder="Cuentanos sobre ti..." rows="4"></textarea>
 			</label>
+=======
+
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
 				<div class="editor-actions">
 					<button type="submit" class="btn-save" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar cambios' }}</button>
 					<button type="button" class="btn-cancel" (click)="cancelEditing()">Cancelar</button>
@@ -41,7 +45,11 @@
 		<div class="hero-copy">
 			<div class="hero-actions">
 				<h1>{{ user.nombre }}</h1>
+<<<<<<< HEAD
 				<button type="button" class="btn-edit" *ngIf="canEditProfile()" (click)="startEditing()">Modificar usuario</button>
+=======
+				<button type="button" class="btn-edit" (click)="startEditing()">Modificar usuario</button>
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
 			</div>
 			<p class="hero-subtitle">{{ user.descripcion || 'Sin descripción disponible.' }}</p>
 		</div>
@@ -139,9 +147,12 @@
 				<header class="panel-head">
 					<h2>Reviews</h2>
 					<span>Reseñas y actividad reciente.</span>
+<<<<<<< HEAD
 					<button type="button" class="btn-edit panel-action" *ngIf="activeTab === 'Reviews' && canEditProfile()" (click)="goToCreateReview()">
 						Añadir review
 					</button>
+=======
+>>>>>>> d4152f23f0aec8dabcc646bacdf83f51a6eddf0a
 				</header>
 
 				<div class="activity-list">

@@ -1,0 +1,23 @@
+name: Deploy Back
+
+on:
+  push:
+    branches: [ "Back" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Deploy Back
+      uses: appleboy/ssh-action@v0.1.10
+      with:
+        host: ${{ secrets.BACK_HOST }}
+        username: ubuntu
+        key: ${{ secrets.SSH_KEY }}
+        script: |
+          cd /var/www/back
+          git pull origin Back
+          composer install --no-interaction
+          php artisan migrate --force
+          php artisan config:cache

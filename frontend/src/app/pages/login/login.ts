@@ -177,6 +177,36 @@ export class LoginComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Validar que el nombre de usuario no exista
+    this.usuarioService.getUsuarios().subscribe({
+      next: (users) => {
+        const userExists = users.some(u => 
+          String(u.nombre ?? '').trim().toLowerCase() === nombre.toLowerCase()
+        );
+        
+        if (userExists) {
+          this.errorMessage = 'El nombre de usuario ya existe. Elige otro.';
+          return;
+        }
+
+        const emailExists = users.some(u =>
+          String(u.email ?? '').trim().toLowerCase() === email.toLowerCase()
+        );
+
+        if (emailExists) {
+          this.errorMessage = 'El correo electrónico ya existe. Usa otro o inicia sesión.';
+          return;
+        }
+
+        this.proceedWithRegistration(nombre, email, password, phone);
+      },
+      error: () => {
+        this.errorMessage = 'No se pudo validar la disponibilidad del usuario. Intenta de nuevo.';
+      }
+    });
+  }
+
+  private proceedWithRegistration(nombre: string, email: string, password: string, phone: string): void {
     this.usuarioService.createUsuario({ nombre, email, password, phone }).subscribe({
       next: () => {
         this.email = email;

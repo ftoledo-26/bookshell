@@ -6,4 +6,7 @@ export interface Usuario {
     rol: string;
     foto: string;
     phone: string;
+    descripcion?: string;
+    reviews?: any[];
+    likes?: any[];
 }

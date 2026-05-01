@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { catchError, finalize, forkJoin, map, of, switchMap, timeout } from 'rxjs';
 import { Book } from '../../models/Book';
@@ -7,11 +8,13 @@ import { Comentario } from '../../models/Comentario';
 import { Usuario } from '../../models/Usuario';
 import { BookService } from '../../services/Book.service';
 import { ComentarioService } from '../../services/Comentario.service';
+import { LoginService } from '../../services/Login.service';
 import { UsuarioService } from '../../services/Usuario.service';
 
 
 type CommentDetailView = {
 	id: number;
+	ownerId: number | null;
 	bookId: number | null;
 	bookTitleRaw: string;
 	username: string;
@@ -19,6 +22,7 @@ type CommentDetailView = {
 	author: string;
 	content: string;
 	likes: number;
+	likedByCurrentUser: boolean;
 	ratingValue: number;
 	ratingCount: number;
 	reviewCount: number;
@@ -31,18 +35,21 @@ type RelatedCommentView = {
 	username: string;
 	content: string;
 	likes: number;
+	ratingValue: number;
+	likedByCurrentUser: boolean;
 	hasRating: boolean;
 };
 
 @Component({
 	selector: 'app-comentario-page',
 	standalone: true,
-	imports: [CommonModule],
+	imports: [CommonModule, FormsModule],
 	templateUrl: './Comentario.html',
 	styleUrls: ['./Comentario.css']
 })
 export class ComentarioPage implements OnInit {
      private readonly cdr = inject(ChangeDetectorRef);
+	private readonly loginService = inject(LoginService);
 	detail: CommentDetailView | null = null;
 	relatedComments: RelatedCommentView[] = [];
 	isLoading = true;
@@ -54,6 +61,14 @@ export class ComentarioPage implements OnInit {
 	private readonly comentarioService = inject(ComentarioService);
 	private readonly bookService = inject(BookService);
 	private readonly usuarioService = inject(UsuarioService);
+	private currentUserId: number | null = this.loginService.getUserId();
+	commentSource: Comentario | null = null;
+	commentDraft = '';
+	commentRatingDraft = 0;
+	isEditingComment = false;
+	isSavingComment = false;
+	canEditCurrentComment = false;
+	successMessage = '';
 
 	ngOnInit(): void {
 		window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
@@ -75,6 +90,11 @@ export class ComentarioPage implements OnInit {
 		this.isLoadingRelated = true;
 		this.errorMessage = '';
 		this.detail = null;
+		this.commentSource = null;
+		this.isEditingComment = false;
+		this.isSavingComment = false;
+		this.canEditCurrentComment = false;
+		this.successMessage = '';
 		this.relatedComments = [];
 
 		this.comentarioService
@@ -148,7 +168,12 @@ export class ComentarioPage implements OnInit {
                         return;
                     }
 					const resolvedBook = this.resolveBookFromComment(comment, book, books);
+					this.commentSource = comment;
 					this.detail = this.mapCommentDetail(comment, resolvedBook, users);
+					this.commentDraft = this.detail.content;
+					this.commentRatingDraft = this.detail.ratingValue > 0 ? this.detail.ratingValue : 0;
+					this.canEditCurrentComment = this.canEditComment(comment);
+					this.isEditingComment = this.canEditCurrentComment;
 					this.loadRelatedComments(this.detail.bookId, this.detail.bookTitleRaw, comment.id, users);
 					this.cdr.markForCheck();
                     },
@@ -214,10 +239,11 @@ export class ComentarioPage implements OnInit {
 		const rawTitle = String(c.libro ?? c.libroTitulo ?? c.title ?? c.titulo ?? book?.titulo ?? '').trim();
 		const normalizedLikes = this.resolveCommentLikes(comment);
 		const ratingStats = this.getBookRatingStats(book);
-		const ratingValue = ratingStats.count > 0 ? ratingStats.average : normalizedLikes;
+		const ratingValue = ratingStats.count > 0 ? ratingStats.average : this.resolveCommentRating(comment);
 
 		return {
 			id: comment.id,
+			ownerId: userId != null ? Number(userId) : null,
 			bookId: bookId != null ? Number(bookId) : (book?.id ?? null),
 			bookTitleRaw: rawTitle,
 			username: c.user || c.nombre || c.usuario?.nombre || c.usuarioNombre || c.username || user?.nombre || 'Usuario desconocido',
@@ -225,12 +251,112 @@ export class ComentarioPage implements OnInit {
 			author: book?.autor || 'Autor no disponible',
 			content: c.contenido ?? c.comentario ?? c.comment ?? '',
 			likes: normalizedLikes,
+			likedByCurrentUser: this.comentarioService.isCommentLikedByUser(comment.id, this.currentUserId),
 			ratingValue: Number.isFinite(ratingValue) ? ratingValue : 0,
 			ratingCount: ratingStats.count,
 			reviewCount: ratingStats.total,
 			hasBookRating: ratingStats.count > 0,
 			coverUrl: this.normalizeCoverPath(c.portada || book?.portada)
 		};
+	}
+
+	canEditComment(comment?: Comentario | null): boolean {
+		if (!comment || this.currentUserId == null) {
+			return false;
+		}
+
+		const raw = comment as any;
+		const ownerId = raw.UsuarioId ?? raw.usuario_id;
+		return ownerId != null && Number(ownerId) === Number(this.currentUserId);
+	}
+
+	startEditingComment(): void {
+		if (!this.commentSource || !this.canEditComment(this.commentSource)) {
+			return;
+		}
+
+		this.commentDraft = String(this.detail?.content ?? this.commentDraft ?? '');
+		this.commentRatingDraft = this.detail?.ratingValue ?? 0;
+		this.isEditingComment = true;
+		this.errorMessage = '';
+		this.cdr.markForCheck();
+	}
+
+	cancelEditingComment(): void {
+		if (!this.detail) {
+			return;
+		}
+
+		this.commentDraft = this.detail.content;
+		this.commentRatingDraft = this.detail.ratingValue;
+		this.isEditingComment = false;
+		this.errorMessage = '';
+		this.cdr.markForCheck();
+	}
+
+	saveComment(): void {
+		if (!this.detail || !this.commentSource || !this.canEditComment(this.commentSource)) {
+			return;
+		}
+
+		const nextContent = this.commentDraft.trim();
+		const nextRating = Number(this.commentRatingDraft);
+
+		if (!nextContent) {
+			this.errorMessage = 'Escribe un comentario antes de guardar.';
+			this.cdr.markForCheck();
+			return;
+		}
+
+		if (!Number.isFinite(nextRating) || nextRating < 1 || nextRating > 5) {
+			this.errorMessage = 'Selecciona una puntuación de 1 a 5.';
+			this.cdr.markForCheck();
+			return;
+		}
+
+		this.isSavingComment = true;
+		this.errorMessage = '';
+
+		const payload: Comentario = {
+			...this.commentSource,
+			id: this.commentSource.id,
+			UsuarioId: this.detail.ownerId ?? this.commentSource.UsuarioId,
+			BookId: this.detail.bookId ?? this.commentSource.BookId,
+			rating: nextRating,
+			likes: this.detail.likes,
+			user: this.detail.username,
+			libro: this.detail.bookTitleRaw || this.detail.bookTitle,
+			portada: this.detail.coverUrl,
+			comment: nextContent,
+			comentario: nextContent,
+			contenido: nextContent
+		};
+
+		this.comentarioService.updateComentario(this.commentSource.id, payload).subscribe({
+			next: (updatedComment) => {
+				this.commentSource = updatedComment;
+						if (this.detail) {
+							this.detail = {
+								...this.detail,
+								content: nextContent,
+								ratingValue: nextRating,
+								bookId: this.commentSource?.BookId != null ? Number(this.commentSource.BookId) : this.detail.bookId,
+								ownerId: this.detail.ownerId ?? this.currentUserId
+							};
+						}
+				this.commentDraft = nextContent;
+				this.commentRatingDraft = nextRating;
+				this.isEditingComment = false;
+				this.isSavingComment = false;
+				this.successMessage = 'Comentario actualizado correctamente.';
+				this.cdr.markForCheck();
+			},
+			error: () => {
+				this.isSavingComment = false;
+				this.errorMessage = 'No se pudo actualizar el comentario.';
+				this.cdr.markForCheck();
+			}
+		});
 	}
 
 	private mapRelatedComments(comments: Comentario[], users: Usuario[]): RelatedCommentView[] {
@@ -244,7 +370,9 @@ export class ComentarioPage implements OnInit {
 				username: c.user || c.nombre || c.usuario?.nombre || c.usuarioNombre || c.username || user?.nombre || 'Usuario desconocido',
 				content: c.contenido ?? c.comentario ?? c.comment ?? '',
 				likes: this.resolveCommentLikes(comment),
-				hasRating: this.resolveCommentLikes(comment) > 0
+				ratingValue: this.resolveCommentRating(comment),
+				likedByCurrentUser: this.comentarioService.isCommentLikedByUser(comment.id, this.currentUserId),
+				hasRating: this.resolveCommentRating(comment) > 0
 			};
 		});
 	}
@@ -254,10 +382,53 @@ export class ComentarioPage implements OnInit {
 	}
 
 	private resolveCommentLikes(comment: Comentario): number {
+		return this.comentarioService.getCommentLikeCount(comment);
+	}
+
+	private resolveCommentRating(comment: Comentario): number {
 		const c = comment as any;
-		const rawLikes = c.likes ?? c.likes_count ?? c.rating ?? 0;
-		const likes = Number(rawLikes);
-		return Number.isFinite(likes) ? likes : 0;
+		const rawRating = c.rating ?? c.valoracion;
+		const rating = Number(rawRating);
+		return Number.isFinite(rating) ? rating : 0;
+	}
+
+	toggleLike(commentId: number, isRelated = false): void {
+		const targetComment = isRelated
+			? this.relatedComments.find((comment) => comment.id === commentId)
+			: this.detail;
+
+		if (!targetComment) {
+			return;
+		}
+
+		const nextState = this.comentarioService.toggleCommentLike(
+			{ id: targetComment.id, likes: targetComment.likes },
+			this.currentUserId
+		);
+
+		if (!isRelated && this.detail) {
+			this.detail = {
+				...this.detail,
+				likes: nextState.likes,
+				likedByCurrentUser: nextState.liked
+			};
+		}
+
+		if (isRelated) {
+			this.relatedComments = this.relatedComments.map((comment) =>
+				comment.id === commentId
+					? { ...comment, likes: nextState.likes, likedByCurrentUser: nextState.liked }
+					: comment
+			);
+		} else {
+			this.relatedComments = this.relatedComments.map((comment) =>
+				comment.id === commentId
+					? { ...comment, likes: nextState.likes, likedByCurrentUser: nextState.liked }
+					: comment
+			);
+		}
+
+		this.cdr.markForCheck();
 	}
 
 	private getBookRatingStats(book: Book | null): { average: number; count: number; total: number } {

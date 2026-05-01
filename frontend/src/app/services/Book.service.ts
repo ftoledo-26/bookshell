@@ -89,10 +89,15 @@ export class BookService {
             .pipe(map((response) => response.data));
     }
 
-    searchBook(query: string): Observable<Book[]>{
+    searchBook(query: string): Observable<Book[]> {
+        const normalizedQuery = encodeURIComponent(query.trim());
+
         return this.http
-            .get<ApiResponse<Book[]>>(`${this.apiUrl}/search?query=${query}`)
-            .pipe(map((response) => response.data ?? []));
+            .get<ApiResponse<Book[]> | Book[]>(`${this.apiUrl}/buscar/${normalizedQuery}`)
+            .pipe(
+                map((response) => Array.isArray(response) ? response : (response.data ?? [])),
+                map((books) => books.map((book) => this.normalizeBook(book)))
+            );
     }
     
 

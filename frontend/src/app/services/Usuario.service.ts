@@ -9,13 +9,14 @@ interface ApiResponse<T> {
   data: T;
 }
 
-type RawUsuario = Partial<Usuario> & { name?: string };
+type RawUsuario = Partial<Usuario> & { name?: string, reviews?: any[], likes?: any[], descripcion?: string };
 
 @Injectable({
   providedIn: 'root'
 })
 export class UsuarioService {
   private apiUrlGet = environment.API_URL + 'usuarios';
+  private apiUrlSearch = environment.API_URL + 'usuarios/buscar/';
   private apiUrlUpdate = environment.API_URL + 'users';
   private apiUrlCreate = environment.API_URL + 'register';
   private users$?: Observable<Usuario[]>;
@@ -33,7 +34,10 @@ export class UsuarioService {
       password: String(raw.password ?? ''),
       rol: String(raw.rol ?? 'usuario'),
       foto: String(raw.foto ?? ''),
-      phone: String(raw.phone ?? '')
+      phone: String(raw.phone ?? ''),
+      descripcion: String(raw.descripcion ?? ''),
+      reviews: raw.reviews ?? [],
+      likes: raw.likes ?? []
     };
   }
 
@@ -72,7 +76,24 @@ export class UsuarioService {
     return request$;
   }
 
-  updateUsuario(id: number, payload: Partial<Pick<Usuario, 'nombre' | 'email' | 'password' | 'foto' | 'rol'>>): Observable<Usuario> {
+  searchUsuarios(query: string): Observable<Usuario[]> {
+    const term = query.trim();
+
+    if (!term) {
+      return this.getUsuarios();
+    }
+
+    return this.http
+      .get<ApiResponse<RawUsuario[]> | RawUsuario[]>(`${this.apiUrlSearch}${encodeURIComponent(term)}`)
+      .pipe(
+        map((response: any) => {
+          const rawUsers: RawUsuario[] = response?.data ?? response ?? [];
+          return Array.isArray(rawUsers) ? rawUsers.map((item) => this.normalizeUsuario(item)) : [];
+        })
+      );
+  }
+
+  updateUsuario(id: number, payload: Partial<Pick<Usuario, 'nombre' | 'email' | 'password' | 'foto' | 'rol' | 'descripcion'>>): Observable<Usuario> {
     const apiPayload: Record<string, unknown> = {};
 
     if (payload.nombre != null) {
@@ -93,6 +114,10 @@ export class UsuarioService {
 
     if (payload.rol != null) {
       apiPayload['rol'] = payload.rol;
+    }
+
+    if (payload.descripcion != null) {
+      apiPayload['descripcion'] = payload.descripcion;
     }
 
     return this.http

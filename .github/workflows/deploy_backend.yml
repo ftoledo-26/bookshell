@@ -95,11 +95,14 @@ jobs:
             fi
 
             # ── Actualizar credenciales DB siempre (por si cambia el RDS) ─
-            sudo sed -i "s|DB_CONNECTION=.*|DB_CONNECTION=mysql|"                          /var/www/back/.env
-            sudo sed -i "s|DB_HOST=.*|DB_HOST=${{ secrets.RDS_ENDPOINT }}|"               /var/www/back/.env
-            sudo sed -i "s|DB_DATABASE=.*|DB_DATABASE=laravel|"                           /var/www/back/.env
-            sudo sed -i "s|DB_USERNAME=.*|DB_USERNAME=laravel|"                           /var/www/back/.env
-            sudo sed -i "s|DB_PASSWORD=.*|DB_PASSWORD=${{ secrets.TF_VAR_DB_PASSWORD }}|" /var/www/back/.env
+            # Las lineas DB_* en el .env.example de Laravel vienen comentadas (# DB_HOST=...)
+            # Los patrones ^#\? *DB_*= manejan tanto lineas comentadas como no comentadas
+            sudo sed -i "s|^DB_CONNECTION=.*|DB_CONNECTION=mysql|"                                      /var/www/back/.env
+            sudo sed -i "s|^#\? *DB_HOST=.*|DB_HOST=${{ secrets.RDS_ENDPOINT }}|"                 /var/www/back/.env
+            sudo sed -i "s|^#\? *DB_PORT=.*|DB_PORT=3306|"                                          /var/www/back/.env
+            sudo sed -i "s|^#\? *DB_DATABASE=.*|DB_DATABASE=laravel|"                               /var/www/back/.env
+            sudo sed -i "s|^#\? *DB_USERNAME=.*|DB_USERNAME=laravel|"                               /var/www/back/.env
+            sudo sed -i "s|^#\? *DB_PASSWORD=.*|DB_PASSWORD=${{ secrets.TF_VAR_DB_PASSWORD }}|"   /var/www/back/.env
 
             # ── Actualizar codigo y dependencias ─────────────────────────
             cd /var/www/back

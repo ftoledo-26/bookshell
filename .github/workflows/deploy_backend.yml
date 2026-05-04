@@ -41,8 +41,8 @@ jobs:
           script: |
             set -e
 
-            # ── Primer arranque: instalar software y clonar ───────────────
-            if [ ! -d "/var/www/back/.git" ]; then
+            # ── Instalar PHP/Composer/Apache si no estan presentes ────────
+            if ! command -v composer &> /dev/null; then
               echo "==> Instalando dependencias del sistema..."
               export DEBIAN_FRONTEND=noninteractive
               sudo apt-get update -y -q
@@ -61,22 +61,6 @@ jobs:
 
               sudo a2enmod rewrite
 
-              echo "==> Clonando repositorio..."
-              sudo git clone -b Back --single-branch \
-                https://github.com/ftoledo-26/bookshell.git /var/www/back
-
-              echo "==> Configurando .env..."
-              sudo cp /var/www/back/.env.example /var/www/back/.env
-              sudo sed -i "s|DB_CONNECTION=.*|DB_CONNECTION=mysql|"                              /var/www/back/.env
-              sudo sed -i "s|DB_HOST=.*|DB_HOST=${{ secrets.RDS_ENDPOINT }}|"                   /var/www/back/.env
-              sudo sed -i "s|DB_DATABASE=.*|DB_DATABASE=laravel|"                               /var/www/back/.env
-              sudo sed -i "s|DB_USERNAME=.*|DB_USERNAME=laravel|"                               /var/www/back/.env
-              sudo sed -i "s|DB_PASSWORD=.*|DB_PASSWORD=${{ secrets.TF_VAR_DB_PASSWORD }}|"     /var/www/back/.env
-
-              cd /var/www/back
-              sudo composer install --no-dev --optimize-autoloader
-              sudo php artisan key:generate --force
-
               # VirtualHost para Laravel
               sudo tee /etc/apache2/sites-available/000-default.conf > /dev/null <<'VHOST'
             <VirtualHost *:80>
@@ -92,23 +76,41 @@ jobs:
             VHOST
 
               sudo systemctl enable apache2
-              sudo systemctl restart apache2
-
-            # ── Actualizacion normal ──────────────────────────────────────
-            else
-              cd /var/www/back
-              sudo git pull origin Back
-              sudo composer install --no-dev --optimize-autoloader
             fi
 
-            # ── Pasos comunes (siempre) ───────────────────────────────────
+            # ── Clonar repo si el directorio no existe o esta incompleto ─
+            if [ ! -d "/var/www/back/.git" ]; then
+              echo "==> Clonando repositorio..."
+              sudo rm -rf /var/www/back
+              sudo git clone -b Back --single-branch \
+                https://github.com/ftoledo-26/bookshell.git /var/www/back
+            fi
+
+            # ── Configurar .env si no existe ─────────────────────────────
+            if [ ! -f "/var/www/back/.env" ]; then
+              echo "==> Configurando .env..."
+              sudo cp /var/www/back/.env.example /var/www/back/.env
+              sudo sed -i "s|DB_CONNECTION=.*|DB_CONNECTION=mysql|"                              /var/www/back/.env
+              sudo sed -i "s|DB_HOST=.*|DB_HOST=${{ secrets.RDS_ENDPOINT }}|"                   /var/www/back/.env
+              sudo sed -i "s|DB_DATABASE=.*|DB_DATABASE=laravel|"                               /var/www/back/.env
+              sudo sed -i "s|DB_USERNAME=.*|DB_USERNAME=laravel|"                               /var/www/back/.env
+              sudo sed -i "s|DB_PASSWORD=.*|DB_PASSWORD=${{ secrets.TF_VAR_DB_PASSWORD }}|"     /var/www/back/.env
+              cd /var/www/back
+              sudo php artisan key:generate --force
+            fi
+
+            # ── Actualizar codigo y dependencias ─────────────────────────
             cd /var/www/back
+            sudo git pull origin Back
+            sudo composer install --no-dev --optimize-autoloader
+
+            # ── Pasos comunes ─────────────────────────────────────────────
             sudo php artisan migrate --force
             sudo php artisan config:cache
             sudo php artisan route:cache
             sudo php artisan view:cache
             sudo chown -R www-data:www-data /var/www/back/storage /var/www/back/bootstrap/cache
             sudo chmod -R 775 /var/www/back/storage /var/www/back/bootstrap/cache
-            sudo systemctl reload apache2
+            sudo systemctl restart apache2
 
             echo "Backend desplegado — $(date)"

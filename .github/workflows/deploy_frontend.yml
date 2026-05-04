@@ -51,11 +51,13 @@ jobs:
             cd /var/www/front
 
             sudo git pull origin Front
+
+            cd /var/www/front/frontend
             sudo npm install
             sudo npm run build -- --configuration production
 
             sudo rm -rf /var/www/html/*
-            DIST_DIR=$(find /var/www/front/dist -name "index.html" -exec dirname {} \; | head -1)
+            DIST_DIR=$(find /var/www/front/frontend/dist -name "index.html" -exec dirname {} \; | head -1)
             sudo cp -r $DIST_DIR/* /var/www/html/
 
             sudo systemctl reload apache2

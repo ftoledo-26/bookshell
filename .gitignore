@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 # Angular specific
 /dist/
 /out-tsc/
@@ -41,6 +42,8 @@ yarn-error.log*
 *.sln
 *.sw?
 =======
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 *.log
 .DS_Store
 .env
@@ -61,8 +64,8 @@ yarn-error.log*
 /public/storage
 /storage/*.key
 /storage/pail
-/vendor
+
+frontend/
 Homestead.json
 Homestead.yaml
 Thumbs.db
->>>>>>> 384a96518823ea7ec00162070e0dd0b99a4e44be

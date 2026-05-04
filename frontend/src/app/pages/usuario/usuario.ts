@@ -1,4 +1,5 @@
 import { CommonModule } from '@angular/common';
+<<<<<<< HEAD
 import { ChangeDetectorRef, Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -10,6 +11,12 @@ import { Usuario } from '../../models/Usuario';
 import { BookService } from '../../services/Book.service';
 import { ComentarioService } from '../../services/Comentario.service';
 import { LoginService } from '../../services/Login.service';
+=======
+import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { catchError, map, of } from 'rxjs';
+import { Usuario } from '../../models/Usuario';
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 import { UsuarioService } from '../../services/Usuario.service';
 
 type ProfileMetric = {
@@ -55,6 +62,7 @@ type ProfileActivity = {
 	time: string;
 };
 
+<<<<<<< HEAD
 type LikedCommentView = {
 	id: number;
 	bookTitle: string;
@@ -78,6 +86,8 @@ type EmbeddedUserReview = {
 	libroData?: { titulo?: string; portada?: string };
 };
 
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 type ProfileTab = 'Profile' | 'Books' | 'Reviews' | 'Likes';
 
 @Component({
@@ -88,6 +98,7 @@ type ProfileTab = 'Profile' | 'Books' | 'Reviews' | 'Likes';
 	styleUrls: ['./usuario.css']
 })
 export class UsuarioPage implements OnInit {
+<<<<<<< HEAD
 	private readonly loginService = inject(LoginService);
 	private readonly usuarioService = inject(UsuarioService);
 	private readonly comentarioService = inject(ComentarioService);
@@ -161,20 +172,36 @@ export class UsuarioPage implements OnInit {
 
 	user: Usuario = {
 		id: 0,
+=======
+	// Cambia este ID aqui si quieres apuntar a otro usuario de prueba en el futuro.
+	private readonly profileUserId = 1;
+	private readonly usuarioService = inject(UsuarioService);
+	private readonly cdr = inject(ChangeDetectorRef);
+
+	user: Usuario = {
+		id: this.profileUserId,
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 		nombre: 'Cargando...',
 		email: '',
 		password: '',
 		rol: 'usuario',
 		foto: '',
+<<<<<<< HEAD
 		phone: '',
 		descripcion: '',
 		reviews: [],
 		likes: []
+=======
+		phone: ''
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 	};
 	editDraft = {
 		nombre: '',
 		email: '',
+<<<<<<< HEAD
 		descripcion: '',
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 	};
 	isEditing = false;
 	isLoading = true;
@@ -182,6 +209,7 @@ export class UsuarioPage implements OnInit {
 	errorMessage = '';
 	successMessage = '';
 	activeTab: ProfileTab = 'Profile';
+<<<<<<< HEAD
 	bookSearchOpen = false;
 	bookSearchQuery = '';
 	isSearchingBooks = false;
@@ -212,6 +240,11 @@ export class UsuarioPage implements OnInit {
 	readonly profileTabs: ProfileTab[] = ['Profile', 'Books', 'Reviews', 'Likes'];
 	metrics: ProfileMetric[] = [
 		{ value: '0', label: 'Reviews' },
+=======
+
+	readonly profileTabs: ProfileTab[] = ['Profile', 'Books', 'Reviews', 'Likes'];
+	readonly metrics: ProfileMetric[] = [
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 		{ value: '0', label: 'Books' },
 		{ value: '0', label: 'Likes' }
 	];
@@ -233,6 +266,7 @@ export class UsuarioPage implements OnInit {
 	];
 
 	ngOnInit(): void {
+<<<<<<< HEAD
 		this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
 			const rawId = params.get('id');
 			const targetUserId = rawId ? Number(rawId) : null;
@@ -357,11 +391,29 @@ export class UsuarioPage implements OnInit {
 			next: (result) => {
 				if (!result.user) {
 					this.errorMessage = 'No se pudo identificar el perfil solicitado.';
+=======
+		this.loadProfile();
+	}
+
+	private loadProfile(): void {
+		this.isLoading = true;
+		this.errorMessage = '';
+
+		this.usuarioService.getUsuarios().pipe(
+			map((users) => users.find((item) => item.id === this.profileUserId)),
+			catchError(() => this.usuarioService.getUsuario(this.profileUserId).pipe(map((user) => user ? user : null))),
+			catchError(() => of(null))
+		).subscribe({
+			next: (user) => {
+				if (!user) {
+					this.errorMessage = 'No se pudo cargar el perfil.';
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 					this.isLoading = false;
 					this.cdr.detectChanges();
 					return;
 				}
 
+<<<<<<< HEAD
 				this.user = result.user;
 				this.viewedUserId = result.user.id;
 				this.editDraft = {
@@ -381,6 +433,13 @@ export class UsuarioPage implements OnInit {
 				if (this.activeTab === 'Likes') {
 					this.loadLikedComments(forceRefreshComments);
 				}
+=======
+				this.user = user;
+				this.editDraft = {
+					nombre: user.nombre,
+					email: user.email
+				};
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 				this.isLoading = false;
 				this.cdr.detectChanges();
 			},
@@ -392,6 +451,7 @@ export class UsuarioPage implements OnInit {
 		});
 	}
 
+<<<<<<< HEAD
 	canEditProfile(): boolean {
 		return this.currentUserId != null && this.viewedUserId != null && Number(this.currentUserId) === Number(this.viewedUserId);
 	}
@@ -877,17 +937,34 @@ export class UsuarioPage implements OnInit {
 			descripcion: String(this.user.descripcion ?? '')
 		};
 		this.clearMessages();
+=======
+	startEditing(): void {
+		this.editDraft = {
+			nombre: this.user.nombre,
+			email: this.user.email
+		};
+		this.errorMessage = '';
+		this.successMessage = '';
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 		this.isEditing = true;
 		this.cdr.detectChanges();
 	}
 
 	cancelEditing(): void {
 		this.isEditing = false;
+<<<<<<< HEAD
 		this.clearMessages();
 		this.editDraft = {
 			nombre: String(this.user.nombre ?? ''),
 			email: String(this.user.email ?? ''),
 			descripcion: String(this.user.descripcion ?? '')
+=======
+		this.errorMessage = '';
+		this.successMessage = '';
+		this.editDraft = {
+			nombre: this.user.nombre,
+			email: this.user.email
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 		};
 		this.cdr.detectChanges();
 	}
@@ -895,13 +972,17 @@ export class UsuarioPage implements OnInit {
 	saveProfile(): void {
 		const nombre = this.editDraft.nombre.trim();
 		const email = this.editDraft.email.trim();
+<<<<<<< HEAD
 		const descripcion = this.editDraft.descripcion?.trim() ?? '';
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 
 		if (!nombre || !email) {
 			this.errorMessage = 'Nombre y email son obligatorios.';
 			return;
 		}
 
+<<<<<<< HEAD
 		const userId = this.currentUserId ?? this.user.id;
 		if (!userId || !this.canEditProfile()) {
 			this.setMessage('error', 'No se pudo actualizar el perfil porque no tienes permiso para editarlo.');
@@ -920,11 +1001,26 @@ export class UsuarioPage implements OnInit {
 				localStorage.setItem('username', updatedUser.nombre);
 				this.isEditing = false;
 				this.setMessage('success', 'Perfil actualizado correctamente.', false);
+=======
+		this.isSaving = true;
+		this.errorMessage = '';
+		this.successMessage = '';
+
+		this.usuarioService.updateUsuario(this.profileUserId, { nombre, email }).subscribe({
+			next: (updatedUser) => {
+				this.user = updatedUser;
+				this.isEditing = false;
+				this.successMessage = 'Perfil actualizado correctamente.';
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 				this.isSaving = false;
 				this.cdr.detectChanges();
 			},
 			error: () => {
+<<<<<<< HEAD
 				this.setMessage('error', 'No se pudo actualizar el perfil.', false);
+=======
+				this.errorMessage = 'No se pudo actualizar el perfil.';
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 				this.isSaving = false;
 				this.cdr.detectChanges();
 			}
@@ -933,6 +1029,7 @@ export class UsuarioPage implements OnInit {
 
 	setActiveTab(tab: ProfileTab): void {
 		this.activeTab = tab;
+<<<<<<< HEAD
 		if (tab === 'Likes') {
 			this.loadLikedComments(false);
 		}
@@ -1172,5 +1269,7 @@ export class UsuarioPage implements OnInit {
 				this.setMessage('error', 'No se pudo eliminar el comentario. Intenta de nuevo.', false);
 			}
 		);
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 	}
 }

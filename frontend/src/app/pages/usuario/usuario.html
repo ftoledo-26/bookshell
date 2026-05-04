@@ -22,11 +22,14 @@
 					<input type="email" [(ngModel)]="editDraft.email" name="email" autocomplete="email" />
 				</label>
 
+<<<<<<< HEAD
 				<label>
 					<span>Descripcion</span>
 					<textarea [(ngModel)]="editDraft.descripcion" name="descripcion" placeholder="Cuentanos sobre ti..." rows="4"></textarea>
 				</label>
 
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 				<div class="editor-actions">
 					<button type="submit" class="btn-save" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar cambios' }}</button>
 					<button type="button" class="btn-cancel" (click)="cancelEditing()">Cancelar</button>
@@ -43,7 +46,11 @@
 		<div class="hero-copy">
 			<div class="hero-actions">
 				<h1>{{ user.nombre }}</h1>
+<<<<<<< HEAD
 				<button type="button" class="btn-edit" *ngIf="profileIsEditable" (click)="startEditing()">Modificar usuario</button>
+=======
+				<button type="button" class="btn-edit" (click)="startEditing()">Modificar usuario</button>
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 			</div>
 			<p class="hero-subtitle">{{ user.descripcion || 'Sin descripción disponible.' }}</p>
 		</div>
@@ -58,7 +65,11 @@
 
 	<nav class="profile-tabs" aria-label="Secciones del perfil" *ngIf="!isLoading && !isEditing">
 		<button
+<<<<<<< HEAD
 				*ngFor="let tab of profileTabs; trackBy: trackByTab"
+=======
+			*ngFor="let tab of profileTabs"
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 			type="button"
 			class="tab-button"
 			[class.active]="tab === activeTab"
@@ -186,9 +197,12 @@
 				<header class="panel-head">
 					<h2>Reviews</h2>
 					<span>Reseñas y actividad reciente.</span>
+<<<<<<< HEAD
 					<button type="button" class="btn-edit panel-action" *ngIf="activeTab === 'Reviews' && profileIsEditable" (click)="goToCreateReview()">
 						Añadir review
 					</button>
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 				</header>
 
 				<div class="activity-list">
@@ -205,6 +219,7 @@
 			<section class="panel" *ngIf="activeTab === 'Likes'">
 				<header class="panel-head">
 					<h2>Likes</h2>
+<<<<<<< HEAD
 					<span>Comentarios y reseñas que marcaste con like.</span>
 				</header>
 				<p class="empty-state" *ngIf="!profileIsEditable">
@@ -229,6 +244,11 @@
 						<button type="button" class="btn-edit liked-action" (click)="openLikedComment(comment.id)">Ver comentario</button>
 					</article>
 				</div>
+=======
+					<span>Libros y reseñas que te gustaron.</span>
+				</header>
+				<p class="empty-state">Todavía no hay likes para mostrar.</p>
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 			</section>
 		</div>
 

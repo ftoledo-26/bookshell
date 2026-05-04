@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Libro;
 use App\Http\Resources\LibroResource;
-
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class LibroController extends Controller
 {
@@ -15,7 +15,7 @@ class LibroController extends Controller
      */
     public function index()
     {
-        $libros = Libro::all();
+        $libros = Libro::with('reviews.user')->get();
         return LibroResource::collection($libros);
     }
 
@@ -24,18 +24,22 @@ class LibroController extends Controller
      */
     public function store(Request $request)
     {
-        $validate = $request->validate([
-            'titulo' => 'required|string|max:255',
-            'autor' => 'required|string|max:255',
-            'descripcion' => 'nullable|string',
-            'portada' => 'nullable|string|max:255',
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+            'author' => 'required|string|max:255',
+        ]);
 
-        ]);
-        $libro = Libro::create($validate);
+        if ($request->hasFile('portada')) {
+            $path = $request->file('portada')->store('portadas', 'public');
+            $validated['portada'] = Storage::url($path);
+        }
+
+        $libro = Libro::create($validated);
+
         return response()->json([
-            'mensaje' => 'Libro Creado Correctamente',
+            'mensaje' => 'Libro creado exitosamente',
             'data' => new LibroResource($libro)
-        ]);
+        ], 201);
     }
 
     /**
@@ -43,7 +47,7 @@ class LibroController extends Controller
      */
     public function show(string $id)
     {
-        $libro = Libro::find($id);
+        $libro = Libro::with('reviews.user')->find($id);
 
         if (!$libro) {
             return response()->json(['mensaje' => 'Libro no encontrado'], 404);
@@ -63,16 +67,21 @@ class LibroController extends Controller
             return response()->json(['mensaje' => 'Libro no encontrado'], 404);
         }
 
-        $validate = $request->validate([
-            'titulo' => 'sometimes|required|string|max:255',
-            'autor' => 'sometimes|required|string|max:255',
-            'descripcion' => 'nullable|string',
-            'portada' => 'nullable|string|max:255',
+        $validated = $request->validate([
+            'title' => 'sometimes|required|string|max:255',
+            'author' => 'sometimes|required|string|max:255',
+            'portada' => 'sometimes|nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
         ]);
 
-        $libro->update($validate);
+        if ($request->hasFile('portada')) {
+            $path = $request->file('portada')->store('portadas', 'public');
+            $validated['portada'] = Storage::url($path);
+        }
+
+        $libro->update($validated);
+
         return response()->json([
-            'mensaje' => 'Libro actualizado correctamente',
+            'mensaje' => 'Libro actualizado exitosamente',
             'data' => new LibroResource($libro)
         ]);
     }
@@ -89,6 +98,18 @@ class LibroController extends Controller
         }
 
         $libro->delete();
-        return response()->json(['mensaje' => 'Libro eliminado correctamente']);
+
+        return response()->json(['mensaje' => 'Libro eliminado exitosamente']);
+    }
+
+    public function searchByTitle(string $title)
+    {
+        $libros = Libro::where('titulo', 'like', '%' . $title . '%')->with('reviews.user')->get();
+
+        if ($libros->isEmpty()) {
+            return response()->json(['mensaje' => 'No se encontraron libros con ese título'], 404);
+        }
+
+        return LibroResource::collection($libros);
     }
 }

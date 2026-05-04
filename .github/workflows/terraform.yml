@@ -8,12 +8,6 @@ name: Terraform CI/CD
 #   TF_VAR_DB_PASSWORD     — Contrasena de la base de datos RDS
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '**.tf'
-      - 'backend.sh'
-      - 'frontend.sh'
   workflow_dispatch:
 
 jobs:

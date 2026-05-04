@@ -5,6 +5,8 @@ name: Deploy Backend (Laravel)
 #   BASTION_EIP         — IP publica del bastion (terraform output bastion_eip)
 #   BACKEND_PRIVATE_IP  — IP privada del backend  (terraform output backend_private_ip)
 #   SSH_PRIVATE_KEY     — Clave privada PEM del Key Pair de AWS (sin passphrase)
+#   RDS_ENDPOINT        — Endpoint del RDS MySQL   (terraform output rds_endpoint)
+#   TF_VAR_DB_PASSWORD  — Contrasena de la base de datos RDS
 
 on:
   push:
@@ -12,6 +14,10 @@ on:
     paths:
       - 'backend.sh'
       - 'backend/**'
+      - '*.php'
+      - 'composer.json'
+      - 'routes/**'
+      - 'app/**'
   workflow_dispatch:
 
 jobs:
@@ -34,15 +40,33 @@ jobs:
           proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
-            cd /var/www/back
 
-            sudo git pull origin Back
-            sudo composer install --no-dev --optimize-autoloader
+            # Clonar y configurar en la primera ejecucion si el directorio no existe
+            if [ ! -d "/var/www/back/.git" ]; then
+              echo "Directorio no encontrado, clonando repositorio..."
+              sudo git clone -b Back --single-branch https://github.com/ftoledo-26/bookshell.git /var/www/back
+
+              sudo cp /var/www/back/.env.example /var/www/back/.env
+              sudo sed -i "s|DB_CONNECTION=.*|DB_CONNECTION=mysql|"           /var/www/back/.env
+              sudo sed -i "s|DB_HOST=.*|DB_HOST=${{ secrets.RDS_ENDPOINT }}|" /var/www/back/.env
+              sudo sed -i "s|DB_DATABASE=.*|DB_DATABASE=laravel|"             /var/www/back/.env
+              sudo sed -i "s|DB_USERNAME=.*|DB_USERNAME=laravel|"             /var/www/back/.env
+              sudo sed -i "s|DB_PASSWORD=.*|DB_PASSWORD=${{ secrets.TF_VAR_DB_PASSWORD }}|" /var/www/back/.env
+
+              cd /var/www/back
+              sudo composer install --no-dev --optimize-autoloader
+              sudo php artisan key:generate --force
+            else
+              cd /var/www/back
+              sudo git pull origin Back
+              sudo composer install --no-dev --optimize-autoloader
+            fi
+
             sudo php artisan migrate --force
             sudo php artisan config:cache
             sudo php artisan route:cache
             sudo php artisan view:cache
-            sudo chown -R www-data:www-data /var/www/back/storage
+            sudo chown -R www-data:www-data /var/www/back/storage /var/www/back/bootstrap/cache
             sudo systemctl reload apache2
 
             echo "Backend desplegado — $(date)"

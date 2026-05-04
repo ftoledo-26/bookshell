@@ -107,6 +107,7 @@ jobs:
             sudo composer install --no-dev --optimize-autoloader
 
             # ── Pasos comunes ─────────────────────────────────────────────
+            sudo php artisan config:clear
             sudo php artisan migrate --force
             sudo php artisan config:cache
             sudo php artisan route:cache

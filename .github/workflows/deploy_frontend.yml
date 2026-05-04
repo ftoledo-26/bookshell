@@ -51,7 +51,7 @@ jobs:
             cd /var/www/front
 
             sudo git pull origin Front
-            sudo npm ci
+            sudo npm install
             sudo npm run build -- --configuration production
 
             sudo rm -rf /var/www/html/*

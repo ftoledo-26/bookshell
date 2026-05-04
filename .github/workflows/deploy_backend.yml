@@ -110,6 +110,7 @@ jobs:
             sudo composer install --no-dev --optimize-autoloader
 
             # ── Pasos comunes ─────────────────────────────────────────────
+            echo "==> .env DB lines:" && sudo grep "^DB_" /var/www/back/.env
             sudo php artisan config:clear
             sudo php artisan migrate --force
             sudo php artisan config:cache

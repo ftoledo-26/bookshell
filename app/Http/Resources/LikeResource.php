@@ -5,7 +5,6 @@ namespace App\Http\Resources;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-
 class LikeResource extends JsonResource
 {
     /**
@@ -17,8 +16,9 @@ class LikeResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'comentario_id'=> $this->comentario_id,
-            'usuario_id' => $this->usuario_id,
+            'estado' => $this->estado,
+            'user' => $this->user?->name ?? null,
+            'review' => $this->review?->comment ?? null,
         ];
     }
 }

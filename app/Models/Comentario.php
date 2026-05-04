@@ -14,5 +14,10 @@ class Comentario extends Model
     public function usuario(){
         return $this->belongsTo(Usuario::class);
     }
+
+    public function usuariosQueLeDieronLike()
+    {
+        return $this->belongsToMany(User::class, 'comentario_usuario', 'comentario_id', 'user_id')->withTimestamps();
+    }
     
 }

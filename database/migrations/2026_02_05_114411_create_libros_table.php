@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('autor')->notNullable();
             $table->string('genero')->notNullable();
             $table->text('descripcion')->notNullable();
-            $table->string('portada')->default('default.png');
+            $table->string('foto')->default('default.png');
             
             $table->timestamps();
         });

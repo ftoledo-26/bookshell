@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\Likes;
+use App\Models\Like;
 use App\Http\Resources\LikeResource;
 
 class LikeController extends Controller
@@ -14,8 +14,8 @@ class LikeController extends Controller
      */
     public function index()
     {
-        $like = Likes::all();
-        return LikeResource::collection($like);
+        $likes = Like::with('user', 'review')->get();
+        return LikeResource::collection($likes);
     }
 
     /**
@@ -23,15 +23,18 @@ class LikeController extends Controller
      */
     public function store(Request $request)
     {
-        $validate = $request->validate([
-            'usuario_id' => 'required|integer',
-            'libro_id' => 'required|integer',
+        $validated = $request->validate([
+            'estado' => 'required|boolean',
+            'user_id' => 'required|exists:users,id',
+            'review_id' => 'required|exists:reviews,id',
         ]);
-        $like = Likes::create($validate);
+
+        $like = Like::create($validated);
+
         return response()->json([
-            'mensaje' => 'Like Creado Correctamente',
+            'mensaje' => 'Like creado exitosamente',
             'data' => new LikeResource($like)
-        ]);
+        ], 201);
     }
 
     /**
@@ -39,7 +42,7 @@ class LikeController extends Controller
      */
     public function show(string $id)
     {
-        $like = Likes::find($id);
+        $like = Like::with('user', 'review')->find($id);
 
         if (!$like) {
             return response()->json(['mensaje' => 'Like no encontrado'], 404);
@@ -53,19 +56,22 @@ class LikeController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        $like = Likes::find($id);
+        $like = Like::find($id);
 
-        if (!$like){
+        if (!$like) {
             return response()->json(['mensaje' => 'Like no encontrado'], 404);
         }
 
-        $validate = $request->validate([
-            'usuario_id' => 'sometimes|required|integer',
-            'libro_id' => 'sometimes|required|integer',
+        $validated = $request->validate([
+            'estado' => 'required|boolean',
+            'user_id' => 'required|exists:users,id',
+            'review_id' => 'required|exists:reviews,id',
         ]);
-        $like->update($validate);
+
+        $like->update($validated);
+
         return response()->json([
-            'mensaje' => 'Like actualizado correctamente',
+            'mensaje' => 'Like actualizado exitosamente',
             'data' => new LikeResource($like)
         ]);
     }
@@ -75,13 +81,14 @@ class LikeController extends Controller
      */
     public function destroy(string $id)
     {
-        $like = Likes::find($id);
+        $like = Like::find($id);
 
         if (!$like) {
             return response()->json(['mensaje' => 'Like no encontrado'], 404);
         }
 
         $like->delete();
-        return response()->json(['mensaje' => 'Like eliminado correctamente']);
+
+        return response()->json(['mensaje' => 'Like eliminado exitosamente']);
     }
 }

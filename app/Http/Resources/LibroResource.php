@@ -18,9 +18,17 @@ class LibroResource extends JsonResource
             'id' => $this->id,
             'titulo' => $this->titulo,
             'autor' => $this->autor,
+            'portada' => $this->foto ?: ($this->portada ?: 'default.pdf'),
             'genero' => $this->genero,
             'descripcion' => $this->descripcion,
-            'portada' => $this->portada,
+            'reviews' => $this->reviews->map(function ($review) {
+                return [
+                    'id' => $review->id,
+                    'user' => $review->user?->name ?? null,
+                    'valoracion' => $review->valoracion,
+                    'comentario' => $review->comentario,
+                ];
+            }),
         ];
     }
 }

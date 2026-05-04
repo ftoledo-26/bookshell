@@ -86,4 +86,19 @@ class UsuarioController extends Controller
         $usuario->delete();
         return response()->json(['mensaje' => 'Usuario eliminado correctamente']);
     }
+
+    public function blockear(string $id)
+    {
+        $usuario = Usuario::find($id);
+
+        if (!$usuario) {
+            return response()->json(['mensaje' => 'Usuario no encontrado'], 404);
+        }
+
+        $usuario->update(['rol' => 'bloqueado']);
+        return response()->json([
+            'mensaje' => 'Usuario bloqueado correctamente',
+            'data' => new UsuarioResource($usuario)
+        ]);
+    }
 }

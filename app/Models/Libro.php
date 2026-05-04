@@ -3,24 +3,29 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Comentarios;
-use App\Models\Libro_Usuario;
 
 class Libro extends Model
 {
     protected $fillable = [
         'titulo',
         'autor',
+        'editorial',
+        'anio_publicacion',
         'genero',
         'descripcion',
-        'portada',
+        'reviews',
+        'users_favoritos',
+        'foto',
     ];
 
-    public function comentarios(){
-        return $this->hasMany(Comentario::class);
+    public function reviews()
+    {
+        return $this->hasMany(Review::class);
     }
-    public function libro_usuario(){
-        return $this->hasMany(Libro_Usuario::class);
+
+    public function usersFavoritos()
+    {
+        return $this->belongsToMany(User::class, 'users_favoritos');
     }
-    
+
 }

@@ -1,0 +1,116 @@
+name: Deploy Backend (Laravel)
+
+# Despliega el backend Laravel en la instancia EC2 Backend via SSH a traves del bastion.
+# Secrets requeridos en GitHub:
+#   BASTION_EIP         — IP publica del bastion (terraform output bastion_eip)
+#   BACKEND_PRIVATE_IP  — IP privada del backend  (terraform output backend_private_ip)
+#   SSH_PRIVATE_KEY     — Clave privada PEM del Key Pair de AWS (sin passphrase)
+#   RDS_ENDPOINT        — Endpoint del RDS MySQL   (terraform output rds_endpoint)
+#   TF_VAR_DB_PASSWORD  — Contrasena de la base de datos RDS
+
+on:
+  push:
+    branches: [Back]
+    paths:
+      - 'backend.sh'
+      - '*.php'
+      - 'composer.json'
+      - 'routes/**'
+      - 'app/**'
+  workflow_dispatch:
+
+jobs:
+  deploy-backend:
+    name: Deploy Laravel via SSH
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      - name: Pull y desplegar en backend (via bastion)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.BACKEND_PRIVATE_IP }}
+          username: ubuntu
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          proxy_host: ${{ secrets.BASTION_EIP }}
+          proxy_username: ubuntu
+          proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 30m
+          script: |
+            set -e
+
+            # ── Instalar PHP/Composer/Apache si no estan presentes ────────
+            if ! command -v composer &> /dev/null; then
+              echo "==> Instalando dependencias del sistema..."
+              export DEBIAN_FRONTEND=noninteractive
+              sudo apt-get update -y -q
+              sudo apt-get install -y -q software-properties-common
+              sudo add-apt-repository -y ppa:ondrej/php
+              sudo apt-get update -y -q
+              sudo apt-get install -y -q \
+                apache2 \
+                php8.2 php8.2-cli php8.2-mysql php8.2-xml php8.2-mbstring \
+                php8.2-curl php8.2-zip php8.2-intl php8.2-bcmath \
+                git curl unzip
+
+              echo "==> Instalando Composer..."
+              curl -sS https://getcomposer.org/installer | sudo php -- \
+                --install-dir=/usr/local/bin --filename=composer
+
+              sudo a2enmod rewrite
+
+              # VirtualHost para Laravel
+              sudo tee /etc/apache2/sites-available/000-default.conf > /dev/null <<'VHOST'
+            <VirtualHost *:80>
+                DocumentRoot /var/www/back/public
+                <Directory /var/www/back/public>
+                    Options Indexes FollowSymLinks
+                    AllowOverride All
+                    Require all granted
+                </Directory>
+                ErrorLog /var/log/apache2/error.log
+                CustomLog /var/log/apache2/access.log combined
+            </VirtualHost>
+            VHOST
+
+              sudo systemctl enable apache2
+            fi
+
+            # ── Clonar repo si el directorio no existe o esta incompleto ─
+            if [ ! -d "/var/www/back/.git" ]; then
+              echo "==> Clonando repositorio..."
+              sudo rm -rf /var/www/back
+              sudo git clone -b Back --single-branch \
+                https://github.com/ftoledo-26/bookshell.git /var/www/back
+            fi
+
+            # ── Configurar .env si no existe ─────────────────────────────
+            if [ ! -f "/var/www/back/.env" ]; then
+              echo "==> Configurando .env..."
+              sudo cp /var/www/back/.env.example /var/www/back/.env
+              sudo sed -i "s|DB_CONNECTION=.*|DB_CONNECTION=mysql|"                              /var/www/back/.env
+              sudo sed -i "s|DB_HOST=.*|DB_HOST=${{ secrets.RDS_ENDPOINT }}|"                   /var/www/back/.env
+              sudo sed -i "s|DB_DATABASE=.*|DB_DATABASE=laravel|"                               /var/www/back/.env
+              sudo sed -i "s|DB_USERNAME=.*|DB_USERNAME=laravel|"                               /var/www/back/.env
+              sudo sed -i "s|DB_PASSWORD=.*|DB_PASSWORD=${{ secrets.TF_VAR_DB_PASSWORD }}|"     /var/www/back/.env
+              cd /var/www/back
+              sudo php artisan key:generate --force
+            fi
+
+            # ── Actualizar codigo y dependencias ─────────────────────────
+            cd /var/www/back
+            sudo git pull origin Back
+            sudo composer install --no-dev --optimize-autoloader
+
+            # ── Pasos comunes ─────────────────────────────────────────────
+            sudo php artisan migrate --force
+            sudo php artisan config:cache
+            sudo php artisan route:cache
+            sudo php artisan view:cache
+            sudo chown -R www-data:www-data /var/www/back/storage /var/www/back/bootstrap/cache
+            sudo chmod -R 775 /var/www/back/storage /var/www/back/bootstrap/cache
+            sudo systemctl restart apache2
+
+            echo "Backend desplegado — $(date)"

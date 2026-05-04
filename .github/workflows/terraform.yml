@@ -2,8 +2,9 @@ name: Terraform CI/CD
 
 # Crea o actualiza toda la infraestructura AWS con Terraform.
 # Secrets requeridos en GitHub:
-#   AWS_ACCESS_KEY_ID      — Clave de acceso AWS
-#   AWS_SECRET_ACCESS_KEY  — Clave secreta AWS
+#   AWS_ACCESS_KEY_ID      — Clave de acceso AWS (AWS Academy: "aws_access_key_id" del credentials)
+#   AWS_SECRET_ACCESS_KEY  — Clave secreta AWS  (AWS Academy: "aws_secret_access_key")
+#   AWS_SESSION_TOKEN      — Token de sesion    (AWS Academy: "aws_session_token", obligatorio)
 #   TF_VAR_DB_PASSWORD     — Contrasena de la base de datos RDS
 
 on:
@@ -35,6 +36,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: us-east-1
 
       - name: Instalar Terraform

@@ -7,7 +7,7 @@ terraform {
   }
 
   backend "s3" {
-    bucket = "bookshell-tfstate"
+    bucket = "bookshell-tfg"
     key    = "terraform.tfstate"
     region = "us-east-1"
   }

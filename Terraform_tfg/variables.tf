@@ -19,20 +19,20 @@ variable "key_name" {
 variable "db_name" {
   description = "Nombre de la base de datos en RDS"
   type        = string
-  default     = "bookshell"
+  default     = "laravel"
 }
 
 variable "db_user" {
   description = "Usuario administrador de RDS"
   type        = string
-  default     = "admin"
+  default     = "laravel"
 }
 
 variable "db_password" {
   description = "Contrasena del administrador de RDS (usar TF_VAR_db_password)"
   type        = string
   sensitive   = true
-  default     = "password"
+  default     = "secret"
 }
 
 variable "domain" {

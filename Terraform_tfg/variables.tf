@@ -32,7 +32,7 @@ variable "db_password" {
   description = "Contrasena del administrador de RDS (usar TF_VAR_db_password)"
   type        = string
   sensitive   = true
-  default     = "secret"
+  default     = "bookshell"
 }
 
 variable "domain" {

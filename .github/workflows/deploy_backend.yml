@@ -86,18 +86,20 @@ jobs:
                 https://github.com/ftoledo-26/bookshell.git /var/www/back
             fi
 
-            # ── Configurar .env si no existe ─────────────────────────────
+            # ── Crear .env si no existe (solo genera APP_KEY una vez) ──
             if [ ! -f "/var/www/back/.env" ]; then
-              echo "==> Configurando .env..."
+              echo "==> Creando .env desde ejemplo..."
               sudo cp /var/www/back/.env.example /var/www/back/.env
-              sudo sed -i "s|DB_CONNECTION=.*|DB_CONNECTION=mysql|"                              /var/www/back/.env
-              sudo sed -i "s|DB_HOST=.*|DB_HOST=${{ secrets.RDS_ENDPOINT }}|"                   /var/www/back/.env
-              sudo sed -i "s|DB_DATABASE=.*|DB_DATABASE=laravel|"                               /var/www/back/.env
-              sudo sed -i "s|DB_USERNAME=.*|DB_USERNAME=laravel|"                               /var/www/back/.env
-              sudo sed -i "s|DB_PASSWORD=.*|DB_PASSWORD=${{ secrets.TF_VAR_DB_PASSWORD }}|"     /var/www/back/.env
               cd /var/www/back
               sudo php artisan key:generate --force
             fi
+
+            # ── Actualizar credenciales DB siempre (por si cambia el RDS) ─
+            sudo sed -i "s|DB_CONNECTION=.*|DB_CONNECTION=mysql|"                          /var/www/back/.env
+            sudo sed -i "s|DB_HOST=.*|DB_HOST=${{ secrets.RDS_ENDPOINT }}|"               /var/www/back/.env
+            sudo sed -i "s|DB_DATABASE=.*|DB_DATABASE=laravel|"                           /var/www/back/.env
+            sudo sed -i "s|DB_USERNAME=.*|DB_USERNAME=laravel|"                           /var/www/back/.env
+            sudo sed -i "s|DB_PASSWORD=.*|DB_PASSWORD=${{ secrets.TF_VAR_DB_PASSWORD }}|" /var/www/back/.env
 
             # ── Actualizar codigo y dependencias ─────────────────────────
             cd /var/www/back

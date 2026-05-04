@@ -56,3 +56,4 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/user_reviews/{id}', [User_ReviewController::class, 'update']);
     Route::delete('/user_reviews/{id}', [User_ReviewController::class, 'destroy']);
 }); 
+

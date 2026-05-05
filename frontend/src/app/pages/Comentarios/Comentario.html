@@ -7,10 +7,7 @@
 
 		<p class="status" *ngIf="isLoading">Cargando comentario...</p>
 		<p class="status error" *ngIf="errorMessage">{{ errorMessage }}</p>
-<<<<<<< HEAD
 		<p class="status success" *ngIf="successMessage">{{ successMessage }}</p>
-=======
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 
 		<article class="comment-card" *ngIf="!isLoading && detail">
 			<div class="cover-column">
@@ -29,7 +26,6 @@
 					<p class="meta">{{ detail.author }} · {{ detail.username }}</p>
 				</header>
 
-<<<<<<< HEAD
 				<p class="rating-pill" *ngIf="detail.ratingValue > 0">Puntuacion: {{ detail.ratingValue }} / 5</p>
 
 				<section class="edit-panel" *ngIf="isEditingComment">
@@ -77,12 +73,6 @@
 						<span>{{ detail.likedByCurrentUser ? 'Liked' : 'Me gusta' }}</span>
 						<strong>{{ detail.likes }}</strong>
 					</button>
-=======
-				<p class="comment-copy">{{ detail.content }}</p>
-
-				<footer>
-					<span class="likes">{{ detail.likes }} likes</span>
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 				</footer>
 			</div>
 		</article>
@@ -99,7 +89,6 @@
 				<article class="related-card" *ngFor="let comment of relatedComments; trackBy: trackByRelatedCommentId">
 					<div class="related-card-head">
 						<strong>{{ comment.username }}</strong>
-<<<<<<< HEAD
 						<div class="related-meta">
 							@if(comment.hasRating) {
 								<span class="rating-tag">{{ comment.ratingValue }} / 5</span>
@@ -116,9 +105,6 @@
 								<strong>{{ comment.likes }}</strong>
 							</button>
 						</div>
-=======
-						<span>{{ comment.likes }} likes</span>
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 					</div>
 
 					<p>{{ comment.content }}</p>

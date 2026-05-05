@@ -1,0 +1,114 @@
+pipeline {
+  agent any
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+  }
+
+  environment {
+    // Ajusta estos valores en Jenkins (o sustituyelos aqui)
+    BASTION_HOST = 'BASTION_PUBLIC_IP'
+    BASTION_USER = 'ubuntu'
+
+    FRONT_HOST = 'FRONT_PRIVATE_IP'
+    FRONT_USER = 'ubuntu'
+    FRONT_APP_DIR = '/var/www/front'
+
+    BACK_HOST = 'BACK_PRIVATE_IP'
+    BACK_USER = 'ubuntu'
+    BACK_APP_DIR = '/var/www/back'
+
+    // Debe ser una credencial tipo "SSH Username with private key"
+    SSH_CRED_ID = 'bookshell-ssh'
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+        sh 'echo "Branch detectada: ${BRANCH_NAME}"'
+      }
+    }
+
+    stage('Deploy Front') {
+      when {
+        expression { env.BRANCH_NAME == 'Front' }
+      }
+      steps {
+        withCredentials([sshUserPrivateKey(credentialsId: env.SSH_CRED_ID, keyFileVariable: 'SSH_KEY')]) {
+          sh '''#!/usr/bin/env bash
+set -e
+
+ssh -i "$SSH_KEY" \
+  -o StrictHostKeyChecking=no \
+  -J ${BASTION_USER}@${BASTION_HOST} \
+  ${FRONT_USER}@${FRONT_HOST} << EOF
+set -e
+
+cd ${FRONT_APP_DIR}
+
+# Un solo repo, rama Front
+git fetch origin Front
+git checkout Front || git checkout -b Front origin/Front
+git reset --hard origin/Front
+
+npm install
+npm run build -- --configuration production
+
+sudo rm -rf /var/www/html/*
+sudo cp -r dist/*/* /var/www/html/
+
+sudo systemctl reload apache2
+EOF
+'''
+        }
+      }
+    }
+
+    stage('Deploy Back') {
+      when {
+        expression { env.BRANCH_NAME == 'Back' }
+      }
+      steps {
+        withCredentials([sshUserPrivateKey(credentialsId: env.SSH_CRED_ID, keyFileVariable: 'SSH_KEY')]) {
+          sh '''#!/usr/bin/env bash
+set -e
+
+ssh -i "$SSH_KEY" \
+  -o StrictHostKeyChecking=no \
+  -J ${BASTION_USER}@${BASTION_HOST} \
+  ${BACK_USER}@${BACK_HOST} << EOF
+set -e
+
+cd ${BACK_APP_DIR}
+
+# Un solo repo, rama Back
+git fetch origin Back
+git checkout Back || git checkout -b Back origin/Back
+git reset --hard origin/Back
+
+composer install --no-dev --optimize-autoloader
+php artisan migrate --force
+php artisan optimize:clear
+php artisan config:cache
+php artisan route:cache
+
+sudo chown -R www-data:www-data ${BACK_APP_DIR}
+sudo systemctl reload apache2
+EOF
+'''
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo 'Deploy completado'
+    }
+    failure {
+      echo 'Deploy con error. Revisa logs del stage que fallo.'
+    }
+  }
+}

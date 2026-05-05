@@ -1,0 +1,66 @@
+name: Terraform CI/CD
+
+# Crea o actualiza toda la infraestructura AWS con Terraform.
+# Secrets requeridos en GitHub:
+#   AWS_ACCESS_KEY_ID      — Clave de acceso AWS (AWS Academy: "aws_access_key_id" del credentials)
+#   AWS_SECRET_ACCESS_KEY  — Clave secreta AWS  (AWS Academy: "aws_secret_access_key")
+#   AWS_SESSION_TOKEN      — Token de sesion    (AWS Academy: "aws_session_token", obligatorio)
+#   TF_VAR_DB_PASSWORD     — Contrasena de la base de datos RDS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  terraform:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Terraform_tfg
+
+    env:
+      TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - name: Instalar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+
+      - name: Mostrar outputs de infraestructura
+        run: |
+          echo "## Infraestructura desplegada" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Recurso | Valor |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Bastion EIP (SSH) | $(terraform output -raw bastion_eip) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend EIP (Web) | $(terraform output -raw frontend_eip) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend IP privada | $(terraform output -raw backend_private_ip) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend IP privada | $(terraform output -raw frontend_private_ip) |" >> $GITHUB_STEP_SUMMARY
+          echo "| RDS Endpoint | $(terraform output -raw rds_endpoint) |" >> $GITHUB_STEP_SUMMARY
+          echo "| ALB DNS | $(terraform output -raw alb_dns) |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Actualiza los secrets BASTION_EIP, BACKEND_PRIVATE_IP y FRONTEND_PRIVATE_IP con estos valores." >> $GITHUB_STEP_SUMMARY

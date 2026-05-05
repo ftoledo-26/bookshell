@@ -1,13 +1,7 @@
 import {
-<<<<<<< HEAD
   Component, OnInit, inject, ElementRef, ViewChild,
   ChangeDetectorRef,
   ChangeDetectionStrategy
-=======
-  Component, OnInit, OnDestroy, inject,
-  ChangeDetectorRef, HostListener,
-  ChangeDetectionStrategy  // ← añadir
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 } from '@angular/core';
 import { Book } from '../../models/Book';
 import { BookService } from '../../services/Book.service';
@@ -49,30 +43,15 @@ type FeaturedReview = {
   imports: [CommonModule],
   templateUrl: './home.html',
   styleUrls: ['./home.css'],
-<<<<<<< HEAD
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class Home implements OnInit {
   @ViewChild('recommendedStrip')
   private recommendedStripRef?: ElementRef<HTMLDivElement>;
 
-=======
-  changeDetection: ChangeDetectionStrategy.OnPush  // ← clave
-})
-export class Home implements OnInit, OnDestroy {
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
   books: Book[] = [];
   recommendedBooks: RecommendedBook[] = [];
-<<<<<<< HEAD
   reviews: FeaturedReview[] = [];
-=======
-  featuredReviews: FeaturedReview[] = [];//Comentarios
-  displayedReviews: FeaturedReview[] = [];
-  private readonly reviewBatchSize = 3;
-  private readonly scrollThresholdPx = 320;
-  private visibleReviewCount = 0;
-  private isLoadingMoreReviews = false;
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
   isLoading = true;
   errorMessage = '';
 
@@ -109,7 +88,6 @@ export class Home implements OnInit, OnDestroy {
         catchError(() => of([] as Usuario[]))
       )
     }).subscribe({
-<<<<<<< HEAD
       next: (result: { books: Book[]; comments: Comentario[]; users: Usuario[] }) => {
         const { books, comments, users } = result;
         this.books = books;
@@ -121,62 +99,29 @@ export class Home implements OnInit, OnDestroy {
           this.errorMessage = 'No se pudieron cargar datos ahora. Intenta de nuevo en unos segundos.';
         }
         this.cdr.markForCheck();
-=======
-      next: ({ books, comments, users }) => {
-        this.books = books;
-        this.comments = comments;
-        this.timelineComments = this.mapTimelineComments(comments, books, users);
-        this.recommendedBooks = this.mapRecommendedBooks(books, comments, users);
-        this.featuredReviews = this.mapFeaturedReviews(this.timelineComments);
-        this.visibleReviewCount = this.reviewBatchSize;
-        this.updateVisibleReviews();
-        this.ensureViewportHasScrollableContent();
-        this.isLoading = false;
-        this.cdr.markForCheck(); // Marcar para verificación de cambios
-        if (books.length === 0 && comments.length === 0) {
-          this.errorMessage = 'No se pudieron cargar datos ahora. Intenta de nuevo en unos segundos.';
-        }
-        this.cdr.detectChanges();
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
       },
       error: (error: unknown) => {
         console.error('Error al cargar inicio:', error);
         this.errorMessage = 'Error al cargar comentarios y libros';
         this.isLoading = false;
-<<<<<<< HEAD
         this.cdr.markForCheck();
-=======
-        this.cdr.detectChanges();
-        this.cdr.markForCheck(); // Marcar para verificación de cambios en caso de error
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
       }
     });
   }
 
   private mapTimelineComments(comments: Comentario[], books: Book[], users: Usuario[]): TimelineComment[] {
-<<<<<<< HEAD
     const userById = new Map<number, string>(users.map((user) => [user.id, user.nombre]));
     const bookById = new Map<number, string>(books.map((book) => [book.id, book.titulo]));
 
     return comments.map((comment) => {
-=======
-    const timeLabels = ['Hace 5 min', 'Hace 22 min', 'Hace 1 h', 'Hace 3 h', 'Ayer'];
-    const userById = new Map<number, string>(users.map((user) => [user.id, user.nombre]));
-    const bookById = new Map<number, string>(books.map((book) => [book.id, book.titulo]));
-
-    return comments.map((comment, index) => {
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
       const c = comment as any;
       const userId = c.UsuarioId ?? c.usuario_id;
       const bookId = c.BookId ?? c.libro_id;
       
       // Intentar obtener nombre de usuario desde diferentes posibles estructuras
       const userName = 
-<<<<<<< HEAD
         c.user ||
         c.nombre ||
-=======
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
         c.usuario?.nombre ||
         c.usuarioNombre ||
         c.username ||
@@ -186,17 +131,13 @@ export class Home implements OnInit, OnDestroy {
       // Intentar obtener título del libro desde diferentes posibles estructuras
       const bookTitle = 
         c.libro?.titulo ||
-<<<<<<< HEAD
         c.libro ||
         c.libroData?.titulo ||
-=======
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
         c.libroTitulo ||
         c.title ||
         c.titulo ||
         (bookId != null ? bookById.get(Number(bookId)) : undefined) ||
         (bookId != null ? String(bookId) : 'Sin titulo');
-<<<<<<< HEAD
 
       const commentText = c.contenido ?? c.comentario ?? c.comment ?? '';
       const likes = this.comentarioService.getCommentLikeCount(comment);
@@ -211,39 +152,10 @@ export class Home implements OnInit, OnDestroy {
         username: userName || (userId != null ? String(userId) : 'Sin usuario'),
         bookTitle: bookTitle || (bookId != null ? String(bookId) : 'Sin titulo'),
         cover
-=======
-
-      return {
-        ...comment,
-        username: userName || (userId != null ? String(userId) : 'Sin usuario'),
-        bookTitle: bookTitle || (bookId != null ? String(bookId) : 'Sin titulo'),
-        createdAt: timeLabels[index % timeLabels.length]
       };
     });
   }
 
-  private mapRecommendedBooks(books: Book[], comments: Comentario[], users: Usuario[]): RecommendedBook[] {
-    const dayLabels = ['Apr 07', 'Apr 06', 'Apr 05', 'Apr 04'];
-    const userById = new Map<number, string>(users.map((user) => [user.id, user.nombre]));
-
-    return books.slice(0, 8).map((book, index) => {
-      const relatedComment = comments.find((comment) => comment.BookId === book.id);
-      const rc = relatedComment as any;
-      const relatedUserId = rc?.UsuarioId ?? rc?.usuario_id;
-      const userName = rc?.usuario?.nombre || rc?.usuarioNombre || rc?.username || (relatedUserId != null ? userById.get(Number(relatedUserId)) : undefined) || (relatedUserId != null ? String(relatedUserId) : 'Sin usuario');
-
-      return {
-        id: book.id,
-        title: book.titulo,
-        cover: book.portada,
-        username: userName,
-        day: dayLabels[index % dayLabels.length]
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
-      };
-    });
-  }
-
-<<<<<<< HEAD
   private mapRecommendedBooks(books: Book[]): RecommendedBook[] {
     return books.slice(0, 8).map((book) => ({
       id: book.id,
@@ -273,74 +185,6 @@ export class Home implements OnInit, OnDestroy {
         cover: coverByBookId.get(Number(item.BookId)) ?? item.cover ?? ''
       };
     });
-=======
-  private mapFeaturedReviews(items: TimelineComment[]): FeaturedReview[] {
-    const shuffledItems = this.shuffleArray(items);
-    const coverByBookId = new Map<number, string>(this.books.map((book) => [book.id, book.portada]));
-
-    return shuffledItems.map((item, index) => ({
-      id: item.id,
-      titulo: item.bookTitle,
-      year: '2026',
-      username: item.username,
-      likes: item.likes,
-      score: this.getScore(item.likes, index),
-      content: item.contenido,
-      cover: coverByBookId.get(item.BookId) ?? ''
-    }));
-  }
-
-private scrollTimeout: ReturnType<typeof setTimeout> | null = null; // ← para throttle
-
-  // Throttle del scroll: en vez de dispararse 60 veces/seg, espera 80ms
-  @HostListener('window:scroll')
-  onWindowScroll(): void {
-    if (this.scrollTimeout) return;
-    this.scrollTimeout = setTimeout(() => {
-      this.loadMoreReviewsIfNeeded();
-      this.scrollTimeout = null;
-    }, 80);
-  }
-  ngOnDestroy(): void {
-    if (this.scrollTimeout) clearTimeout(this.scrollTimeout);
-  }
-  private loadMoreReviewsIfNeeded(): void {
-    if (this.isLoading || this.isLoadingMoreReviews) {
-      return;
-    }
-
-    if (this.displayedReviews.length >= this.featuredReviews.length) {
-      return;
-    }
-
-    const pageBottom = window.scrollY + window.innerHeight;
-    const pageHeight = document.documentElement.scrollHeight;
-    const reachedBottom = pageBottom >= pageHeight - this.scrollThresholdPx;
-
-    if (!reachedBottom) {
-      return;
-    }
-
-    this.isLoadingMoreReviews = true;
-    this.visibleReviewCount += this.reviewBatchSize;
-    this.updateVisibleReviews();
-    this.isLoadingMoreReviews = false;
-    this.ensureViewportHasScrollableContent();
-  }
-
-  private ensureViewportHasScrollableContent(): void {
-    const canScroll = document.documentElement.scrollHeight > window.innerHeight + 8;
-    const hasMore = this.displayedReviews.length < this.featuredReviews.length;
-    if (!canScroll && hasMore) {
-      this.visibleReviewCount += this.reviewBatchSize;
-      this.updateVisibleReviews();
-      this.cdr.markForCheck(); // ← markForCheck en vez de detectChanges
-    }
-  }
-
-  private updateVisibleReviews(): void {
-    this.displayedReviews = this.featuredReviews.slice(0, this.visibleReviewCount);
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
   }
 
   private shuffleArray<T>(items: T[]): T[] {
@@ -354,7 +198,6 @@ private scrollTimeout: ReturnType<typeof setTimeout> | null = null; // ← para 
     return shuffled;
   }
 
-<<<<<<< HEAD
   openReviewDetail(reviewId: number): void {
     this.router.navigate(['/comentarios', reviewId]);
   }
@@ -411,11 +254,6 @@ private scrollTimeout: ReturnType<typeof setTimeout> | null = null; // ← para 
 
   onRecommendedTouchEnd(): void {
     this.isRecommendedSwiping = false;
-=======
-  private getScore(likes: number, index: number): string {
-    const score = 3.5 + ((likes + index) % 3) * 0.5;
-    return `${score.toFixed(1)} / 5`;
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
   }
 
   openReviewDetail(reviewId: number): void {

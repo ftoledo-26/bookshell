@@ -15,7 +15,6 @@
         <h2>New on Bookshell</h2>
       </header>
 
-<<<<<<< HEAD
       <div
         #recommendedStrip
         class="recommended-strip"
@@ -32,12 +31,6 @@
               
               <img [src]="book.cover" [alt]="book.title" loading="eager" />
             }
-=======
-      <div class="recommended-strip">
-        <article class="book-tile" *ngFor="let book of recommendedBooks; trackBy: trackByBookId">
-          <div class="cover-wrap">
-            <img src="/prueba.webp" [alt]="book.title" loading="eager" />
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
           </div>
 
           <footer>
@@ -55,11 +48,7 @@
       <div class="reviews-scroll">
         <article
           class="review-card"
-<<<<<<< HEAD
           *ngFor="let review of reviews; trackBy: trackByReviewId"
-=======
-          *ngFor="let review of displayedReviews; trackBy: trackByReviewId"
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
           role="button"
           tabindex="0"
           (click)="openReviewDetail(review.id)"
@@ -82,15 +71,11 @@
               </h3>
               <div class="meta-row">
                 <span class="score">{{ review.score }}</span>
-<<<<<<< HEAD
                 @if(review.hasRating) {
                   <span>{{ review.likes }} likes</span>
                 } @else {
                   <span>sin likes</span>
                 }
-=======
-                <span>{{ review.likes }} likes</span>
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
               </div>
             </header>
 

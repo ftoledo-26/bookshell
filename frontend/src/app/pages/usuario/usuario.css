@@ -2,16 +2,10 @@
 	display:block;
 	min-height:100dvh;
 	background:
-<<<<<<< HEAD
 		radial-gradient(circle at 18% 12%, rgba(255, 177, 89, 0.14), transparent 34%),
 		radial-gradient(circle at 82% 88%, rgba(255, 120, 57, 0.1), transparent 28%),
 		linear-gradient(160deg, #120f0a 0%, #1d120f 44%, #2c1911 100%);
 	color:#f7f3eb;
-=======
-		radial-gradient(circle at top, rgba(32, 48, 68, 0.5), transparent 32%),
-		linear-gradient(180deg, #0b1219 0%, #0e151e 100%);
-	color:#edf3f9;
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 }
 
 .profile-shell {
@@ -26,15 +20,9 @@
 	margin: 0;
 	padding: 0.75rem 0.85rem;
 	border-radius: 0.8rem;
-<<<<<<< HEAD
 	border: 1px solid rgba(255, 225, 178, 0.2);
 	background: rgba(14, 10, 7, 0.58);
 	color: #f0e2cd;
-=======
-	border: 1px solid rgba(111, 130, 150, 0.35);
-	background: rgba(17, 24, 33, 0.82);
-	color: #d9e6f3;
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 }
 
 .status.error {
@@ -44,15 +32,9 @@
 }
 
 .status.success {
-<<<<<<< HEAD
 	border-color: rgba(255, 204, 122, 0.4);
 	background: rgba(56, 37, 18, 0.72);
 	color: #ffe1b5;
-=======
-	border-color: rgba(29, 215, 96, 0.35);
-	background: rgba(20, 43, 28, 0.84);
-	color: #bff3cf;
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 }
 
 .editor-panel {
@@ -60,13 +42,8 @@
 	gap: 0.85rem;
 	padding: 1rem;
 	border-radius: 1rem;
-<<<<<<< HEAD
 	border: 1px solid rgba(255, 225, 178, 0.2);
 	background: rgba(33, 25, 18, 0.78);
-=======
-	border: 1px solid rgba(78, 94, 110, 0.45);
-	background: rgba(12, 18, 26, 0.72);
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 	backdrop-filter: blur(8px);
 }
 
@@ -78,11 +55,7 @@
 .editor-form label {
 	display: grid;
 	gap: 0.4rem;
-<<<<<<< HEAD
 	color: #cfbca2;
-=======
-	color: #b7c7d6;
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 	font-size: 0.95rem;
 }
 
@@ -90,7 +63,6 @@
 	width: 100%;
 	padding: 0.9rem 1rem;
 	border-radius: 0.85rem;
-<<<<<<< HEAD
 	border: 1px solid rgba(255, 225, 178, 0.2);
 	background: rgba(12, 9, 7, 0.72);
 	color: #f7f3eb;
@@ -98,15 +70,6 @@
 
 .editor-form input:focus {
 	outline: 2px solid #ffb14c;
-=======
-	border: 1px solid #344556;
-	background: #0f1720;
-	color: #edf3f9;
-}
-
-.editor-form input:focus {
-	outline: 2px solid #1fd760;
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 	outline-offset: 2px;
 }
 
@@ -117,7 +80,6 @@
 	align-items: center;
 }
 
-<<<<<<< HEAD
 .panel-head {
 	flex-wrap: wrap;
 }
@@ -346,8 +308,6 @@
 	padding-left: 0.9rem;
 }
 
-=======
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 .preview-actions {
 	justify-content: flex-start;
 }
@@ -371,13 +331,8 @@
 .edit-card {
 	width: min(580px, 100%);
 	border-radius: 1.1rem;
-<<<<<<< HEAD
 	border: 1px solid rgba(255, 225, 178, 0.2);
 	background: linear-gradient(170deg, rgba(33, 25, 18, 0.92), rgba(18, 12, 9, 0.94));
-=======
-	border: 1px solid rgba(74, 90, 104, 0.62);
-	background: linear-gradient(170deg, rgba(12, 18, 26, 0.95), rgba(16, 25, 35, 0.95));
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 	padding: 1.2rem;
 	box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
 	display: grid;
@@ -388,11 +343,7 @@
 	display: grid;
 	gap: 0.35rem;
 	padding-bottom: 0.8rem;
-<<<<<<< HEAD
 	border-bottom: 1px solid rgba(255, 225, 178, 0.16);
-=======
-	border-bottom: 1px solid rgba(74, 90, 104, 0.45);
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 }
 
 .edit-eyebrow {
@@ -400,11 +351,7 @@
 	font-size: 0.78rem;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
-<<<<<<< HEAD
 	color: #ffd18b;
-=======
-	color: #a7bccf;
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 	font-weight: 700;
 }
 
@@ -416,11 +363,7 @@
 
 .edit-head p {
 	margin: 0;
-<<<<<<< HEAD
 	color: #cfbca2;
-=======
-	color: #9fb3c4;
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 }
 
 .btn-edit,
@@ -436,33 +379,20 @@
 
 .btn-edit,
 .btn-save {
-<<<<<<< HEAD
 	background: linear-gradient(90deg, rgba(255, 204, 122, 0.16), rgba(255, 157, 82, 0.14));
 	color: #ffd18b;
 	border: 1px solid rgba(255, 204, 122, 0.35);
 	box-shadow: inset 0 0 0 1px rgba(255, 177, 89, 0.18);
-=======
-	background: #0d141b;
-	color: #43de7f;
-	border: 1px solid #26bf62;
-	box-shadow: inset 0 0 0 1px rgba(38, 191, 98, 0.2);
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 }
 
 .btn-edit:hover,
 .btn-save:hover {
-<<<<<<< HEAD
 	background: linear-gradient(95deg, #f8b84e, #ff8f3c);
 	color: #1c130f;
-=======
-	background: #173320;
-	color: #d8ffea;
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 	transform: translateY(-1px);
 }
 
 .btn-cancel {
-<<<<<<< HEAD
 	background: rgba(33, 25, 18, 0.78);
 	color: #f4dcc2;
 	border: 1px solid rgba(255, 225, 178, 0.24);
@@ -524,6 +454,18 @@
 :host .avatar-block {
 	background: linear-gradient(180deg, rgba(255, 177, 89, 0.25), rgba(255, 120, 57, 0.2));
 	border-color: rgba(255, 225, 178, 0.3);
+}
+
+:host .avatar-block.has-photo {
+	background: transparent;
+	overflow: hidden;
+}
+
+:host .avatar-image {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	border-radius: inherit;
 }
 
 :host .avatar-face {
@@ -1091,18 +1033,6 @@
 	box-shadow: 0 10px 24px rgba(255, 143, 60, 0.25);
 }
 
-=======
-	background: #2a1a0f;
-	color: #ffd4b0;
-	border: 1px solid #ff9b57;
-}
-
-.btn-cancel:hover {
-	background: #472612;
-	transform: translateY(-1px);
-}
-
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 .btn-save:disabled {
 	opacity: 0.7;
 	cursor: progress;
@@ -1137,7 +1067,6 @@
 	.editor-actions .btn-cancel {
 		width: 100%;
 	}
-<<<<<<< HEAD
 
 	.panel-head {
 		align-items: flex-start;
@@ -1168,6 +1097,50 @@
 		grid-column: 1 / -1;
 		justify-self: start;
 	}
-=======
->>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
+}
+
+/* Photo upload styles */
+.editor-form input[type="file"] {
+	cursor: pointer;
+	color: #cfbca2;
+}
+
+.editor-form input[type="file"]::file-selector-button {
+	padding: 0.6rem 1rem;
+	border-radius: 0.6rem;
+	border: 1px solid rgba(255, 177, 89, 0.4);
+	background: rgba(255, 177, 89, 0.1);
+	color: #ffb14c;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.3s ease;
+}
+
+.editor-form input[type="file"]::file-selector-button:hover {
+	background: rgba(255, 177, 89, 0.2);
+	border-color: rgba(255, 177, 89, 0.6);
+}
+
+.photo-note {
+	margin: 0.5rem 0 0;
+	font-size: 0.85rem;
+	color: #cfbca2;
+}
+
+.photo-preview {
+	display: grid;
+	gap: 0.5rem;
+	max-width: 200px;
+	margin: 1rem 0;
+	padding: 0.5rem;
+	border-radius: 0.85rem;
+	border: 2px solid rgba(255, 177, 89, 0.3);
+	background: rgba(12, 9, 7, 0.5);
+}
+
+.photo-preview img {
+	width: 100%;
+	height: auto;
+	border-radius: 0.75rem;
+	object-fit: cover;
 }

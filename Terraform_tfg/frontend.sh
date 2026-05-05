@@ -17,13 +17,14 @@ mkdir -p /var/www/front
 cd /var/www/front
 git clone -b ${repo_branch} --single-branch ${repo_url} .
 
-# Build de produccion Angular
+# Build de produccion Angular (el proyecto esta en frontend/)
+cd /var/www/front/frontend
 npm ci
 npm run build -- --configuration production
 
 # Copiar build a DocumentRoot (Angular 17+ genera en browser/, versiones anteriores directamente)
 rm -rf /var/www/html/*
-DIST_DIR=$(find /var/www/front/dist -name "index.html" -exec dirname {} \; | head -1)
+DIST_DIR=$(find /var/www/front/frontend/dist -name "index.html" -exec dirname {} \; | head -1)
 cp -r $DIST_DIR/* /var/www/html/
 
 # Apache VirtualHost — proxy /api al backend

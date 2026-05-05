@@ -132,6 +132,19 @@ export class UsuarioService {
       );
   }
 
+  updateUsuarioWithPhoto(id: number, formData: FormData): Observable<Usuario> {
+    return this.http
+      .post<ApiResponse<RawUsuario> | { data?: RawUsuario }>(`${this.apiUrlUpdate}/${id}`, formData)
+      .pipe(
+        map((response: any) => this.normalizeUsuario(response?.data ?? response)),
+        map((response) => {
+          this.userByIdCache.delete(id);
+          this.users$ = undefined;
+          return response;
+        })
+      );
+  }
+
   createUsuario(payload: Pick<Usuario, 'nombre' | 'email' | 'password' | 'phone'>): Observable<Usuario> {
     const apiPayload = {
       name: payload.nombre,

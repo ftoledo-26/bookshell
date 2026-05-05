@@ -40,8 +40,8 @@ cat > /etc/apache2/sites-available/000-default.conf <<'VHOST'
     </Directory>
 
     ProxyPreserveHost On
-    ProxyPass        /api http://BACKEND_IP_HERE:8000/api
-    ProxyPassReverse /api http://BACKEND_IP_HERE:8000/api
+    ProxyPass        /api http://BACKEND_IP_HERE:80/api
+    ProxyPassReverse /api http://BACKEND_IP_HERE:80/api
 
     ErrorLog /var/log/apache2/error.log
     CustomLog /var/log/apache2/access.log combined
@@ -66,5 +66,10 @@ systemctl enable apache2
 #     -m admin@${domain} --redirect
 # ---------------------------------------------------------------
 
+# HTTPS con Let's Encrypt (requiere que DuckDNS ya apunte al frontend_eip)
+certbot --apache -d ${domain} \
+  --non-interactive --agree-tos \
+  -m franciscomanueltoledo@gmail.com \
+  --redirect || echo "[frontend.sh] AVISO: certbot fallo — HTTPS no activo. Ejecutar via workflow deploy_frontend cuando DuckDNS apunte aqui."
+
 echo "[frontend.sh] Instalacion completada. Dominio: ${domain}, Backend: ${backend_ip}"
-echo "[frontend.sh] Para activar HTTPS ejecuta: sudo certbot --apache -d ${domain} --agree-tos -m tu@email.com --redirect"

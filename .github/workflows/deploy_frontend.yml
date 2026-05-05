@@ -3,7 +3,7 @@ name: Deploy Frontend (Angular)
 # Despliega la aplicacion Angular en la instancia EC2 Frontend via SSH a traves del bastion.
 # Tambien actualiza DuckDNS y activa HTTPS con certbot si aun no esta activado.
 # Secrets requeridos en GitHub:
-#   BASTION_EIP          — IP publica del bastion (terraform output bastion_eip)
+#   BASTION_EIP          — IP publica del bastion  (terraform output bastion_eip)
 #   FRONTEND_PRIVATE_IP  — IP privada del frontend (terraform output frontend_private_ip)
 #   FRONTEND_EIP         — IP publica del frontend (terraform output frontend_eip)
 #   SSH_PRIVATE_KEY      — Clave privada PEM del Key Pair de AWS (sin passphrase)
@@ -14,8 +14,11 @@ on:
   push:
     branches: [Front]
     paths:
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'angular.json'
       - 'frontend.sh'
-      - 'frontend/**'
   workflow_dispatch:
 
 jobs:
@@ -27,17 +30,15 @@ jobs:
       - name: Checkout codigo
         uses: actions/checkout@v4
 
-      # Actualizar DuckDNS con la IP actual del frontend
       - name: Actualizar DuckDNS
         run: |
           RESP=$(curl -s "https://www.duckdns.org/update?domains=bookshell&token=${{ secrets.DUCKDNS_TOKEN }}&ip=${{ secrets.FRONTEND_EIP }}")
           echo "Respuesta DuckDNS: $RESP"
           if [ "$RESP" != "OK" ]; then
-            echo "Advertencia: DuckDNS no devolvio OK"
+            echo "::warning::DuckDNS no devolvio OK — comprueba el token y la IP"
           fi
 
-      # Pull, build Angular y recarga Apache en el servidor frontend
-      - name: Pull, build y desplegar Angular (via bastion)
+      - name: Pull, build y HTTPS (via bastion)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.FRONTEND_PRIVATE_IP }}
@@ -46,45 +47,40 @@ jobs:
           proxy_host: ${{ secrets.BASTION_EIP }}
           proxy_username: ubuntu
           proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 30m
           script: |
             set -e
-            cd /var/www/front
 
+            # ── Actualizar codigo ─────────────────────────────────────────
+            cd /var/www/front
             sudo git pull origin Front
 
-            cd /var/www/front/frontend
-            sudo npm install
+            # ── Build Angular ─────────────────────────────────────────────
+            sudo npm ci
             sudo npm run build -- --configuration production
 
+            # ── Copiar build al DocumentRoot ──────────────────────────────
             sudo rm -rf /var/www/html/*
-            DIST_DIR=$(find /var/www/front/frontend/dist -name "index.html" -exec dirname {} \; | head -1)
-            sudo cp -r $DIST_DIR/* /var/www/html/
+            DIST_DIR=$(sudo find /var/www/front/dist -name "index.html" -exec dirname {} \; | head -1)
+            sudo cp -r "$DIST_DIR"/* /var/www/html/
 
-            sudo systemctl reload apache2
-            echo "Frontend Angular desplegado — $(date)"
+            # ── Corregir puerto proxy backend (8000→80) si es necesario ──
+            sudo sed -i "s|:8000/api|:80/api|g" /etc/apache2/sites-available/000-default.conf
 
-      # Activar HTTPS con certbot (solo si aun no esta configurado)
-      - name: Activar HTTPS con certbot
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.FRONTEND_PRIVATE_IP }}
-          username: ubuntu
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          proxy_host: ${{ secrets.BASTION_EIP }}
-          proxy_username: ubuntu
-          proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            # Solo ejecuta certbot si aun no existe el certificado
+            # ── HTTPS con certbot ─────────────────────────────────────────
             if [ ! -d "/etc/letsencrypt/live/bookshell.duckdns.org" ]; then
-              echo "Solicitando certificado Let's Encrypt..."
+              echo "==> Solicitando certificado HTTPS..."
               sudo certbot --apache \
                 -d bookshell.duckdns.org \
                 --non-interactive \
                 --agree-tos \
                 -m ${{ secrets.CERTBOT_EMAIL }} \
                 --redirect
-              echo "HTTPS activado correctamente"
+              echo "HTTPS activado"
             else
-              echo "Certificado ya existe, renovando si es necesario..."
+              echo "==> Renovando certificado si es necesario..."
               sudo certbot renew --quiet
             fi
+
+            sudo systemctl reload apache2
+            echo "Frontend desplegado — $(date)"

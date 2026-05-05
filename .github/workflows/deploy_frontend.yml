@@ -53,9 +53,10 @@ jobs:
           script: |
             set -e
 
-            # ── Actualizar codigo ─────────────────────────────────────────
+            # ── Actualizar codigo (reset hard para limpiar conflictos locales) ──
             cd /var/www/front
-            sudo git pull origin Front
+            sudo git fetch origin Front
+            sudo git reset --hard origin/Front
 
             # ── Build Angular (el proyecto esta en frontend/) ─────────────
             cd /var/www/front/frontend

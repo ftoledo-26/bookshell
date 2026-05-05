@@ -27,6 +27,16 @@
 					<textarea [(ngModel)]="editDraft.descripcion" name="descripcion" placeholder="Cuentanos sobre ti..." rows="4"></textarea>
 				</label>
 
+				<label>
+					<span>Foto de perfil</span>
+					<input type="file" accept="image/*" (change)="onPhotoSelected($event)" name="foto" />
+					<p class="photo-note" *ngIf="photoPreview">Se guardará como: <strong>{{ editDraft.nombre }}.webp</strong></p>
+				</label>
+
+				<div class="photo-preview" *ngIf="photoPreview">
+					<img [src]="photoPreview" alt="Vista previa de foto" />
+				</div>
+
 				<div class="editor-actions">
 					<button type="submit" class="btn-save" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar cambios' }}</button>
 					<button type="button" class="btn-cancel" (click)="cancelEditing()">Cancelar</button>
@@ -36,8 +46,9 @@
 	</section>
 
 	<section class="profile-hero" *ngIf="!isLoading && !isEditing">
-		<div class="avatar-block" aria-hidden="true">
-			<span class="avatar-icon" aria-hidden="true"></span>
+		<div class="avatar-block" [class.has-photo]="user.foto">
+			<img *ngIf="user.foto" [src]="getUserPhotoUrl()" [alt]="user.nombre + ' foto'" class="avatar-image" />
+			<span *ngIf="!user.foto" class="avatar-icon" aria-hidden="true"></span>
 		</div>
 
 		<div class="hero-copy">

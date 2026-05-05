@@ -11,6 +11,7 @@ import { BookService } from '../../services/Book.service';
 import { ComentarioService } from '../../services/Comentario.service';
 import { LoginService } from '../../services/Login.service';
 import { UsuarioService } from '../../services/Usuario.service';
+import { environment } from '../../environments/environments';
 
 type ProfileMetric = {
 	value: string;
@@ -96,6 +97,7 @@ export class UsuarioPage implements OnInit {
 	private readonly route = inject(ActivatedRoute);
 	private readonly router = inject(Router);
 	private readonly destroyRef = inject(DestroyRef);
+	private readonly backendBaseUrl = environment.API_URL.replace(/\/api\/?$/, '');
 	private currentUserId: number | null = this.loginService.getUserId();
 	private viewedUserId: number | null = null;
 	profileIsEditable = false;
@@ -175,7 +177,9 @@ export class UsuarioPage implements OnInit {
 		nombre: '',
 		email: '',
 		descripcion: '',
+		foto: null as File | null
 	};
+	photoPreview: string | null = null;
 	isEditing = false;
 	isLoading = true;
 	isSaving = false;
@@ -367,7 +371,8 @@ export class UsuarioPage implements OnInit {
 				this.editDraft = {
 					nombre: String(result.user.nombre ?? ''),
 					email: String(result.user.email ?? ''),
-					descripcion: String(result.user.descripcion ?? '')
+					descripcion: String(result.user.descripcion ?? ''),
+					foto: null
 				};
 				this.profileComments = result.comments;
 				this.allComments = result.allComments;
@@ -874,7 +879,8 @@ export class UsuarioPage implements OnInit {
 		this.editDraft = {
 			nombre: String(this.user.nombre ?? ''),
 			email: String(this.user.email ?? ''),
-			descripcion: String(this.user.descripcion ?? '')
+			descripcion: String(this.user.descripcion ?? ''),
+			foto: null
 		};
 		this.clearMessages();
 		this.isEditing = true;
@@ -887,8 +893,10 @@ export class UsuarioPage implements OnInit {
 		this.editDraft = {
 			nombre: String(this.user.nombre ?? ''),
 			email: String(this.user.email ?? ''),
-			descripcion: String(this.user.descripcion ?? '')
+			descripcion: String(this.user.descripcion ?? ''),
+			foto: null
 		};
+		this.photoPreview = null;
 		this.cdr.detectChanges();
 	}
 
@@ -911,24 +919,61 @@ export class UsuarioPage implements OnInit {
 		this.isSaving = true;
 		this.clearMessages();
 
-		this.usuarioService.updateUsuario(userId, { nombre, email, descripcion }).subscribe({
-			next: (updatedUser) => {
-				this.user = updatedUser;
-				this.currentUserId = updatedUser.id;
-					this.profileIsEditable = this.canEditProfile();
-				this.viewedUserId = updatedUser.id;
-				localStorage.setItem('username', updatedUser.nombre);
-				this.isEditing = false;
-				this.setMessage('success', 'Perfil actualizado correctamente.', false);
+		// Si hay una foto, convertirla a WebP y enviar como FormData
+		if (this.editDraft.foto) {
+			this.convertImageToWebP(this.editDraft.foto, nombre).then((webpBlob) => {
+				const formData = new FormData();
+				formData.append('_method', 'PUT');
+				formData.append('name', nombre);
+				formData.append('email', email);
+				formData.append('descripcion', descripcion);
+				formData.append('foto', webpBlob, `${nombre}.webp`);
+
+				this.usuarioService.updateUsuarioWithPhoto(userId, formData).subscribe({
+					next: (updatedUser) => this.handleProfileUpdateSuccess(updatedUser),
+					error: () => this.handleProfileUpdateError()
+				});
+			}).catch(() => {
+				this.setMessage('error', 'No se pudo procesar la imagen. Por favor, intenta con otra.', false);
 				this.isSaving = false;
 				this.cdr.detectChanges();
-			},
-			error: () => {
-				this.setMessage('error', 'No se pudo actualizar el perfil.', false);
-				this.isSaving = false;
-				this.cdr.detectChanges();
-			}
-		});
+			});
+		} else {
+			// Sin foto, solo actualizar datos básicos
+			this.usuarioService.updateUsuario(userId, { nombre, email, descripcion }).subscribe({
+				next: (updatedUser) => this.handleProfileUpdateSuccess(updatedUser),
+				error: () => this.handleProfileUpdateError()
+			});
+		}
+	}
+
+	private handleProfileUpdateSuccess(updatedUser: Usuario | any): void {
+		this.user = {
+			...updatedUser,
+			nombre: String(updatedUser?.nombre ?? updatedUser?.name ?? '')
+		};
+		this.currentUserId = updatedUser.id;
+		this.profileIsEditable = this.canEditProfile();
+		this.viewedUserId = updatedUser.id;
+		localStorage.setItem('username', String(updatedUser?.nombre ?? updatedUser?.name ?? ''));
+		this.isEditing = false;
+		this.editDraft.foto = null;
+		this.photoPreview = null;
+		this.setMessage('success', 'Perfil actualizado correctamente.', false);
+		this.isSaving = false;
+		this.cdr.detectChanges();
+	}
+
+	private handleProfileUpdateError(error?: any): void {
+		const apiMessage = error?.error?.message
+			?? error?.error?.errors?.foto?.[0]
+			?? error?.error?.errors?.name?.[0]
+			?? error?.error?.errors?.email?.[0]
+			?? 'No se pudo actualizar el perfil.';
+
+		this.setMessage('error', apiMessage, false);
+		this.isSaving = false;
+		this.cdr.detectChanges();
 	}
 
 	setActiveTab(tab: ProfileTab): void {
@@ -940,6 +985,23 @@ export class UsuarioPage implements OnInit {
 
 	openLikedComment(commentId: number): void {
 		this.router.navigate(['/comentarios', commentId]);
+	}
+
+	getUserPhotoUrl(): string {
+		const foto = String(this.user.foto ?? '').trim();
+		if (!foto) {
+			return '';
+		}
+
+		if (/^https?:\/\//i.test(foto)) {
+			return foto;
+		}
+
+		if (foto.startsWith('/')) {
+			return `${this.backendBaseUrl}${foto}`;
+		}
+
+		return `${this.backendBaseUrl}/usuarios/${foto}`;
 	}
 
 	trackByBookCommentId(index: number, comment: ProfileBookComment): number {
@@ -1172,5 +1234,92 @@ export class UsuarioPage implements OnInit {
 				this.setMessage('error', 'No se pudo eliminar el comentario. Intenta de nuevo.', false);
 			}
 		);
+	}
+
+	onPhotoSelected(event: Event): void {
+		const input = event.target as HTMLInputElement;
+		const file = input.files?.[0];
+
+		if (!file) {
+			this.editDraft.foto = null;
+			this.photoPreview = null;
+			return;
+		}
+
+		// Validar que sea una imagen
+		if (!file.type.startsWith('image/')) {
+			this.setMessage('error', 'Por favor selecciona un archivo de imagen válido.', false);
+			this.editDraft.foto = null;
+			this.photoPreview = null;
+			return;
+		}
+
+		// Validar tamaño máximo (ej: 5MB)
+		const maxSize = 5 * 1024 * 1024; // 5MB
+		if (file.size > maxSize) {
+			this.setMessage('error', 'La imagen debe pesar menos de 5MB.', false);
+			this.editDraft.foto = null;
+			this.photoPreview = null;
+			return;
+		}
+
+		this.editDraft.foto = file;
+
+		// Crear preview
+		const reader = new FileReader();
+		reader.onload = (e) => {
+			this.photoPreview = e.target?.result as string;
+			this.cdr.detectChanges();
+		};
+		reader.readAsDataURL(file);
+
+		this.clearMessages();
+	}
+
+	private convertImageToWebP(file: File, username: string): Promise<Blob> {
+		return new Promise((resolve, reject) => {
+			const reader = new FileReader();
+
+			reader.onload = (event) => {
+				const img = new Image();
+				img.onload = () => {
+					const canvas = document.createElement('canvas');
+					canvas.width = img.width;
+					canvas.height = img.height;
+
+					const ctx = canvas.getContext('2d');
+					if (!ctx) {
+						reject(new Error('No se pudo obtener el contexto del canvas'));
+						return;
+					}
+
+					ctx.drawImage(img, 0, 0);
+
+					canvas.toBlob(
+						(blob) => {
+							if (blob) {
+								resolve(blob);
+							} else {
+								reject(new Error('No se pudo convertir la imagen a WebP'));
+							}
+						},
+						'image/webp',
+						0.85 // Calidad
+					);
+				};
+
+				img.onerror = () => {
+					reject(new Error('No se pudo cargar la imagen'));
+				};
+
+				img.src = event.target?.result as string;
+			};
+
+			reader.onerror = () => {
+				reject(new Error('No se pudo leer el archivo'));
+			};
+
+			reader.readAsDataURL(file);
+		});
 	}
 }

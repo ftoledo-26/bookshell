@@ -36,7 +36,6 @@
 				<div class="photo-preview" *ngIf="photoPreview">
 					<img [src]="photoPreview" alt="Vista previa de foto" />
 				</div>
-
 				<div class="editor-actions">
 					<button type="submit" class="btn-save" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar cambios' }}</button>
 					<button type="button" class="btn-cancel" (click)="cancelEditing()">Cancelar</button>
@@ -69,7 +68,7 @@
 
 	<nav class="profile-tabs" aria-label="Secciones del perfil" *ngIf="!isLoading && !isEditing">
 		<button
-				*ngFor="let tab of profileTabs; trackBy: trackByTab"
+			*ngFor="let tab of profileTabs"
 			type="button"
 			class="tab-button"
 			[class.active]="tab === activeTab"
@@ -240,6 +239,9 @@
 						<button type="button" class="btn-edit liked-action" (click)="openLikedComment(comment.id)">Ver comentario</button>
 					</article>
 				</div>
+					<span>Libros y reseñas que te gustaron.</span>
+				</header>
+				<p class="empty-state">Todavía no hay likes para mostrar.</p>
 			</section>
 		</div>
 

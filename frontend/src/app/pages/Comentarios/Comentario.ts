@@ -1,6 +1,9 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+<<<<<<< HEAD
 import { FormsModule } from '@angular/forms';
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 import { ActivatedRoute, Router } from '@angular/router';
 import { catchError, finalize, forkJoin, map, of, switchMap, timeout } from 'rxjs';
 import { Book } from '../../models/Book';
@@ -8,25 +11,35 @@ import { Comentario } from '../../models/Comentario';
 import { Usuario } from '../../models/Usuario';
 import { BookService } from '../../services/Book.service';
 import { ComentarioService } from '../../services/Comentario.service';
+<<<<<<< HEAD
 import { LoginService } from '../../services/Login.service';
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 import { UsuarioService } from '../../services/Usuario.service';
 
 
 type CommentDetailView = {
 	id: number;
+<<<<<<< HEAD
 	ownerId: number | null;
 	bookId: number | null;
 	bookTitleRaw: string;
+=======
+	bookId: number | null;
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 	username: string;
 	bookTitle: string;
 	author: string;
 	content: string;
 	likes: number;
+<<<<<<< HEAD
 	likedByCurrentUser: boolean;
 	ratingValue: number;
 	ratingCount: number;
 	reviewCount: number;
 	hasBookRating: boolean;
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 	coverUrl: string;
 };
 
@@ -35,21 +48,31 @@ type RelatedCommentView = {
 	username: string;
 	content: string;
 	likes: number;
+<<<<<<< HEAD
 	ratingValue: number;
 	likedByCurrentUser: boolean;
 	hasRating: boolean;
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 };
 
 @Component({
 	selector: 'app-comentario-page',
 	standalone: true,
+<<<<<<< HEAD
 	imports: [CommonModule, FormsModule],
+=======
+	imports: [CommonModule],
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 	templateUrl: './Comentario.html',
 	styleUrls: ['./Comentario.css']
 })
 export class ComentarioPage implements OnInit {
      private readonly cdr = inject(ChangeDetectorRef);
+<<<<<<< HEAD
 	private readonly loginService = inject(LoginService);
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 	detail: CommentDetailView | null = null;
 	relatedComments: RelatedCommentView[] = [];
 	isLoading = true;
@@ -61,6 +84,7 @@ export class ComentarioPage implements OnInit {
 	private readonly comentarioService = inject(ComentarioService);
 	private readonly bookService = inject(BookService);
 	private readonly usuarioService = inject(UsuarioService);
+<<<<<<< HEAD
 	private currentUserId: number | null = this.loginService.getUserId();
 	commentSource: Comentario | null = null;
 	commentDraft = '';
@@ -69,6 +93,8 @@ export class ComentarioPage implements OnInit {
 	isSavingComment = false;
 	canEditCurrentComment = false;
 	successMessage = '';
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 
 	ngOnInit(): void {
 		window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
@@ -90,6 +116,7 @@ export class ComentarioPage implements OnInit {
 		this.isLoadingRelated = true;
 		this.errorMessage = '';
 		this.detail = null;
+<<<<<<< HEAD
 		this.commentSource = null;
 		this.isEditingComment = false;
 		this.isSavingComment = false;
@@ -114,11 +141,30 @@ export class ComentarioPage implements OnInit {
 					);
 				}),
 				switchMap((comment: Comentario | undefined) => {
+=======
+		this.relatedComments = [];
+
+		this.comentarioService
+			.getComentario(commentId)
+			.pipe(
+				timeout(8000),
+				catchError(() =>
+					this.comentarioService.getComentarios().pipe(
+						timeout(8000),
+						map((comments) => comments.find((item) => Number(item.id) === commentId)),
+						catchError(() => of(undefined))
+					)
+				),
+				switchMap((comment) => {
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 					if (!comment) {
 						return of({
 							comment: null,
 							book: null,
+<<<<<<< HEAD
 							books: [] as Book[],
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 							users: [] as Usuario[]
 						});
 					}
@@ -126,7 +172,10 @@ export class ComentarioPage implements OnInit {
 					const c = comment as any;
 					const userId = c.UsuarioId ?? c.usuario_id;
 					const bookId = c.BookId ?? c.libro_id;
+<<<<<<< HEAD
 					const bookTitle = String(c.libro ?? c.libroTitulo ?? c.titulo ?? '').trim();
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 					const hasEmbeddedUsername = Boolean(c.usuario?.nombre || c.usuarioNombre || c.username);
 
 					return forkJoin({
@@ -135,10 +184,13 @@ export class ComentarioPage implements OnInit {
 							bookId != null
 								? this.bookService.getBook(Number(bookId)).pipe(timeout(6000), catchError(() => of(null)))
 								: of(null),
+<<<<<<< HEAD
 						books:
 							bookId == null && bookTitle.length > 0
 								? this.bookService.getBooks().pipe(timeout(6000), catchError(() => of([] as Book[])))
 								: of([] as Book[]),
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 						users:
 							!hasEmbeddedUsername && userId != null
 								? this.usuarioService.getUsuarios().pipe(timeout(6000), catchError(() => of([] as Usuario[])))
@@ -149,7 +201,10 @@ export class ComentarioPage implements OnInit {
 						of({
 							comment: null,
 							book: null,
+<<<<<<< HEAD
 							books: [] as Book[],
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 							users: [] as Usuario[]
 						})
 					),
@@ -159,14 +214,19 @@ export class ComentarioPage implements OnInit {
 				})
 			)
 			.subscribe({
+<<<<<<< HEAD
 				next: (result: { comment: Comentario | null; book: Book | null; books: Book[]; users: Usuario[] }) => {
 					const { comment, book, books, users } = result;
+=======
+				next: ({ comment, book, users }) => {
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
                     if (!comment) {
                         this.errorMessage = 'No se encontró ese comentario...';
                         this.isLoadingRelated = false;
                         this.cdr.markForCheck();
                         return;
                     }
+<<<<<<< HEAD
 					const resolvedBook = this.resolveBookFromComment(comment, book, books);
 					this.commentSource = comment;
 					this.detail = this.mapCommentDetail(comment, resolvedBook, users);
@@ -175,6 +235,10 @@ export class ComentarioPage implements OnInit {
 					this.canEditCurrentComment = this.canEditComment(comment);
 					this.isEditingComment = this.canEditCurrentComment;
 					this.loadRelatedComments(this.detail.bookId, this.detail.bookTitleRaw, comment.id, users);
+=======
+                    this.detail = this.mapCommentDetail(comment, book, users);
+					this.loadRelatedComments(this.detail.bookId, comment.id, users);
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 					this.cdr.markForCheck();
                     },
                     error: () => {
@@ -185,8 +249,13 @@ export class ComentarioPage implements OnInit {
 			});
 	}
 
+<<<<<<< HEAD
 	private loadRelatedComments(bookId: number | null, bookTitle: string, currentCommentId: number, users: Usuario[]): void {
 		if (bookId == null && bookTitle.trim().length === 0) {
+=======
+	private loadRelatedComments(bookId: number | null, currentCommentId: number, users: Usuario[]): void {
+		if (bookId == null) {
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 			this.relatedComments = [];
 			this.isLoadingRelated = false;
 			this.cdr.markForCheck();
@@ -196,7 +265,11 @@ export class ComentarioPage implements OnInit {
 		this.isLoadingRelated = true;
 
 		forkJoin({
+<<<<<<< HEAD
 			relatedComments: this.comentarioService.getComentariosByBookId(bookId ?? -1, currentCommentId, bookTitle).pipe(
+=======
+			relatedComments: this.comentarioService.getComentariosByBookId(bookId, currentCommentId).pipe(
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 				timeout(8000),
 				catchError(() => of([] as Comentario[]))
 			),
@@ -210,13 +283,18 @@ export class ComentarioPage implements OnInit {
 					this.cdr.markForCheck();
 				})
 			)
+<<<<<<< HEAD
 			.subscribe((result: { relatedComments: Comentario[]; users: Usuario[] }) => {
 				const { relatedComments, users: relatedUsers } = result;
+=======
+			.subscribe(({ relatedComments, users: relatedUsers }) => {
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 				this.relatedComments = this.mapRelatedComments(relatedComments, relatedUsers);
 				this.cdr.markForCheck();
 			});
 	}
 
+<<<<<<< HEAD
 	private resolveBookFromComment(comment: Comentario, loadedBook: Book | null, books: Book[]): Book | null {
 		if (loadedBook) {
 			return loadedBook;
@@ -231,11 +309,14 @@ export class ComentarioPage implements OnInit {
 		return books.find((item) => item.titulo.trim().toLowerCase() === bookTitle) ?? null;
 	}
 
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 	private mapCommentDetail(comment: Comentario, book: Book | null, users: Usuario[]): CommentDetailView {
 		const c = comment as any;
 		const userId = c.UsuarioId ?? c.usuario_id;
 		const user = users.find((item) => item.id === Number(userId));
 		const bookId = c.BookId ?? c.libro_id;
+<<<<<<< HEAD
 		const rawTitle = String(c.libro ?? c.libroTitulo ?? c.title ?? c.titulo ?? book?.titulo ?? '').trim();
 		const normalizedLikes = this.resolveCommentLikes(comment);
 		const ratingStats = this.getBookRatingStats(book);
@@ -359,6 +440,21 @@ export class ComentarioPage implements OnInit {
 		});
 	}
 
+=======
+
+		return {
+			id: comment.id,
+			bookId: bookId != null ? Number(bookId) : null,
+			username: c.usuario?.nombre || c.usuarioNombre || c.username || user?.nombre || 'Usuario desconocido',
+			bookTitle: c.libro?.titulo || c.libroTitulo || c.title || c.titulo || book?.titulo || 'Libro sin titulo',
+			author: book?.autor || 'Autor no disponible',
+			content: comment.contenido,
+			likes: comment.likes,
+			coverUrl: book?.portada || '/prueba.webp'
+		};
+	}
+
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 	private mapRelatedComments(comments: Comentario[], users: Usuario[]): RelatedCommentView[] {
 		return comments.map((comment) => {
 			const c = comment as any;
@@ -367,16 +463,23 @@ export class ComentarioPage implements OnInit {
 
 			return {
 				id: comment.id,
+<<<<<<< HEAD
 				username: c.user || c.nombre || c.usuario?.nombre || c.usuarioNombre || c.username || user?.nombre || 'Usuario desconocido',
 				content: c.contenido ?? c.comentario ?? c.comment ?? '',
 				likes: this.resolveCommentLikes(comment),
 				ratingValue: this.resolveCommentRating(comment),
 				likedByCurrentUser: this.comentarioService.isCommentLikedByUser(comment.id, this.currentUserId),
 				hasRating: this.resolveCommentRating(comment) > 0
+=======
+				username: c.usuario?.nombre || c.usuarioNombre || c.username || user?.nombre || 'Usuario desconocido',
+				content: comment.contenido,
+				likes: comment.likes
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 			};
 		});
 	}
 
+<<<<<<< HEAD
 	private buildReviewLikesMap(book: Book | null): Map<number, number> {
 		return new Map<number, number>();
 	}
@@ -469,6 +572,8 @@ export class ComentarioPage implements OnInit {
 		return `/${raw}`;
 	}
 
+=======
+>>>>>>> 6ee403d94b236db5de2aad6953fa50b577b8e351
 	trackByRelatedCommentId(index: number, comment: RelatedCommentView): number {
 		return comment.id;
 	}

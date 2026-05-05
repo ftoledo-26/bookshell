@@ -64,3 +64,4 @@ Thumbs.db
 terraform.tfstate
 terraform.tfstate.backup
 *.tfvars
+Terraform_tfg/

@@ -6,7 +6,7 @@ use App\Models\Libro;
 use App\Http\Resources\LibroResource;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class LibroController extends Controller
 {
@@ -71,11 +71,11 @@ class LibroController extends Controller
             'title' => 'sometimes|required|string|max:255',
             'author' => 'sometimes|required|string|max:255',
             'portada' => 'sometimes|nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
+            'portada' => 'sometimes|nullable|string|max:255',
         ]);
 
-        if ($request->hasFile('portada')) {
-            $path = $request->file('portada')->store('portadas', 'public');
-            $validated['portada'] = Storage::url($path);
+        iif ($request->has('portada') || $request->hasFile('portada')) {
+            $validated['portada'] = Str::slug($validated['title'] ?? $libro->titulo) . '.webp';
         }
 
         $libro->update($validated);

@@ -31,8 +31,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Actualizar DuckDNS
+        continue-on-error: true
         run: |
-          RESP=$(curl -s "https://www.duckdns.org/update?domains=bookshell&token=${{ secrets.DUCKDNS_TOKEN }}&ip=${{ secrets.FRONTEND_EIP }}")
+          RESP=$(curl -s --max-time 15 "https://www.duckdns.org/update?domains=bookshell&token=${{ secrets.DUCKDNS_TOKEN }}&ip=${{ secrets.FRONTEND_EIP }}" || echo "CURL_ERROR")
           echo "Respuesta DuckDNS: $RESP"
           if [ "$RESP" != "OK" ]; then
             echo "::warning::DuckDNS no devolvio OK — comprueba el token y la IP"

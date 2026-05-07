@@ -255,16 +255,4 @@ export class Home implements OnInit {
   onRecommendedTouchEnd(): void {
     this.isRecommendedSwiping = false;
   }
-
-  openReviewDetail(reviewId: number): void {
-    this.router.navigate(['/comentarios', reviewId]);
-  }
-
-  trackByBookId(index: number, book: RecommendedBook): number {
-    return book.id;
-  }
-
-  trackByReviewId(index: number, review: FeaturedReview): number {
-    return review.id;
-  }
 }

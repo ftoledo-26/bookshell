@@ -84,8 +84,8 @@
 				<header class="panel-head">
 					<h2>Favorite books</h2>
 					<span>Selecciona tus lecturas favoritas.</span>
-					<button type="button" class="btn-edit panel-action" *ngIf="activeTab === 'Books' && profileIsEditable" (click)="openBookFinder()">
-						{{ bookSearchOpen ? 'Ocultar buscador' : 'Añadir libro' }}
+					<button type="button" class="btn-edit panel-action" *ngIf="activeTab === 'Books' && profileIsEditable && !bookSearchOpen" (click)="openBookFinder()">
+						Añadir libro
 					</button>
 				</header>
 
@@ -93,15 +93,20 @@
 					<div class="finder-toolbar">
 						<input
 							type="text"
-							[(ngModel)]="bookSearchQuery"
+							[ngModel]="bookSearchQuery"
+							(ngModelChange)="onBookSearchChange($event)"
 							name="bookSearchQuery"
-							placeholder="Busca por título o autor"
+							placeholder="Busca por título o autor…"
 							autocomplete="off"
+							(keyup.enter)="searchBooks()"
 						/>
-						<button type="button" class="btn-save" (click)="searchBooks()" [disabled]="isSearchingBooks">
-							{{ isSearchingBooks ? 'Buscando...' : 'Buscar' }}
+						<button type="button" class="btn-finder-search" (click)="searchBooks()" [disabled]="isSearchingBooks">
+							<span *ngIf="!isSearchingBooks">Buscar</span>
+							<span *ngIf="isSearchingBooks" class="finder-spinner" aria-hidden="true"></span>
 						</button>
-						<button type="button" class="btn-cancel" (click)="closeBookFinder()">Cerrar</button>
+						<button type="button" class="btn-finder-close" (click)="closeBookFinder()" aria-label="Cerrar buscador">
+							<span aria-hidden="true">✕</span>
+						</button>
 					</div>
 
 					<p class="finder-empty" *ngIf="!isSearchingBooks && bookSearchResults.length === 0 && bookSearchQuery.trim().length > 0">
@@ -110,19 +115,21 @@
 
 					<div class="finder-results" *ngIf="bookSearchResults.length > 0">
 						<article class="finder-result" *ngFor="let book of bookSearchResults; trackBy: trackByBookSearchResultId">
-							<div class="finder-cover" aria-hidden="true"></div>
+							<div class="finder-cover">
+								<img [src]="normalizeCoverPath(book.portada)" [alt]="book.titulo" loading="lazy" />
+							</div>
 							<div class="finder-copy">
 								<strong>{{ book.titulo }}</strong>
 								<p>{{ book.autor }}</p>
-								<span>{{ book.descripcion || 'Sin descripción' }}</span>
-								<label class="finder-state">
+								<span class="finder-desc">{{ book.descripcion || 'Sin descripción' }}</span>
+								<label class="finder-state-row">
 									<span>Estado</span>
 									<select [(ngModel)]="bookSearchStates[book.id]" [name]="'bookState-' + book.id">
 										<option *ngFor="let option of bookStateOptions" [ngValue]="option.value">{{ option.label }}</option>
 									</select>
 								</label>
 							</div>
-							<button type="button" class="btn-edit finder-action" (click)="addBookToProfile(book, bookSearchStates[book.id])" [disabled]="isSavingBook || !profileIsEditable">
+							<button type="button" class="btn-finder-add" (click)="addBookToProfile(book, bookSearchStates[book.id])" [disabled]="isSavingBook || !profileIsEditable">
 								Añadir
 							</button>
 						</article>
@@ -139,53 +146,50 @@
 				</p>
 
 				<div class="book-grid">
-					<article *ngFor="let book of favoriteBooks; trackBy: trackByBookId" class="book-card profile-book-card">
-						<div class="book-cover profile-book-cover" aria-hidden="true"></div>
+					<article *ngFor="let book of favoriteBooks; trackBy: trackByBookId" class="book-card">
+						<div class="book-cover">
+							<img [src]="book.coverUrl" [alt]="book.title" loading="lazy" />
+						</div>
 						<div class="book-info">
 							<div class="book-head">
-								<div>
+								<div class="book-title-block">
 									<strong>{{ book.title }}</strong>
 									<p>{{ book.author }}</p>
 								</div>
 								<div class="book-head-actions">
 									<span class="book-state-pill">{{ book.stateLabel }}</span>
 									<div class="action-menu-wrap" *ngIf="profileIsEditable">
-										<button type="button" class="menu-trigger" (click)="toggleActionMenu('book', book.id); $event.stopPropagation()" [attr.aria-expanded]="isActionMenuOpen('book', book.id)" aria-label="Abrir acciones del libro">⋮</button>
-										<div class="action-menu" *ngIf="isActionMenuOpen('book', book.id) || (actionMenuVisible?.kind === 'book' && actionMenuVisible?.id === book.id)" [class.visible]="actionMenuVisible?.kind === 'book' && actionMenuVisible?.id === book.id">
-											<button type="button" (click)="deleteBook(book.id)">Borrar</button>
-											<button type="button" (click)="openBookPreview(book, 'edit')">Modificar</button>
-											<button type="button" (click)="openBookPreview(book)">Ir al libro</button>
+										<button type="button" class="menu-trigger" (click)="toggleActionMenu('book', book.id); $event.stopPropagation()" [attr.aria-expanded]="isActionMenuOpen('book', book.id)" aria-label="Opciones">⋮</button>
+										<div class="action-menu" [class.visible]="actionMenuVisible?.kind === 'book' && actionMenuVisible?.id === book.id">
+											<button type="button" class="action-item action-danger" (click)="deleteBook(book.id)">Borrar</button>
+											<button type="button" class="action-item" (click)="openBookPreview(book, 'edit')">Modificar</button>
+											<button type="button" class="action-item" (click)="openBookPreview(book)">Ir al libro</button>
 										</div>
 									</div>
 								</div>
 							</div>
-							<div class="book-meta">
-								<span>{{ book.commentCount }} comentarios</span>
-								@if(book.averageRating) {
-									<span>{{ book.averageRating }}</span>
-								}
+
+							<div class="book-meta" *ngIf="book.commentCount > 0 || book.averageRating">
+								<span class="meta-chip">{{ book.commentCount }} comentarios</span>
+								<span class="meta-chip accent" *ngIf="book.averageRating">{{ book.averageRating }}</span>
 							</div>
-							<div class="book-comments">
+
+							<div class="book-comments" *ngIf="book.comments.length > 0">
 								<article class="book-comment" *ngFor="let comment of book.comments; trackBy: trackByBookCommentId">
-									<header>
-										<div>
-											<strong>{{ comment.author }}</strong>
-											<span>{{ comment.likes }} likes</span>
-										</div>
-											<div class="action-menu-wrap" *ngIf="profileIsEditable">
-											<button type="button" class="menu-trigger" (click)="toggleActionMenu('comment', comment.id); $event.stopPropagation()" [attr.aria-expanded]="isActionMenuOpen('comment', comment.id)" aria-label="Abrir acciones del comentario">⋮</button>
-											<div class="action-menu action-menu-right" *ngIf="isActionMenuOpen('comment', comment.id) || (actionMenuVisible?.kind === 'comment' && actionMenuVisible?.id === comment.id)" [class.visible]="actionMenuVisible?.kind === 'comment' && actionMenuVisible?.id === comment.id">
-												<button type="button" (click)="deleteComment(comment.id)">Borrar</button>
-												<button type="button" (click)="openCommentDetail(comment.id)">Modificar</button>
-												<button type="button" (click)="openBookPreview(book)">Ir al libro</button>
+									<div class="comment-top">
+										<span class="comment-author">{{ comment.author }}</span>
+										<span class="comment-likes">♡ {{ comment.likes }}</span>
+										<div class="action-menu-wrap" *ngIf="profileIsEditable">
+											<button type="button" class="menu-trigger" (click)="toggleActionMenu('comment', comment.id); $event.stopPropagation()" aria-label="Opciones">⋮</button>
+											<div class="action-menu action-menu-right" [class.visible]="actionMenuVisible?.kind === 'comment' && actionMenuVisible?.id === comment.id">
+												<button type="button" class="action-item action-danger" (click)="deleteComment(comment.id)">Borrar</button>
+												<button type="button" class="action-item" (click)="openCommentDetail(comment.id)">Modificar</button>
+												<button type="button" class="action-item" (click)="openBookPreview(book)">Ir al libro</button>
 											</div>
 										</div>
-									</header>
-									<p>{{ comment.content }}</p>
+									</div>
+									<p class="comment-body">{{ comment.content }}</p>
 								</article>
-								<p class="book-empty-comments" *ngIf="book.comments.length === 0">
-									Todavía no hay comentarios para este libro.
-								</p>
 							</div>
 						</div>
 					</article>
@@ -239,9 +243,6 @@
 						<button type="button" class="btn-edit liked-action" (click)="openLikedComment(comment.id)">Ver comentario</button>
 					</article>
 				</div>
-					<span>Libros y reseñas que te gustaron.</span>
-				</header>
-				<p class="empty-state">Todavía no hay likes para mostrar.</p>
 			</section>
 		</div>
 

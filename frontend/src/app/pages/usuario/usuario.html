@@ -67,15 +67,17 @@
 	</section>
 
 	<nav class="profile-tabs" aria-label="Secciones del perfil" *ngIf="!isLoading && !isEditing">
-		<button
-			*ngFor="let tab of profileTabs"
-			type="button"
-			class="tab-button"
-			[class.active]="tab === activeTab"
-			(click)="setActiveTab(tab)"
-		>
-			{{ tab }}
-		</button>
+		<ng-container *ngFor="let tab of profileTabs">
+			<button
+				*ngIf="tab !== 'Likes' || profileIsEditable"
+				type="button"
+				class="tab-button"
+				[class.active]="tab === activeTab"
+				(click)="setActiveTab(tab)"
+			>
+				{{ tab }}
+			</button>
+		</ng-container>
 	</nav>
 
 	<section class="profile-grid" *ngIf="!isLoading && !isEditing">
@@ -216,7 +218,7 @@
 				</div>
 			</section>
 
-			<section class="panel" *ngIf="activeTab === 'Likes'">
+			<section class="panel" *ngIf="activeTab === 'Likes' && profileIsEditable">
 				<header class="panel-head">
 					<h2>Likes</h2>
 					<span>Comentarios y reseñas que marcaste con like.</span>
@@ -247,13 +249,6 @@
 		</div>
 
 		<aside class="side-column" *ngIf="activeTab === 'Profile'">
-			<section class="promo-card">
-				<p class="promo-eyebrow">Need an upgrade?</p>
-				<h2>Profile stats, filtering and watchlist alerts.</h2>
-				<p class="promo-copy">Este bloque ocupa el espacio lateral del diseño de referencia mientras el perfil sigue siendo funcional.</p>
-				<a href="#" class="promo-button">Get Pro</a>
-			</section>
-
 			<section class="panel side-panel">
 				<header class="panel-head">
 					<h2>Activity</h2>

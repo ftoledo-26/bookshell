@@ -309,6 +309,20 @@
   filter: brightness(1.05);
 }
 
+.submit-btn.submit-error {
+  background: linear-gradient(95deg, #e84040, #ff5a1f);
+  animation: btn-shake 0.42s ease-out;
+}
+
+@keyframes btn-shake {
+  0%, 100% { transform: translateX(0); }
+  18%       { transform: translateX(-6px); }
+  36%       { transform: translateX(6px); }
+  54%       { transform: translateX(-4px); }
+  72%       { transform: translateX(4px); }
+  88%       { transform: translateX(-2px); }
+}
+
 .status {
   margin-top: 0.1rem;
   padding: 0.55rem 0.7rem;

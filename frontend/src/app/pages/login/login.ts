@@ -26,6 +26,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   activeMode: AuthMode = 'login';
   isTransitioning = false;
   private transitionTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private errorFlashId: ReturnType<typeof setTimeout> | null = null;
 
   email: string = '';
   password: string = '';
@@ -38,15 +39,22 @@ export class LoginComponent implements OnInit, OnDestroy {
   showPassword: boolean = false;
   errorMessage: string = '';
   successMessage: string = '';
+  submitError = false;
 
   ngOnInit(): void {
     this.redirectIfLoggedIn();
   }
 
   ngOnDestroy(): void {
-    if (this.transitionTimeoutId) {
-      clearTimeout(this.transitionTimeoutId);
-    }
+    if (this.transitionTimeoutId) clearTimeout(this.transitionTimeoutId);
+    if (this.errorFlashId) clearTimeout(this.errorFlashId);
+  }
+
+  private setError(msg: string): void {
+    this.errorMessage = msg;
+    this.submitError = true;
+    if (this.errorFlashId) clearTimeout(this.errorFlashId);
+    this.errorFlashId = setTimeout(() => { this.submitError = false; }, 1000);
   }
 
   private redirectIfLoggedIn(): boolean {
@@ -130,7 +138,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.successMessage = '';
 
     if (!this.email || !this.password) {
-      this.errorMessage = 'Completa el email y la contraseña.';
+      this.setError('Completa el email y la contraseña.');
       return;
     }
 
@@ -143,10 +151,10 @@ export class LoginComponent implements OnInit, OnDestroy {
           return;
         }
 
-        this.errorMessage = 'El servidor respondió sin token.';
+        this.setError('El servidor respondió sin token.');
       },
       error: () => {
-        this.errorMessage = 'Usuario o contraseña incorrectos.';
+        this.setError('Usuario o contraseña incorrectos.');
       }
     });
   }
@@ -162,30 +170,29 @@ export class LoginComponent implements OnInit, OnDestroy {
     const phone = this.registerPhone.trim();
 
     if (!nombre || !email || !password || !confirmPassword || !phone) {
-      this.errorMessage = 'Completa todos los campos para crear tu cuenta.';
+      this.setError('Completa todos los campos para crear tu cuenta.');
       return;
     }
 
     const passwordError = this.validatePassword(password);
     if (passwordError) {
-      this.errorMessage = passwordError;
+      this.setError(passwordError);
       return;
     }
 
     if (password !== confirmPassword) {
-      this.errorMessage = 'Las contraseñas no coinciden.';
+      this.setError('Las contraseñas no coinciden.');
       return;
     }
 
-    // Validar que el nombre de usuario no exista
     this.usuarioService.getUsuarios().subscribe({
       next: (users) => {
-        const userExists = users.some(u => 
+        const userExists = users.some(u =>
           String(u.nombre ?? '').trim().toLowerCase() === nombre.toLowerCase()
         );
-        
+
         if (userExists) {
-          this.errorMessage = 'El nombre de usuario ya existe. Elige otro.';
+          this.setError('El nombre de usuario ya existe. Elige otro.');
           return;
         }
 
@@ -194,14 +201,14 @@ export class LoginComponent implements OnInit, OnDestroy {
         );
 
         if (emailExists) {
-          this.errorMessage = 'El correo electrónico ya existe. Usa otro o inicia sesión.';
+          this.setError('El correo electrónico ya existe. Usa otro o inicia sesión.');
           return;
         }
 
         this.proceedWithRegistration(nombre, email, password, phone);
       },
       error: () => {
-        this.errorMessage = 'No se pudo validar la disponibilidad del usuario. Intenta de nuevo.';
+        this.setError('No se pudo validar la disponibilidad del usuario. Intenta de nuevo.');
       }
     });
   }
@@ -230,19 +237,19 @@ export class LoginComponent implements OnInit, OnDestroy {
 
             this.password = '';
             this.successMessage = '';
-            this.errorMessage = 'La cuenta se creó, pero no se pudo iniciar sesión automáticamente. Inicia sesión manualmente.';
+            this.setError('La cuenta se creó, pero no se pudo iniciar sesión automáticamente. Inicia sesión manualmente.');
             this.setMode('login');
           },
           error: () => {
             this.password = '';
             this.successMessage = '';
-            this.errorMessage = 'La cuenta se creó, pero no se pudo iniciar sesión automáticamente. Inicia sesión manualmente.';
+            this.setError('La cuenta se creó, pero no se pudo iniciar sesión automáticamente. Inicia sesión manualmente.');
             this.setMode('login');
           }
         });
       },
       error: () => {
-        this.errorMessage = 'No se pudo crear la cuenta. Verifica el correo e intenta de nuevo.';
+        this.setError('No se pudo crear la cuenta. Verifica el correo e intenta de nuevo.');
       }
     });
   }

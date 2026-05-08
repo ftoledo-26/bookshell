@@ -23,7 +23,14 @@
         (touchend)="onRecommendedTouchEnd()"
         (touchcancel)="onRecommendedTouchEnd()"
       >
-        <article class="book-tile" *ngFor="let book of recommendedBooks; trackBy: trackByBookId">
+        <article
+          class="book-tile"
+          *ngFor="let book of recommendedBooks; trackBy: trackByBookId"
+          role="button"
+          tabindex="0"
+          (click)="openBookDrawer(book)"
+          (keydown.enter)="openBookDrawer(book)"
+        >
           <div class="cover-wrap">
             @if(!book.cover) {
               <img src="/prueba.webp" [alt]="book.title" loading="eager" />
@@ -89,4 +96,39 @@
       Todavia no hay reviews para mostrar.
     </p>
   </section>
+
+  <div
+    class="book-drawer-backdrop"
+    *ngIf="selectedBook || bookDrawerVisible"
+    [class.visible]="bookDrawerVisible"
+    (click)="closeBookDrawer()"
+  ></div>
+
+  <aside
+    class="book-drawer"
+    *ngIf="selectedBook || bookDrawerVisible"
+    [class.visible]="bookDrawerVisible"
+  >
+    @if(selectedBook; as book) {
+      <header class="drawer-head">
+        <div class="drawer-cover">
+          <img [src]="book.cover || '/prueba.webp'" [alt]="book.title" loading="lazy" />
+        </div>
+        <div class="drawer-title">
+          <p class="drawer-author">{{ book.author || 'Autor desconocido' }}</p>
+          <h2>{{ book.title }}</h2>
+          <p class="drawer-desc" *ngIf="book.description">{{ book.description }}</p>
+        </div>
+        <button type="button" class="drawer-close" (click)="closeBookDrawer()" aria-label="Cerrar">×</button>
+      </header>
+      <div class="drawer-actions">
+        <button type="button" class="btn-drawer-fav" (click)="addBookToFavorites()">
+          Añadir a favoritos
+        </button>
+        <button type="button" class="btn-drawer-review" (click)="goToCreateReviewForBook()">
+          Hacer review
+        </button>
+      </div>
+    }
+  </aside>
 </main>

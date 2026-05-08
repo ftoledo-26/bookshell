@@ -22,7 +22,9 @@ type TimelineComment = Comentario & {
 type RecommendedBook = {
   id: number;
   title: string;
+  author: string;
   cover: string;
+  description: string;
 };
 
 type FeaturedReview = {
@@ -54,6 +56,9 @@ export class Home implements OnInit {
   reviews: FeaturedReview[] = [];
   isLoading = true;
   errorMessage = '';
+
+  selectedBook: RecommendedBook | null = null;
+  bookDrawerVisible = false;
 
   private isRecommendedSwiping = false;
   private recommendedTouchStartX = 0;
@@ -160,7 +165,9 @@ export class Home implements OnInit {
     return books.slice(0, 8).map((book) => ({
       id: book.id,
       title: book.titulo,
-      cover: book.portada
+      author: (book as any).autor ?? '',
+      cover: book.portada,
+      description: (book as any).descripcion ?? ''
     }));
   }
 
@@ -254,5 +261,66 @@ export class Home implements OnInit {
 
   onRecommendedTouchEnd(): void {
     this.isRecommendedSwiping = false;
+  }
+
+  openBookDrawer(book: RecommendedBook): void {
+    this.selectedBook = book;
+    this.cdr.detectChanges();
+    requestAnimationFrame(() => {
+      this.bookDrawerVisible = true;
+      this.cdr.detectChanges();
+    });
+  }
+
+  closeBookDrawer(): void {
+    this.bookDrawerVisible = false;
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      this.selectedBook = null;
+      this.cdr.detectChanges();
+    }, 300);
+  }
+
+  addBookToFavorites(): void {
+    if (!this.selectedBook) return;
+    const token = localStorage.getItem('token');
+    if (!token) {
+      this.closeBookDrawer();
+      this.router.navigate(['/login']);
+      return;
+    }
+    const userId = this.getCurrentUserId();
+    this.closeBookDrawer();
+    if (userId) {
+      this.router.navigate(['/usuario', userId]);
+    } else {
+      this.router.navigate(['/login']);
+    }
+  }
+
+  goToCreateReviewForBook(): void {
+    if (!this.selectedBook) return;
+    const token = localStorage.getItem('token');
+    if (!token) {
+      this.closeBookDrawer();
+      this.router.navigate(['/login']);
+      return;
+    }
+    const bookId = this.selectedBook.id;
+    this.closeBookDrawer();
+    this.router.navigate(['/reviews/nueva'], { queryParams: { bookId } });
+  }
+
+  private getCurrentUserId(): number | null {
+    const raw = localStorage.getItem('userId') ?? localStorage.getItem('user_id');
+    if (raw) return Number(raw);
+    const token = localStorage.getItem('token');
+    if (!token) return null;
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.id ?? payload.userId ?? null;
+    } catch {
+      return null;
+    }
   }
 }

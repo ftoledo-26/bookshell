@@ -112,7 +112,7 @@
           <div class="status error" *ngIf="errorMessage">{{ errorMessage }}</div>
           <div class="status success" *ngIf="successMessage">{{ successMessage }}</div>
 
-          <button class="submit-btn" type="submit">Entrar a mi espacio</button>
+          <button class="submit-btn" type="submit" [class.submit-error]="submitError">Entrar a mi espacio</button>
         </form>
 
         <ng-template #signInForm>
@@ -186,7 +186,7 @@
             <div class="status error" *ngIf="errorMessage">{{ errorMessage }}</div>
             <div class="status success" *ngIf="successMessage">{{ successMessage }}</div>
 
-            <button class="submit-btn" type="submit">Crear cuenta</button>
+            <button class="submit-btn" type="submit" [class.submit-error]="submitError">Crear cuenta</button>
 
             <p class="form-hint">
               ¿Ya tienes cuenta?

@@ -17,16 +17,13 @@ jobs:
   terraform:
     name: Terraform Apply
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      variables: write    # permite actualizar variables de repositorio con GITHUB_TOKEN
     defaults:
       run:
         working-directory: Terraform_tfg
 
     env:
       TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GH_PAT }}
 
     steps:
       - name: Checkout codigo

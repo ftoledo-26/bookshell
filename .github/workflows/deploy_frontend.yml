@@ -3,23 +3,22 @@ name: Deploy Frontend (Angular)
 # Despliega la aplicacion Angular en la instancia EC2 Frontend via SSH a traves del bastion.
 # Tambien actualiza DuckDNS y activa HTTPS con certbot si aun no esta activado.
 # Secrets requeridos en GitHub:
-#   BASTION_EIP          — IP publica del bastion  (terraform output bastion_eip)
-#   FRONTEND_PRIVATE_IP  — IP privada del frontend (terraform output frontend_private_ip)
-#   FRONTEND_EIP         — IP publica del frontend (terraform output frontend_eip)
-#   BACKEND_PRIVATE_IP   — IP privada del backend  (terraform output backend_private_ip)
 #   SSH_PRIVATE_KEY      — Clave privada PEM del Key Pair de AWS (sin passphrase)
 #   DUCKDNS_TOKEN        — Token de DuckDNS (en duckdns.org -> tu cuenta)
 #   CERTBOT_EMAIL        — Email para Let's Encrypt (p.ej. tu@gmail.com)
+# Variables de repositorio (se rellenan automaticamente por terraform.yml):
+#   BASTION_EIP, FRONTEND_PRIVATE_IP, FRONTEND_EIP, BACKEND_PRIVATE_IP
 
 on:
   push:
     branches: [Front]
     paths:
-      - 'src/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'angular.json'
-      - 'frontend.sh'
+      - 'frontend/src/**'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - 'frontend/angular.json'
+      - 'Terraform_tfg/frontend.sh'
+      - '.github/workflows/deploy_frontend.yml'
   workflow_dispatch:
 
 jobs:
@@ -34,7 +33,7 @@ jobs:
       - name: Actualizar DuckDNS
         continue-on-error: true
         run: |
-          RESP=$(curl -s --max-time 15 "https://www.duckdns.org/update?domains=bookshell&token=${{ secrets.DUCKDNS_TOKEN }}&ip=${{ secrets.FRONTEND_EIP }}" || echo "CURL_ERROR")
+          RESP=$(curl -s --max-time 15 "https://www.duckdns.org/update?domains=bookshell&token=${{ secrets.DUCKDNS_TOKEN }}&ip=${{ vars.FRONTEND_EIP }}" || echo "CURL_ERROR")
           echo "Respuesta DuckDNS: $RESP"
           if [ "$RESP" != "OK" ]; then
             echo "::warning::DuckDNS no devolvio OK — comprueba el token y la IP"
@@ -43,19 +42,20 @@ jobs:
       - name: Pull, build y HTTPS (via bastion)
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.FRONTEND_PRIVATE_IP }}
+          host: ${{ vars.FRONTEND_PRIVATE_IP }}
           username: ubuntu
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          proxy_host: ${{ secrets.BASTION_EIP }}
+          proxy_host: ${{ vars.BASTION_EIP }}
           proxy_username: ubuntu
           proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
           command_timeout: 30m
           script: |
             set -e
 
-            # ── Actualizar codigo ─────────────────────────────────────────
+            # ── Actualizar codigo (reset hard para limpiar conflictos locales) ──
             cd /var/www/front
-            sudo git pull origin Front
+            sudo git fetch origin Front
+            sudo git reset --hard origin/Front
 
             # ── Build Angular (el proyecto esta en frontend/) ─────────────
             cd /var/www/front/frontend
@@ -67,11 +67,28 @@ jobs:
             DIST_DIR=$(sudo find /var/www/front/frontend/dist -name "index.html" -exec dirname {} \; | head -1)
             sudo cp -r "$DIST_DIR"/* /var/www/html/
 
+            # ── .htaccess para Angular routing (evita 404 al recargar) ────
+            {
+              echo 'Options -MultiViews'
+              echo 'RewriteEngine On'
+              echo 'RewriteBase /'
+              echo 'RewriteRule ^index\.html$ - [L]'
+              echo 'RewriteCond %{REQUEST_URI} !^/api'
+              echo 'RewriteCond %{REQUEST_URI} !^/admin'
+              echo 'RewriteCond %{REQUEST_URI} !^/filament'
+              echo 'RewriteCond %{REQUEST_URI} !^/storage'
+              echo 'RewriteCond %{REQUEST_FILENAME} !-f'
+              echo 'RewriteCond %{REQUEST_FILENAME} !-d'
+              echo 'RewriteRule . /index.html [L]'
+            } | sudo tee /var/www/html/.htaccess > /dev/null
+
             # ── Asegurar modulos proxy activos ────────────────────────────
             sudo a2enmod proxy proxy_http rewrite
 
             # ── Corregir puerto proxy en vhost HTTP ───────────────────────
             sudo sed -i "s|:8000/api|:80/api|g" /etc/apache2/sites-available/000-default.conf
+            # Asegurar AllowOverride All en vhost HTTP
+            sudo sed -i "s|AllowOverride None|AllowOverride All|g" /etc/apache2/sites-available/000-default.conf
 
             # ── HTTPS con certbot ─────────────────────────────────────────
             if [ ! -d "/etc/letsencrypt/live/bookshell.duckdns.org" ]; then
@@ -88,13 +105,14 @@ jobs:
               sudo certbot renew --quiet
             fi
 
-            # ── Asegurar ProxyPass en vhost SSL (certbot puede no copiarlo) ─
+            # ── Asegurar ProxyPass y AllowOverride en vhost SSL ───────────
             SSL_VHOST="/etc/apache2/sites-available/000-default-le-ssl.conf"
             if [ -f "$SSL_VHOST" ]; then
               sudo sed -i "s|:8000/api|:80/api|g" "$SSL_VHOST"
+              sudo sed -i "s|AllowOverride None|AllowOverride All|g" "$SSL_VHOST"
               if ! sudo grep -q "ProxyPass" "$SSL_VHOST"; then
                 echo "==> Aniadiendo ProxyPass al vhost SSL..."
-                BACKEND_IP="${{ secrets.BACKEND_PRIVATE_IP }}"
+                BACKEND_IP="${{ vars.BACKEND_PRIVATE_IP }}"
                 sudo sed -i "s|</VirtualHost>|    ProxyPreserveHost On\n    ProxyPass        /api http://${BACKEND_IP}:80/api\n    ProxyPassReverse /api http://${BACKEND_IP}:80/api\n</VirtualHost>|" "$SSL_VHOST"
               fi
             fi

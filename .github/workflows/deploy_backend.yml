@@ -31,10 +31,10 @@ jobs:
       - name: Pull y desplegar en backend (via bastion)
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.BACKEND_PRIVATE_IP }}
+          host: ${{ vars.BACKEND_PRIVATE_IP }}
           username: ubuntu
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          proxy_host: ${{ secrets.BASTION_EIP }}
+          proxy_host: ${{ vars.BASTION_EIP }}
           proxy_username: ubuntu
           proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
           command_timeout: 30m
@@ -98,7 +98,7 @@ jobs:
             # Las lineas DB_* en el .env.example de Laravel vienen comentadas (# DB_HOST=...)
             # Los patrones ^#\? *DB_*= manejan tanto lineas comentadas como no comentadas
             sudo sed -i "s|^DB_CONNECTION=.*|DB_CONNECTION=mysql|"                                      /var/www/back/.env
-            sudo sed -i "s|^#\? *DB_HOST=.*|DB_HOST=${{ secrets.RDS_ENDPOINT }}|"                 /var/www/back/.env
+            sudo sed -i "s|^#\? *DB_HOST=.*|DB_HOST=${{ vars.RDS_ENDPOINT }}|"                 /var/www/back/.env
             sudo sed -i "s|^#\? *DB_PORT=.*|DB_PORT=3306|"                                          /var/www/back/.env
             sudo sed -i "s|^#\? *DB_DATABASE=.*|DB_DATABASE=laravel|"                               /var/www/back/.env
             sudo sed -i "s|^#\? *DB_USERNAME=.*|DB_USERNAME=laravel|"                               /var/www/back/.env

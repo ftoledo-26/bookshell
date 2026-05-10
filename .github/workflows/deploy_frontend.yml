@@ -34,7 +34,7 @@ jobs:
       - name: Actualizar DuckDNS
         continue-on-error: true
         run: |
-          RESP=$(curl -s --max-time 15 "https://www.duckdns.org/update?domains=bookshell&token=${{ secrets.DUCKDNS_TOKEN }}&ip=${{ secrets.FRONTEND_EIP }}" || echo "CURL_ERROR")
+          RESP=$(curl -s --max-time 15 "https://www.duckdns.org/update?domains=bookshell&token=${{ secrets.DUCKDNS_TOKEN }}&ip=${{ vars.FRONTEND_EIP }}" || echo "CURL_ERROR")
           echo "Respuesta DuckDNS: $RESP"
           if [ "$RESP" != "OK" ]; then
             echo "::warning::DuckDNS no devolvio OK — comprueba el token y la IP"
@@ -43,10 +43,10 @@ jobs:
       - name: Pull, build y HTTPS (via bastion)
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.FRONTEND_PRIVATE_IP }}
+          host: ${{ vars.FRONTEND_PRIVATE_IP }}
           username: ubuntu
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          proxy_host: ${{ secrets.BASTION_EIP }}
+          proxy_host: ${{ vars.BASTION_EIP }}
           proxy_username: ubuntu
           proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
           command_timeout: 30m
@@ -95,7 +95,7 @@ jobs:
               sudo sed -i "s|:8000/api|:80/api|g" "$SSL_VHOST"
               if ! sudo grep -q "ProxyPass" "$SSL_VHOST"; then
                 echo "==> Aniadiendo ProxyPass al vhost SSL..."
-                BACKEND_IP="${{ secrets.BACKEND_PRIVATE_IP }}"
+                BACKEND_IP="${{ vars.BACKEND_PRIVATE_IP }}"
                 sudo sed -i "s|</VirtualHost>|    ProxyPreserveHost On\n    ProxyPass        /api http://${BACKEND_IP}:80/api\n    ProxyPassReverse /api http://${BACKEND_IP}:80/api\n</VirtualHost>|" "$SSL_VHOST"
               fi
             fi

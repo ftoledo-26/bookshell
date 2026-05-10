@@ -113,6 +113,8 @@ jobs:
                 BACKEND_IP="${{ vars.BACKEND_PRIVATE_IP }}"
                 sudo sed -i "s|</VirtualHost>|    ProxyPreserveHost On\n    ProxyPass        /api http://${BACKEND_IP}:80/api\n    ProxyPassReverse /api http://${BACKEND_IP}:80/api\n</VirtualHost>|" "$SSL_VHOST"
               fi
+              # Asegurar AllowOverride All para que .htaccess funcione en HTTPS
+              sudo sed -i "s|AllowOverride None|AllowOverride All|g" "$SSL_VHOST"
             fi
 
             sudo systemctl reload apache2

@@ -59,7 +59,7 @@ php artisan storage:link
 BOOK_COUNT=$(mysql -h "${db_host}" -u "${db_user}" -p"${db_password}" "${db_name}" \
     -sse "SELECT COUNT(*) FROM libros;" 2>/dev/null || echo "999")
 
-if [ "${BOOK_COUNT}" = "0" ]; then
+if [ "$${BOOK_COUNT}" = "0" ]; then
     echo "[backend.sh] Tabla libros vacia — ejecutando seed_books.py..."
     pip3 install --quiet requests Pillow pymysql
     python3 /var/www/back/seed_books.py \
@@ -72,7 +72,7 @@ if [ "${BOOK_COUNT}" = "0" ]; then
         --limit 40 \
         || echo "[backend.sh] Aviso: seed_books.py reporto errores, el despliegue continua."
 else
-    echo "[backend.sh] BD ya tiene ${BOOK_COUNT} libro(s) — seed saltado."
+    echo "[backend.sh] BD ya tiene $${BOOK_COUNT} libro(s) — seed saltado."
 fi
 
 # Crear usuario administrador por defecto — CAMBIAR CREDENCIALES tras el primer despliegue

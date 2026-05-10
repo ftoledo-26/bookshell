@@ -106,7 +106,8 @@ jobs:
 
             # ── Actualizar codigo y dependencias ─────────────────────────
             cd /var/www/back
-            sudo git pull origin Back
+            sudo git fetch origin Back
+            sudo git reset --hard origin/Back
             sudo composer install --no-dev --optimize-autoloader
 
             # ── Pasos comunes ─────────────────────────────────────────────

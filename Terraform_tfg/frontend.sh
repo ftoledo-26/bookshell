@@ -27,6 +27,21 @@ rm -rf /var/www/html/*
 DIST_DIR=$(find /var/www/front/frontend/dist -name "index.html" -exec dirname {} \; | head -1)
 cp -r $DIST_DIR/* /var/www/html/
 
+# .htaccess para Angular routing (evita 404 al recargar pagina)
+cat > /var/www/html/.htaccess <<'HTACCESS'
+Options -MultiViews
+RewriteEngine On
+RewriteBase /
+RewriteRule ^index\.html$ - [L]
+RewriteCond %{REQUEST_URI} !^/api
+RewriteCond %{REQUEST_URI} !^/admin
+RewriteCond %{REQUEST_URI} !^/filament
+RewriteCond %{REQUEST_URI} !^/storage
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.html [L]
+HTACCESS
+
 # Apache VirtualHost — proxy /api al backend
 # Los placeholders se reemplazan por sed despues del heredoc
 cat > /etc/apache2/sites-available/000-default.conf <<'VHOST'

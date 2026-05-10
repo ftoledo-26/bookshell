@@ -68,6 +68,21 @@ jobs:
             DIST_DIR=$(sudo find /var/www/front/frontend/dist -name "index.html" -exec dirname {} \; | head -1)
             sudo cp -r "$DIST_DIR"/* /var/www/html/
 
+            # ── .htaccess para Angular routing (evita 404 al recargar) ────
+            sudo tee /var/www/html/.htaccess > /dev/null <<'HTACCESS'
+Options -MultiViews
+RewriteEngine On
+RewriteBase /
+RewriteRule ^index\.html$ - [L]
+RewriteCond %{REQUEST_URI} !^/api
+RewriteCond %{REQUEST_URI} !^/admin
+RewriteCond %{REQUEST_URI} !^/filament
+RewriteCond %{REQUEST_URI} !^/storage
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.html [L]
+HTACCESS
+
             # ── Asegurar modulos proxy activos ────────────────────────────
             sudo a2enmod proxy proxy_http rewrite
 

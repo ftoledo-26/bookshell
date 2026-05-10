@@ -41,8 +41,20 @@ cat > /etc/apache2/sites-available/000-default.conf <<'VHOST'
     </Directory>
 
     ProxyPreserveHost On
-    ProxyPass        /api http://BACKEND_IP_HERE:80/api
-    ProxyPassReverse /api http://BACKEND_IP_HERE:80/api
+
+    # API Laravel
+    ProxyPass        /api      http://BACKEND_IP_HERE:80/api
+    ProxyPassReverse /api      http://BACKEND_IP_HERE:80/api
+
+    # Panel de administracion Filament (/admin) y sus assets (/filament)
+    ProxyPass        /admin    http://BACKEND_IP_HERE:80/admin
+    ProxyPassReverse /admin    http://BACKEND_IP_HERE:80/admin
+    ProxyPass        /filament http://BACKEND_IP_HERE:80/filament
+    ProxyPassReverse /filament http://BACKEND_IP_HERE:80/filament
+
+    # Storage publico (portadas de libros)
+    ProxyPass        /storage  http://BACKEND_IP_HERE:80/storage
+    ProxyPassReverse /storage  http://BACKEND_IP_HERE:80/storage
 
     ErrorLog /var/log/apache2/error.log
     CustomLog /var/log/apache2/access.log combined

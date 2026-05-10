@@ -224,7 +224,13 @@ resource "aws_instance" "backend" {
     db_password  = var.db_password
     repo_url     = var.repo_url
     repo_branch  = var.backend_branch
+    domain       = var.domain
   })
+
+  # Cambios en backend.sh no recrean la instancia — los deploys se hacen via deploy_backend.yml
+  lifecycle {
+    ignore_changes = [user_data]
+  }
 
   tags = { Name = "Backend" }
 }
@@ -245,6 +251,11 @@ resource "aws_instance" "frontend" {
     repo_url      = var.repo_url
     repo_branch   = var.frontend_branch
   })
+
+  # Cambios en frontend.sh no recrean la instancia — los deploys se hacen via deploy_frontend.yml
+  lifecycle {
+    ignore_changes = [user_data]
+  }
 
   tags = { Name = "Frontend" }
 }
@@ -277,8 +288,15 @@ resource "aws_db_instance" "mysql" {
   db_subnet_group_name   = aws_db_subnet_group.default.name
   vpc_security_group_ids = [aws_security_group.rds_sg.id]
   skip_final_snapshot    = true
+  deletion_protection    = true   # impide borrado accidental desde la consola o terraform destroy
   publicly_accessible    = false
   tags                   = { Name = "bookshell-rds" }
+
+  # Terraform no puede recrear ni destruir el RDS — protege todos los datos
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes  = [password]  # cambios de password no fuerzan recreacion
+  }
 }
 
 # -----------------------------------------------------------------------

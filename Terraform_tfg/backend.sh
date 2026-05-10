@@ -1,7 +1,7 @@
 #!/bin/bash
 # Script de arranque del backend (Laravel + RDS).
 # Terraform lo procesa como templatefile() — sustituye ${db_host}, ${db_name},
-# ${db_user}, ${db_password}, ${repo_url} y ${repo_branch} antes de pasarselo a EC2.
+# ${db_user}, ${db_password}, ${repo_url}, ${repo_branch} y ${domain} antes de pasarselo a EC2.
 set -e
 
 export DEBIAN_FRONTEND=noninteractive
@@ -13,6 +13,7 @@ apt-get install -y \
     apache2 \
     php8.2 php8.2-cli php8.2-mysql php8.2-xml php8.2-mbstring \
     php8.2-curl php8.2-zip php8.2-intl php8.2-bcmath php8.2-gd \
+    python3 python3-pip \
     git curl unzip
 
 # Composer
@@ -34,21 +35,12 @@ sed -i "s|DB_DATABASE=.*|DB_DATABASE=${db_name}|" .env
 sed -i "s|DB_USERNAME=.*|DB_USERNAME=${db_user}|" .env
 sed -i "s|DB_PASSWORD=.*|DB_PASSWORD=${db_password}|" .env
 sed -i "s|DB_CONNECTION=.*|DB_CONNECTION=mysql|"  .env
+# APP_URL necesario para que Filament genere URLs correctas a traves del proxy
+sed -i "s|APP_URL=.*|APP_URL=https://${domain}|"  .env
 
 # Dependencias PHP
 composer install --no-dev --optimize-autoloader
 php artisan key:generate
-
-# ──────────────────────────────────────────────────────────────
-# Filament — panel de administracion en /admin
-# AVISO: para restringir acceso por rol, el modelo User debe
-# implementar Filament\Models\Contracts\FilamentUser y definir
-# canAccessPanel(Panel $panel): bool
-# ──────────────────────────────────────────────────────────────
-composer require filament/filament:"^3.0" -W
-
-# filament:install --panels pide el ID del panel; "" acepta el default "admin"
-echo "" | php artisan filament:install --panels
 
 # Esperar a que RDS este disponible (hasta 5 minutos)
 for i in $(seq 1 30); do
@@ -59,6 +51,29 @@ done
 
 # Enlace simbolico storage/app/public → public/storage (necesario para portadas)
 php artisan storage:link
+
+# ──────────────────────────────────────────────────────────────
+# Seed de libros — solo si la tabla esta vacia
+# seed_books.py debe estar en la rama Back (se clono en /var/www/back)
+# ──────────────────────────────────────────────────────────────
+BOOK_COUNT=$(mysql -h "${db_host}" -u "${db_user}" -p"${db_password}" "${db_name}" \
+    -sse "SELECT COUNT(*) FROM libros;" 2>/dev/null || echo "999")
+
+if [ "${BOOK_COUNT}" = "0" ]; then
+    echo "[backend.sh] Tabla libros vacia — ejecutando seed_books.py..."
+    pip3 install --quiet requests Pillow pymysql
+    python3 /var/www/back/seed_books.py \
+        --db-host    "${db_host}" \
+        --db-name    "${db_name}" \
+        --db-user    "${db_user}" \
+        --db-password "${db_password}" \
+        --images-dir /var/www/back/storage/app/public/portadas \
+        --subject fiction \
+        --limit 40 \
+        || echo "[backend.sh] Aviso: seed_books.py reporto errores, el despliegue continua."
+else
+    echo "[backend.sh] BD ya tiene ${BOOK_COUNT} libro(s) — seed saltado."
+fi
 
 # Crear usuario administrador por defecto — CAMBIAR CREDENCIALES tras el primer despliegue
 php artisan tinker --execute="

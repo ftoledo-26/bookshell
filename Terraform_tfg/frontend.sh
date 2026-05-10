@@ -33,12 +33,12 @@ Options -MultiViews
 RewriteEngine On
 RewriteBase /
 RewriteRule ^index\.html$ - [L]
-RewriteCond %{REQUEST_URI} !^/api
-RewriteCond %{REQUEST_URI} !^/admin
-RewriteCond %{REQUEST_URI} !^/filament
-RewriteCond %{REQUEST_URI} !^/storage
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %%{REQUEST_URI} !^/api
+RewriteCond %%{REQUEST_URI} !^/admin
+RewriteCond %%{REQUEST_URI} !^/filament
+RewriteCond %%{REQUEST_URI} !^/storage
+RewriteCond %%{REQUEST_FILENAME} !-f
+RewriteCond %%{REQUEST_FILENAME} !-d
 RewriteRule . /index.html [L]
 HTACCESS
 

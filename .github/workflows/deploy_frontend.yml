@@ -109,7 +109,12 @@ jobs:
             SSL_VHOST="/etc/apache2/sites-available/000-default-le-ssl.conf"
             if [ -f "$SSL_VHOST" ]; then
               sudo sed -i "s|:8000/api|:80/api|g" "$SSL_VHOST"
-              sudo sed -i "s|AllowOverride None|AllowOverride All|g" "$SSL_VHOST"
+              # AllowOverride: reemplazar cualquier valor, o añadir si no existe
+              if sudo grep -q "AllowOverride" "$SSL_VHOST"; then
+                sudo sed -i "s|AllowOverride.*|AllowOverride All|g" "$SSL_VHOST"
+              else
+                sudo sed -i "s|</Directory>|    AllowOverride All\n</Directory>|" "$SSL_VHOST"
+              fi
               if ! sudo grep -q "ProxyPass" "$SSL_VHOST"; then
                 echo "==> Aniadiendo ProxyPass al vhost SSL..."
                 BACKEND_IP="${{ vars.BACKEND_PRIVATE_IP }}"

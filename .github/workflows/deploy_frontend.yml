@@ -69,19 +69,19 @@ jobs:
             sudo cp -r "$DIST_DIR"/* /var/www/html/
 
             # ── .htaccess para Angular routing (evita 404 al recargar) ────
-            sudo tee /var/www/html/.htaccess > /dev/null <<'HTACCESS'
-Options -MultiViews
-RewriteEngine On
-RewriteBase /
-RewriteRule ^index\.html$ - [L]
-RewriteCond %{REQUEST_URI} !^/api
-RewriteCond %{REQUEST_URI} !^/admin
-RewriteCond %{REQUEST_URI} !^/filament
-RewriteCond %{REQUEST_URI} !^/storage
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule . /index.html [L]
-HTACCESS
+            {
+              echo 'Options -MultiViews'
+              echo 'RewriteEngine On'
+              echo 'RewriteBase /'
+              echo 'RewriteRule ^index\.html$ - [L]'
+              echo 'RewriteCond %{REQUEST_URI} !^/api'
+              echo 'RewriteCond %{REQUEST_URI} !^/admin'
+              echo 'RewriteCond %{REQUEST_URI} !^/filament'
+              echo 'RewriteCond %{REQUEST_URI} !^/storage'
+              echo 'RewriteCond %{REQUEST_FILENAME} !-f'
+              echo 'RewriteCond %{REQUEST_FILENAME} !-d'
+              echo 'RewriteRule . /index.html [L]'
+            } | sudo tee /var/www/html/.htaccess > /dev/null
 
             # ── Asegurar modulos proxy activos ────────────────────────────
             sudo a2enmod proxy proxy_http rewrite

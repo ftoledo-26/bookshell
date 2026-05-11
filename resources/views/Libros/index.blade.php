@@ -1,40 +1,35 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Listado de Libros</title>
-    <link rel="stylesheet" 
-    href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
-</head>
-<body>
-    <main class="container">
+@extends('layouts.app')
 
-        <h1>📚 Listado de Libros</h1>
-
-        @foreach ($libros as $libro)
-
-
-            <article>
-                
-                <h3>📘 {{ $libro->titulo }}</h3>
-                <p>Autor: {{ $libro->autor }}</p>
-                <p>Editorial: {{ $libro->editorial }}</p>
-                <br>
-                <br>
-                <strong>Opiniones</strong>
-                <ul>
-                    @foreach ($libro->reviews as $review)
-                        <li>
-                            <p>{{ $review->user?->name ?? 'Usuario desconocido' }}</p>
-                            <p>{{ $review->comentario }}</p>
-                        </li>
-                    @endforeach
-                </ul>
-                @if($libro->reviews->isEmpty())
-                    <small><em>🚫 No hay reseñas aún.</em></small>
-                @endif
-            </article>
+@section('content')
+<div class="container">
+    <h1>Libros</h1>
+    <a href="{{ route('libros.topRated') }}" class="btn btn-secondary mb-3">Ordenar por Valoración</a>
+    @if($libros->count() > 0)
+        <div class="row">
+            @foreach($libros as $libro)
+                <div class="col-md-4 mb-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">{{ $libro->titulo }}</h5>
+                            <p class="card-text">Autor: {{ $libro->autor }}</p>
+                            @if($libro->reviews_avg_valoracion)
+                                <p class="card-text">Valoración promedio: {{ number_format($libro->reviews_avg_valoracion, 1) }}/5</p>
+                            @else
+                                <p class="card-text">Sin valoraciones</p>
+                            @endif
+                            <a href="{{ route('libros.show', $libro->id) }}" class="btn btn-primary">Ver Detalles</a>
+                            <a href="{{ route('libros.comentarios.desc', $libro->id) }}" class="btn btn-info">Comentarios (Desc)</a>
+                            <a href="{{ route('libros.comentarios.asc', $libro->id) }}" class="btn btn-info">Comentarios (Asc)</a>
+                        </div>
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    @else
+        <p>No hay libros disponibles.</p>
+    @endif
+</div>
+@endsection
 
 
         @endforeach

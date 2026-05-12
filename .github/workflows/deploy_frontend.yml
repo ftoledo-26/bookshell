@@ -115,10 +115,18 @@ jobs:
               else
                 sudo sed -i "s|</Directory>|    AllowOverride All\n</Directory>|" "$SSL_VHOST"
               fi
-              if ! sudo grep -q "ProxyPass" "$SSL_VHOST"; then
-                echo "==> Aniadiendo ProxyPass al vhost SSL..."
-                BACKEND_IP="${{ vars.BACKEND_PRIVATE_IP }}"
+              BACKEND_IP="${{ vars.BACKEND_PRIVATE_IP }}"
+              if ! sudo grep -q "ProxyPass /api" "$SSL_VHOST"; then
+                echo "==> Aniadiendo ProxyPass /api al vhost SSL..."
                 sudo sed -i "s|</VirtualHost>|    ProxyPreserveHost On\n    ProxyPass        /api http://${BACKEND_IP}:80/api\n    ProxyPassReverse /api http://${BACKEND_IP}:80/api\n</VirtualHost>|" "$SSL_VHOST"
+              fi
+              if ! sudo grep -q "ProxyPass /filament" "$SSL_VHOST"; then
+                echo "==> Aniadiendo ProxyPass /filament al vhost SSL..."
+                sudo sed -i "s|</VirtualHost>|    ProxyPass        /filament http://${BACKEND_IP}:80/filament\n    ProxyPassReverse /filament http://${BACKEND_IP}:80/filament\n</VirtualHost>|" "$SSL_VHOST"
+              fi
+              if ! sudo grep -q "ProxyPass /storage" "$SSL_VHOST"; then
+                echo "==> Aniadiendo ProxyPass /storage al vhost SSL..."
+                sudo sed -i "s|</VirtualHost>|    ProxyPass        /storage http://${BACKEND_IP}:80/storage\n    ProxyPassReverse /storage http://${BACKEND_IP}:80/storage\n</VirtualHost>|" "$SSL_VHOST"
               fi
             fi
 

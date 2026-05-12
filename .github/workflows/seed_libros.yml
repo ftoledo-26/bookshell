@@ -1,0 +1,69 @@
+name: Seed Libros (Open Library)
+
+# Workflow manual para poblar la BD con libros desde Open Library.
+# Requiere que el backend ya este desplegado (deploy_backend.yml ejecutado al menos una vez).
+# Secrets/Vars: SSH_PRIVATE_KEY, BASTION_EIP, BACKEND_PRIVATE_IP
+
+on:
+  workflow_dispatch:
+    inputs:
+      limite:
+        description: 'Numero de libros a insertar desde Open Library (ej: 500, 1000, 5000)'
+        required: false
+        default: '1000'
+
+jobs:
+  seed-libros:
+    name: Poblar libros en BD
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Seed libros en backend (via bastion)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ vars.BACKEND_PRIVATE_IP }}
+          username: ubuntu
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          proxy_host: ${{ vars.BASTION_EIP }}
+          proxy_username: ubuntu
+          proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 120m
+          script: |
+            set -e
+
+            if [ ! -d "/var/www/back/.git" ]; then
+              echo "ERROR: Backend no desplegado. Ejecuta deploy_backend.yml primero."
+              exit 1
+            fi
+
+            # ── Actualizar codigo para tener el script mas reciente ───────
+            cd /var/www/back
+            sudo git fetch origin Back
+            sudo git reset --hard origin/Back
+
+            # ── Instalar dependencias Python ──────────────────────────────
+            echo "==> Instalando dependencias Python..."
+            sudo pip3 install --quiet --break-system-packages pymysql Pillow requests 2>/dev/null || \
+            sudo pip3 install --quiet pymysql Pillow requests 2>/dev/null || true
+
+            # ── Directorios de imagenes ───────────────────────────────────
+            sudo mkdir -p /var/www/back/public/libros
+            sudo chown ubuntu:ubuntu /var/www/back/public/libros
+
+            # ── Portadas de los 20 libros curados (descargar_portadas.py) ─
+            echo "==> Descargando portadas curadas..."
+            sudo python3 /var/www/back/scripts/descargar_portadas.py || echo "[seed] Aviso: algunas portadas curadas fallaron"
+
+            # ── Seed de los 20 libros curados via Laravel ─────────────────
+            echo "==> Seeding libros curados..."
+            sudo php artisan db:seed --class=LibroSeeder --force || echo "[seed] Aviso: libros curados ya existian"
+
+            # ── Bulk seed desde Open Library ──────────────────────────────
+            echo "==> Iniciando bulk seed (${{ github.event.inputs.limite }} libros)..."
+            sudo python3 /var/www/back/scripts/poblar_libros.py ${{ github.event.inputs.limite }}
+
+            # ── Permisos finales ──────────────────────────────────────────
+            sudo chown -R www-data:www-data /var/www/back/public/libros
+            sudo chmod -R 755 /var/www/back/public/libros
+
+            echo "Seed completado — $(date)"

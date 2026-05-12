@@ -41,10 +41,14 @@ jobs:
             sudo git fetch origin Back
             sudo git reset --hard origin/Back
 
-            # ── Instalar dependencias Python ──────────────────────────────
+            # ── Instalar dependencias Python via apt (fiable en Ubuntu) ──
             echo "==> Instalando dependencias Python..."
-            sudo pip3 install --quiet --break-system-packages pymysql Pillow requests 2>/dev/null || \
-            sudo pip3 install --quiet pymysql Pillow requests 2>/dev/null || true
+            sudo apt-get install -y -q python3-pymysql python3-pil python3-requests
+
+            # ── Regenerar vendor/ con PHP 8.2 como plataforma ────────────
+            echo "==> Actualizando dependencias PHP..."
+            sudo COMPOSER_ALLOW_SUPERUSER=1 composer config platform.php 8.2.30
+            sudo COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --optimize-autoloader
 
             # ── Directorios de imagenes ───────────────────────────────────
             sudo mkdir -p /var/www/back/public/libros

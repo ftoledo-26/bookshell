@@ -8,29 +8,29 @@ Uso: python3 poblar_libros.py [limite]
 import os, sys, io, re, time, subprocess, unicodedata
 import requests
 
-# ── Auto-install dependencies ──────────────────────────────────────────
-def pip_install(*pkgs):
-    subprocess.run(
-        [sys.executable, '-m', 'pip', 'install', '--quiet', '--break-system-packages', *pkgs],
-        check=False, capture_output=True
-    )
-    subprocess.run(
-        [sys.executable, '-m', 'pip', 'install', '--quiet', *pkgs],
-        check=False, capture_output=True
-    )
+# ── Auto-install dependencies (fallback si apt no las instaló) ────────
+def try_install(apt_pkg, pip_pkg):
+    print(f"  Intentando apt-get install {apt_pkg}...")
+    r = subprocess.run(['sudo', 'apt-get', 'install', '-y', '-q', apt_pkg], capture_output=True)
+    if r.returncode != 0:
+        print(f"  apt falló, probando pip ({pip_pkg})...")
+        subprocess.run(
+            [sys.executable, '-m', 'pip', 'install', '--break-system-packages', pip_pkg],
+            check=False
+        )
 
 try:
     import pymysql
 except ImportError:
-    print("Instalando pymysql...")
-    pip_install('pymysql')
+    print("pymysql no encontrado, instalando...")
+    try_install('python3-pymysql', 'pymysql')
     import pymysql
 
 try:
     from PIL import Image
 except ImportError:
-    print("Instalando Pillow...")
-    pip_install('Pillow')
+    print("Pillow no encontrado, instalando...")
+    try_install('python3-pil', 'Pillow')
     from PIL import Image
 
 # ── Config ─────────────────────────────────────────────────────────────

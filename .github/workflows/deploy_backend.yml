@@ -78,6 +78,11 @@ jobs:
               sudo git reset --hard origin/Back
             fi
 
+            # ── Config global: rewrite rules directos (no depende de AllowOverride) ──
+            sudo cp /var/www/back/.apache/laravel.conf \
+              /etc/apache2/conf-available/laravel.conf
+            sudo a2enconf laravel
+
             # ── VirtualHost HTTP (copiado desde el repo) ──────────────────
             sudo cp /var/www/back/.apache/000-default.conf \
               /etc/apache2/sites-available/000-default.conf

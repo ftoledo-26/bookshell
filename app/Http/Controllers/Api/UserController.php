@@ -73,9 +73,9 @@ class UserController extends Controller
         ]);
 
         if ($request->hasFile('foto')) {
-            $filename = Str::slug($usuario->name) . '_' . time() . '.webp';
-            $request->file('foto')->storeAs('public/fotos', $filename);
-            $validated['foto'] = '/storage/fotos/' . $filename;
+            $filename = Str::slug($usuario->name) . '.webp';
+            $request->file('foto')->move(public_path('fotos'), $filename);
+            $validated['foto'] = '/fotos/' . $filename;
         } else {
             unset($validated['foto']);
         }

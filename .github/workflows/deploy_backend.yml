@@ -59,10 +59,12 @@ jobs:
               curl -sS https://getcomposer.org/installer | sudo php -- \
                 --install-dir=/usr/local/bin --filename=composer
 
-              sudo a2enmod rewrite
+              sudo a2enmod rewrite ssl
+              sudo systemctl enable apache2
+            fi
 
-              # VirtualHost para Laravel
-              sudo tee /etc/apache2/sites-available/000-default.conf > /dev/null <<'VHOST'
+            # ── VirtualHost HTTP (siempre actualizado) ────────────────────
+            sudo tee /etc/apache2/sites-available/000-default.conf > /dev/null <<'VHOST'
             <VirtualHost *:80>
                 DocumentRoot /var/www/back/public
                 <Directory /var/www/back/public>
@@ -75,7 +77,27 @@ jobs:
             </VirtualHost>
             VHOST
 
-              sudo systemctl enable apache2
+            # ── VirtualHost HTTPS (siempre actualizado si existe el cert) ─
+            if [ -f "/etc/letsencrypt/live/bookshell.duckdns.org/fullchain.pem" ]; then
+              sudo tee /etc/apache2/sites-available/000-default-le-ssl.conf > /dev/null <<'SSLVHOST'
+            <IfModule mod_ssl.c>
+            <VirtualHost *:443>
+                DocumentRoot /var/www/back/public
+                <Directory /var/www/back/public>
+                    Options Indexes FollowSymLinks
+                    AllowOverride All
+                    Require all granted
+                </Directory>
+                ErrorLog /var/log/apache2/error.log
+                CustomLog /var/log/apache2/access.log combined
+                SSLEngine on
+                Include /etc/letsencrypt/options-ssl-apache.conf
+                SSLCertificateFile /etc/letsencrypt/live/bookshell.duckdns.org/fullchain.pem
+                SSLCertificateKeyFile /etc/letsencrypt/live/bookshell.duckdns.org/privkey.pem
+            </VirtualHost>
+            </IfModule>
+            SSLVHOST
+              sudo a2ensite 000-default-le-ssl.conf 2>/dev/null || true
             fi
 
             # ── Clonar repo si el directorio no existe o esta incompleto ─

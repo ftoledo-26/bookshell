@@ -172,10 +172,9 @@ def main():
                     if not titulo or titulo.lower() in existing:
                         continue
 
-                    autor     = ", ".join((doc.get("author_name") or [])[:2]) or "Desconocido"
-                    editorial = ((doc.get("publisher") or [""])[0])[:255]
-                    anio      = str(doc.get("first_publish_year") or "")
-                    cover_id  = doc.get("cover_i")
+                    autor    = ", ".join((doc.get("author_name") or [])[:2]) or "Desconocido"
+                    anio     = str(doc.get("first_publish_year") or "")
+                    cover_id = doc.get("cover_i")
 
                     # ── Portada ───────────────────────────────────────────────
                     foto_path = None
@@ -195,12 +194,11 @@ def main():
                         cur.execute(
                             """
                             INSERT INTO libros
-                                (titulo, autor, editorial, anio_publicacion,
+                                (titulo, autor, anio_publicacion,
                                  genero, descripcion, foto, created_at, updated_at)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                            VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
                             """,
-                            (titulo, autor, editorial, anio,
-                             genero, "", foto_path),
+                            (titulo, autor, anio, genero, "", foto_path),
                         )
                         conn.commit()
                         existing.add(titulo.lower())

@@ -94,8 +94,7 @@ jobs:
             fi
 
             # ── Dependencias Python para scripts/ ────────────────────────
-            sudo pip3 install --break-system-packages -q \
-              -r /var/www/back/scripts/requirements.txt
+            sudo pip3 install -q -r /var/www/back/scripts/requirements.txt
 
             # ── Config global: rewrite rules directos (no depende de AllowOverride) ──
             sudo cp /var/www/back/.apache/laravel.conf \

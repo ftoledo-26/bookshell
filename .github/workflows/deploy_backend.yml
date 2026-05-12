@@ -106,7 +106,6 @@ jobs:
             cd /var/www/back
             sudo git fetch origin Back
             sudo git reset --hard origin/Back
-            sudo COMPOSER_ALLOW_SUPERUSER=1 composer config platform.php 8.2.30
             sudo COMPOSER_ALLOW_SUPERUSER=1 composer update --no-dev --optimize-autoloader
 
             # ── Pasos comunes ─────────────────────────────────────────────

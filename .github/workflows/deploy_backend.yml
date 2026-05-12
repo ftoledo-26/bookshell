@@ -108,16 +108,10 @@ jobs:
             sudo git reset --hard origin/Back
             sudo COMPOSER_ALLOW_SUPERUSER=1 composer update --no-dev --optimize-autoloader
 
-            # ── Portadas de libros (Python) ───────────────────────────────
-            sudo apt-get install -y -q python3-requests python3-pil 2>/dev/null || true
-            sudo mkdir -p /var/www/back/public/libros
-            sudo python3 /var/www/back/scripts/descargar_portadas.py || echo "[deploy] Aviso: algunas portadas no se pudieron descargar"
-
             # ── Pasos comunes ─────────────────────────────────────────────
             echo "==> .env DB lines:" && sudo grep "^DB_" /var/www/back/.env
             sudo php artisan config:clear
             sudo php artisan migrate --force || echo "[deploy] Aviso: alguna migracion ya existia en la BD, continua el despliegue."
-            sudo php artisan db:seed --class=LibroSeeder --force || echo "[deploy] Aviso: seeder de libros ya ejecutado"
             sudo php artisan config:cache
             sudo php artisan route:cache
             sudo php artisan view:cache

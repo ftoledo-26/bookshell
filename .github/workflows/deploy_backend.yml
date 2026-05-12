@@ -115,6 +115,7 @@ jobs:
             sudo php artisan config:cache
             sudo php artisan route:cache
             sudo php artisan view:cache
+            sudo php artisan storage:link --force || true
             sudo chown -R www-data:www-data /var/www/back/storage /var/www/back/bootstrap/cache
             sudo chmod -R 775 /var/www/back/storage /var/www/back/bootstrap/cache
             sudo systemctl restart apache2

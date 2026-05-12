@@ -69,11 +69,15 @@ class UserController extends Controller
             'email' => 'string|email|max:255|unique:users,email,' . $id,
             'password' => 'string|min:8',
             'descripcion' => 'string|max:255|nullable',
-            'foto' => 'sometimes|nullable|string|max:255',
+            'foto' => 'sometimes|nullable|file|image|max:5120',
         ]);
 
-        if ($request->has('foto') || $request->hasFile('foto')) {
-            $validated['foto'] = Str::slug($validated['name'] ?? $usuario->name) . '.webp';
+        if ($request->hasFile('foto')) {
+            $filename = Str::slug($usuario->name) . '_' . time() . '.webp';
+            $request->file('foto')->storeAs('public/fotos', $filename);
+            $validated['foto'] = $filename;
+        } else {
+            unset($validated['foto']);
         }
 
         $usuario->update($validated);

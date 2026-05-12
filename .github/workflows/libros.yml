@@ -41,30 +41,18 @@ jobs:
             sudo git fetch origin Back
             sudo git reset --hard origin/Back
 
-            # ── Instalar dependencias Python via apt (fiable en Ubuntu) ──
+            # ── Instalar dependencias Python ──────────────────────────────
             echo "==> Instalando dependencias Python..."
+            sudo apt-get update -y -q
             sudo apt-get install -y -q python3-pymysql python3-pil python3-requests
-
-            # ── Regenerar vendor/ con PHP 8.2 como plataforma ────────────
-            echo "==> Actualizando dependencias PHP..."
-            sudo COMPOSER_ALLOW_SUPERUSER=1 composer config platform.php 8.2.30
-            sudo COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --optimize-autoloader
 
             # ── Directorios de imagenes ───────────────────────────────────
             sudo mkdir -p /var/www/back/public/libros
             sudo chown ubuntu:ubuntu /var/www/back/public/libros
 
-            # ── Portadas de los 20 libros curados (descargar_portadas.py) ─
-            echo "==> Descargando portadas curadas..."
-            sudo python3 /var/www/back/scripts/descargar_portadas.py || echo "[seed] Aviso: algunas portadas curadas fallaron"
-
-            # ── Seed de los 20 libros curados via Laravel ─────────────────
-            echo "==> Seeding libros curados..."
-            sudo php artisan db:seed --class=LibroSeeder --force || echo "[seed] Aviso: libros curados ya existian"
-
-            # ── Bulk seed desde Open Library ──────────────────────────────
+            # ── Bulk seed desde Open Library (inserta directo en MySQL) ───
             echo "==> Iniciando bulk seed (${{ github.event.inputs.limite }} libros)..."
-            sudo python3 /var/www/back/scripts/poblar_libros.py ${{ github.event.inputs.limite }}
+            python3 /var/www/back/scripts/poblar_libros.py ${{ github.event.inputs.limite }}
 
             # ── Permisos finales ──────────────────────────────────────────
             sudo chown -R www-data:www-data /var/www/back/public/libros

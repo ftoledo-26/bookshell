@@ -19,7 +19,7 @@
                             @endif
                             <a href="{{ route('libros.show', $libro->id) }}" class="btn btn-primary">Ver Detalles</a>
                             <a href="{{ route('libros.comentarios', $libro->id) }}" class="btn btn-info">Ver Comentarios</a>
-                        -</div>
+                        </div>
                     </div>
                 </div>
             @endforeach

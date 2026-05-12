@@ -46,8 +46,8 @@ GENEROS = {
     "otro":            ["adventure fiction", "short stories", "travel writing"],
 }
 
-OL_SEARCH = "https://openlibrary.org/search.json"
-OL_COVER  = "https://covers.openlibrary.org/b/id/{}-L.jpg"
+OL_SUBJECTS = "https://openlibrary.org/subjects/{}.json"
+OL_COVER    = "https://covers.openlibrary.org/b/id/{}-L.jpg"
 
 ENV_FILE     = "/var/www/back/.env"
 DEFAULT_IMG  = "/var/www/back/public/libros"
@@ -95,16 +95,12 @@ def download_cover(url: str, dest: Path) -> bool:
 
 
 def fetch_ol(subject: str, limit: int = 100, offset: int = 0) -> list:
-    params = {
-        "subject": subject,
-        "limit":   min(limit, 100),
-        "offset":  offset,
-        "fields":  "title,author_name,publisher,first_publish_year,cover_i,description",
-    }
+    slug = re.sub(r"\s+", "_", subject.lower().strip())
+    url  = OL_SUBJECTS.format(slug)
     try:
-        r = requests.get(OL_SEARCH, params=params, timeout=25)
+        r = requests.get(url, params={"limit": min(limit, 100), "offset": offset}, timeout=25)
         r.raise_for_status()
-        return r.json().get("docs", [])
+        return r.json().get("works", [])
     except Exception as e:
         print(f"  [!] Open Library error ({subject}): {e}")
         return []
@@ -171,12 +167,11 @@ def main():
                     if not titulo or titulo.lower() in existing:
                         continue
 
-                    autor      = ", ".join((doc.get("author_name") or [])[:2]) or "Desconocido"
-                    editorial  = ((doc.get("publisher") or [""])[0])[:255]
+                    autor      = ", ".join(a["name"] for a in (doc.get("authors") or [])[:2]) or "Desconocido"
+                    editorial  = ""
                     anio       = str(doc.get("first_publish_year") or "")
-                    cover_id   = doc.get("cover_i")
-                    desc_raw   = doc.get("description") or ""
-                    descripcion = (desc_raw if isinstance(desc_raw, str) else "")[:2000]
+                    cover_id   = doc.get("cover_id")
+                    descripcion = ""
 
                     # ── Portada ───────────────────────────────────────────────
                     foto_path = None

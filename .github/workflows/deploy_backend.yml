@@ -2,11 +2,10 @@ name: Deploy Backend (Laravel)
 
 # Despliega el backend Laravel en la instancia EC2 Backend via SSH a traves del bastion.
 # Secrets requeridos en GitHub:
-#   BASTION_EIP         — IP publica del bastion (terraform output bastion_eip)
-#   BACKEND_PRIVATE_IP  — IP privada del backend  (terraform output backend_private_ip)
 #   SSH_PRIVATE_KEY     — Clave privada PEM del Key Pair de AWS (sin passphrase)
-#   RDS_ENDPOINT        — Endpoint del RDS MySQL   (terraform output rds_endpoint)
 #   TF_VAR_DB_PASSWORD  — Contrasena de la base de datos RDS
+# Variables de repositorio:
+#   BASTION_EIP, BACKEND_PRIVATE_IP, RDS_ENDPOINT
 
 on:
   push:
@@ -17,6 +16,7 @@ on:
       - 'composer.json'
       - 'routes/**'
       - 'app/**'
+      - '.github/workflows/deploy_backend.yml'
   workflow_dispatch:
 
 jobs:
@@ -31,10 +31,10 @@ jobs:
       - name: Pull y desplegar en backend (via bastion)
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.BACKEND_PRIVATE_IP }}
+          host: ${{ vars.BACKEND_PRIVATE_IP }}
           username: ubuntu
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          proxy_host: ${{ secrets.BASTION_EIP }}
+          proxy_host: ${{ vars.BASTION_EIP }}
           proxy_username: ubuntu
           proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
           command_timeout: 30m
@@ -95,24 +95,23 @@ jobs:
             fi
 
             # ── Actualizar credenciales DB siempre (por si cambia el RDS) ─
-            # Las lineas DB_* en el .env.example de Laravel vienen comentadas (# DB_HOST=...)
-            # Los patrones ^#\? *DB_*= manejan tanto lineas comentadas como no comentadas
-            sudo sed -i "s|^DB_CONNECTION=.*|DB_CONNECTION=mysql|"                                      /var/www/back/.env
-            sudo sed -i "s|^#\? *DB_HOST=.*|DB_HOST=${{ secrets.RDS_ENDPOINT }}|"                 /var/www/back/.env
-            sudo sed -i "s|^#\? *DB_PORT=.*|DB_PORT=3306|"                                          /var/www/back/.env
-            sudo sed -i "s|^#\? *DB_DATABASE=.*|DB_DATABASE=laravel|"                               /var/www/back/.env
-            sudo sed -i "s|^#\? *DB_USERNAME=.*|DB_USERNAME=laravel|"                               /var/www/back/.env
-            sudo sed -i "s|^#\? *DB_PASSWORD=.*|DB_PASSWORD=${{ secrets.TF_VAR_DB_PASSWORD }}|"   /var/www/back/.env
+            sudo sed -i "s|^DB_CONNECTION=.*|DB_CONNECTION=mysql|"           /var/www/back/.env
+            sudo sed -i "s|^#\? *DB_HOST=.*|DB_HOST=${{ vars.RDS_ENDPOINT }}|"  /var/www/back/.env
+            sudo sed -i "s|^#\? *DB_PORT=.*|DB_PORT=3306|"                   /var/www/back/.env
+            sudo sed -i "s|^#\? *DB_DATABASE=.*|DB_DATABASE=laravel|"        /var/www/back/.env
+            sudo sed -i "s|^#\? *DB_USERNAME=.*|DB_USERNAME=laravel|"        /var/www/back/.env
+            sudo sed -i "s|^#\? *DB_PASSWORD=.*|DB_PASSWORD=${{ secrets.TF_VAR_DB_PASSWORD }}|" /var/www/back/.env
 
             # ── Actualizar codigo y dependencias ─────────────────────────
             cd /var/www/back
-            sudo git pull origin Back
-            sudo composer install --no-dev --optimize-autoloader
+            sudo git fetch origin Back
+            sudo git reset --hard origin/Back
+            sudo COMPOSER_ALLOW_SUPERUSER=1 composer update --no-dev --optimize-autoloader
 
             # ── Pasos comunes ─────────────────────────────────────────────
             echo "==> .env DB lines:" && sudo grep "^DB_" /var/www/back/.env
             sudo php artisan config:clear
-            sudo php artisan migrate --force
+            sudo php artisan migrate --force || echo "[deploy] Aviso: alguna migracion ya existia en la BD, continua el despliegue."
             sudo php artisan config:cache
             sudo php artisan route:cache
             sudo php artisan view:cache

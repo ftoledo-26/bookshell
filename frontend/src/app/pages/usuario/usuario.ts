@@ -1029,6 +1029,10 @@ export class UsuarioPage implements OnInit {
 		return `${this.backendBaseUrl}/usuarios/${foto}`;
 	}
 
+	onAvatarError(): void {
+		this.user.foto = '';
+	}
+
 	trackByBookCommentId(_index: number, comment: ProfileBookComment): number {
 		return comment.id;
 	}

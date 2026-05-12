@@ -46,7 +46,7 @@
 
 	<section class="profile-hero" *ngIf="!isLoading && !isEditing">
 		<div class="avatar-block" [class.has-photo]="user.foto">
-			<img *ngIf="user.foto" [src]="getUserPhotoUrl()" [alt]="user.nombre + ' foto'" class="avatar-image" />
+			<img *ngIf="user.foto" [src]="getUserPhotoUrl()" [alt]="user.nombre + ' foto'" class="avatar-image" (error)="onAvatarError()" />
 			<span *ngIf="!user.foto" class="avatar-icon" aria-hidden="true"></span>
 		</div>
 

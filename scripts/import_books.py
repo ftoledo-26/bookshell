@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-import_books.py — Importa libros en español desde Google Books a la BD de bookshell.
+import_books.py — Importa libros en español desde Open Library a la BD de bookshell.
 Las portadas se descargan y convierten a WebP con el nombre del titulo.
 
 Requiere:
@@ -30,24 +30,26 @@ except ImportError:
     PIL_AVAILABLE = False
     print("[!] Pillow no instalado — portadas se guardan como JPG sin convertir")
 
-# ── Géneros del enum → términos de búsqueda en español ───────────────────────
+# ── Géneros → términos de búsqueda (q=) para Open Library en español ─────────
 GENEROS = {
-    "novela":          ["novela ficción", "novela contemporánea"],
-    "fantasia":        ["fantasía novela", "magia aventura fantasía"],
-    "ciencia_ficcion": ["ciencia ficción", "ficción científica"],
+    "novela":          ["novela ficcion", "literatura contemporanea"],
+    "fantasia":        ["fantasia novela", "magia aventura"],
+    "ciencia_ficcion": ["ciencia ficcion", "ficcion cientifica"],
     "terror":          ["terror novela", "horror suspense"],
-    "misterio":        ["misterio novela", "novela policíaca crimen"],
-    "romance":         ["romance novela", "novela romántica amor"],
-    "historia":        ["historia novela", "novela histórica"],
-    "biografia":       ["biografía", "autobiografía memorias"],
-    "poesia":          ["poesía", "poemas lírica"],
-    "ensayo":          ["ensayo filosófico", "filosofía ensayo"],
+    "misterio":        ["misterio policial", "novela policiaca"],
+    "romance":         ["romance novela", "novela romantica"],
+    "historia":        ["novela historica", "historia ficcion"],
+    "biografia":       ["biografia", "autobiografia memorias"],
+    "poesia":          ["poesia", "poemas lirica"],
+    "ensayo":          ["ensayo filosofia", "ensayo literario"],
     "otro":            ["aventura novela", "cuentos relatos"],
 }
 
-GB_SEARCH    = "https://www.googleapis.com/books/v1/volumes"
-ENV_FILE     = "/var/www/back/.env"
-DEFAULT_IMG  = "/var/www/back/public/libros"
+OL_SEARCH = "https://openlibrary.org/search.json"
+OL_COVER  = "https://covers.openlibrary.org/b/id/{}-L.jpg"
+
+ENV_FILE      = "/var/www/back/.env"
+DEFAULT_IMG   = "/var/www/back/public/libros"
 DEFAULT_TOTAL = 1000
 
 
@@ -91,28 +93,28 @@ def download_cover(url: str, dest: Path) -> bool:
         return False
 
 
-def fetch_gb(query: str, max_results: int = 40, start_index: int = 0) -> list:
+def fetch_ol(query: str, limit: int = 100, offset: int = 0) -> list:
+    """Busca en Open Library con q= + language=spa para obtener títulos en español."""
     params = {
-        "q":           query,
-        "langRestrict": "es",
-        "maxResults":  min(max_results, 40),
-        "startIndex":  start_index,
-        "printType":   "books",
-        "orderBy":     "relevance",
+        "q":        query,
+        "language": "spa",
+        "limit":    min(limit, 100),
+        "offset":   offset,
+        "fields":   "title,author_name,publisher,first_publish_year,cover_i",
     }
     try:
-        r = requests.get(GB_SEARCH, params=params, timeout=25)
+        r = requests.get(OL_SEARCH, params=params, timeout=25)
         r.raise_for_status()
-        return r.json().get("items", [])
+        return r.json().get("docs", [])
     except Exception as e:
-        print(f"  [!] Google Books error ({query}): {e}")
+        print(f"  [!] Open Library error ({query}): {e}")
         return []
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="Importar libros en español desde Google Books")
+    parser = argparse.ArgumentParser(description="Importar libros en español desde Open Library")
     parser.add_argument("--total",   type=int, default=DEFAULT_TOTAL,
                         help="Número total de libros a importar (default: 1000)")
     parser.add_argument("--img-dir", default=DEFAULT_IMG,
@@ -155,41 +157,33 @@ def main():
             if inserted >= args.total or genre_inserted >= per_genre:
                 break
             print(f"\n[→] {genero}: buscando '{query}'...")
-            start_index = 0
+            offset = 0
 
             while inserted < args.total and genre_inserted < per_genre:
-                items = fetch_gb(query, max_results=40, start_index=start_index)
-                if not items:
+                docs = fetch_ol(query, limit=100, offset=offset)
+                if not docs:
                     break
 
-                for item in items:
+                for doc in docs:
                     if inserted >= args.total or genre_inserted >= per_genre:
                         break
 
-                    vi     = item.get("volumeInfo", {})
-                    titulo = (vi.get("title") or "").strip()
+                    titulo = (doc.get("title") or "").strip()
                     if not titulo or titulo.lower() in existing:
                         continue
 
-                    autor       = ", ".join((vi.get("authors") or [])[:2]) or "Desconocido"
-                    editorial   = (vi.get("publisher") or "")[:255]
-                    pub_date    = vi.get("publishedDate") or ""
-                    anio        = pub_date[:4] if pub_date else ""
-                    descripcion = (vi.get("description") or "")[:2000]
+                    autor     = ", ".join((doc.get("author_name") or [])[:2]) or "Desconocido"
+                    editorial = ((doc.get("publisher") or [""])[0])[:255]
+                    anio      = str(doc.get("first_publish_year") or "")
+                    cover_id  = doc.get("cover_i")
 
                     # ── Portada ───────────────────────────────────────────────
-                    foto_path  = None
-                    img_links  = vi.get("imageLinks", {})
-                    cover_url  = img_links.get("thumbnail") or img_links.get("smallThumbnail")
-                    if cover_url:
-                        cover_url = (cover_url
-                                     .replace("zoom=1", "zoom=2")
-                                     .replace("&edge=curl", "")
-                                     .replace("http://", "https://"))
+                    foto_path = None
+                    if cover_id:
                         ext      = ".webp" if PIL_AVAILABLE else ".jpg"
                         filename = sanitize(titulo) + ext
                         dest     = img_dir / filename
-                        if dest.exists() or download_cover(cover_url, dest):
+                        if dest.exists() or download_cover(OL_COVER.format(cover_id), dest):
                             foto_path = f"libros/{filename}"
                         else:
                             sin_portada += 1
@@ -206,7 +200,7 @@ def main():
                             VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
                             """,
                             (titulo, autor, editorial, anio,
-                             genero, descripcion, foto_path),
+                             genero, "", foto_path),
                         )
                         conn.commit()
                         existing.add(titulo.lower())
@@ -218,8 +212,8 @@ def main():
                         conn.rollback()
                         print(f"  [!] Error inserting '{titulo[:40]}': {e}")
 
-                start_index += len(items)
-                time.sleep(0.3)   # respetar rate-limit de Google Books
+                offset += len(docs)
+                time.sleep(0.3)
 
     cur.close()
     conn.close()

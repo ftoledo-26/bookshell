@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { LoginService } from '../../services/Login.service';
 import { UsuarioService } from '../../services/Usuario.service';
+import { environment } from '../../environments/environments';
 
 
 type AuthMode = 'login' | 'signin';
@@ -147,7 +148,11 @@ export class LoginComponent implements OnInit, OnDestroy {
         const token = response.access_token ?? response.token;
 
         if (token) {
-          this.router.navigate(['/']);
+          if (response.user.roll === 'admin') {
+            window.location.href = environment.ADMIN_URL;
+          } else {
+            this.router.navigate(['/']);
+          }
           return;
         }
 

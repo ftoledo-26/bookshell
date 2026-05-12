@@ -97,8 +97,12 @@ jobs:
               sudo mkdir -p /etc/letsencrypt/renewal-hooks/deploy
               sudo cp /var/www/back/.apache/000-default-le-ssl.conf \
                 /etc/letsencrypt/renewal-hooks/deploy/bookshell-ssl.conf
-              sudo cp /var/www/back/.apache/apache-allowoverride.sh \
-                /etc/letsencrypt/renewal-hooks/deploy/apache-allowoverride.sh
+              sudo tee /etc/letsencrypt/renewal-hooks/deploy/apache-allowoverride.sh > /dev/null << 'HOOK'
+#!/bin/bash
+cp /etc/letsencrypt/renewal-hooks/deploy/bookshell-ssl.conf \
+  /etc/apache2/sites-available/000-default-le-ssl.conf
+systemctl reload apache2
+HOOK
               sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/apache-allowoverride.sh
             fi
 

@@ -16,6 +16,7 @@ on:
       - 'composer.json'
       - 'routes/**'
       - 'app/**'
+      - '.apache/**'
       - '.github/workflows/deploy_backend.yml'
   workflow_dispatch:
 
@@ -65,78 +66,39 @@ jobs:
             # ── Modulos Apache (siempre habilitados) ──────────────────────
             sudo a2enmod rewrite ssl
 
-            # ── VirtualHost HTTP (siempre actualizado) ────────────────────
-            sudo tee /etc/apache2/sites-available/000-default.conf > /dev/null <<'VHOST'
-            <VirtualHost *:80>
-                ServerName bookshell.duckdns.org
-                DocumentRoot /var/www/back/public
-                <Directory /var/www/back/public>
-                    Options Indexes FollowSymLinks
-                    AllowOverride All
-                    Require all granted
-                </Directory>
-                ErrorLog /var/log/apache2/error.log
-                CustomLog /var/log/apache2/access.log combined
-            </VirtualHost>
-            VHOST
-
-            # ── VirtualHost HTTPS (siempre actualizado si existe el cert) ─
-            if [ -f "/etc/letsencrypt/live/bookshell.duckdns.org/fullchain.pem" ]; then
-              sudo tee /etc/apache2/sites-available/000-default-le-ssl.conf > /dev/null <<'SSLVHOST'
-            <IfModule mod_ssl.c>
-            <VirtualHost *:443>
-                ServerName bookshell.duckdns.org
-                DocumentRoot /var/www/back/public
-                <Directory /var/www/back/public>
-                    Options Indexes FollowSymLinks
-                    AllowOverride All
-                    Require all granted
-                </Directory>
-                ErrorLog /var/log/apache2/error.log
-                CustomLog /var/log/apache2/access.log combined
-                SSLEngine on
-                Include /etc/letsencrypt/options-ssl-apache.conf
-                SSLCertificateFile /etc/letsencrypt/live/bookshell.duckdns.org/fullchain.pem
-                SSLCertificateKeyFile /etc/letsencrypt/live/bookshell.duckdns.org/privkey.pem
-            </VirtualHost>
-            </IfModule>
-            SSLVHOST
-              sudo a2ensite 000-default-le-ssl.conf 2>/dev/null || true
-
-              # Hook para que certbot no rompa AllowOverride tras cada renovacion
-              sudo mkdir -p /etc/letsencrypt/renewal-hooks/deploy
-              sudo tee /etc/letsencrypt/renewal-hooks/deploy/apache-allowoverride.sh > /dev/null <<'HOOK'
-            #!/bin/bash
-            sudo tee /etc/apache2/sites-available/000-default-le-ssl.conf > /dev/null <<'INNERVHOST'
-            <IfModule mod_ssl.c>
-            <VirtualHost *:443>
-                ServerName bookshell.duckdns.org
-                DocumentRoot /var/www/back/public
-                <Directory /var/www/back/public>
-                    Options Indexes FollowSymLinks
-                    AllowOverride All
-                    Require all granted
-                </Directory>
-                ErrorLog /var/log/apache2/error.log
-                CustomLog /var/log/apache2/access.log combined
-                SSLEngine on
-                Include /etc/letsencrypt/options-ssl-apache.conf
-                SSLCertificateFile /etc/letsencrypt/live/bookshell.duckdns.org/fullchain.pem
-                SSLCertificateKeyFile /etc/letsencrypt/live/bookshell.duckdns.org/privkey.pem
-            </VirtualHost>
-            </IfModule>
-            INNERVHOST
-            sudo systemctl reload apache2
-            HOOK
-              sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/apache-allowoverride.sh
-            fi
-
-            # ── Clonar repo si el directorio no existe o esta incompleto ─
+            # ── Clonar o actualizar repo ──────────────────────────────────
             if [ ! -d "/var/www/back/.git" ]; then
               echo "==> Clonando repositorio..."
               sudo rm -rf /var/www/back
               sudo git clone -b Back --single-branch \
                 https://github.com/ftoledo-26/bookshell.git /var/www/back
+            else
+              cd /var/www/back
+              sudo git fetch origin Back
+              sudo git reset --hard origin/Back
+            fi
+
+            # ── VirtualHost HTTP (copiado desde el repo) ──────────────────
+            sudo cp /var/www/back/.apache/000-default.conf \
+              /etc/apache2/sites-available/000-default.conf
+
+            # ── VirtualHost HTTPS (copiado desde el repo si existe el cert)
+            if [ -f "/etc/letsencrypt/live/bookshell.duckdns.org/fullchain.pem" ]; then
+              sudo cp /var/www/back/.apache/000-default-le-ssl.conf \
+                /etc/apache2/sites-available/000-default-le-ssl.conf
+              sudo a2ensite 000-default-le-ssl.conf 2>/dev/null || true
+
+              # Hook para que certbot no rompa AllowOverride tras cada renovacion
+              sudo mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+              sudo cp /var/www/back/.apache/000-default-le-ssl.conf \
+                /etc/letsencrypt/renewal-hooks/deploy/bookshell-ssl.conf
+              sudo tee /etc/letsencrypt/renewal-hooks/deploy/apache-allowoverride.sh > /dev/null << 'HOOK'
+#!/bin/bash
+cp /etc/letsencrypt/renewal-hooks/deploy/bookshell-ssl.conf \
+  /etc/apache2/sites-available/000-default-le-ssl.conf
+systemctl reload apache2
+HOOK
+              sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/apache-allowoverride.sh
             fi
 
             # ── Crear .env si no existe (solo genera APP_KEY una vez) ──
@@ -155,10 +117,8 @@ jobs:
             sudo sed -i "s|^#\? *DB_USERNAME=.*|DB_USERNAME=laravel|"        /var/www/back/.env
             sudo sed -i "s|^#\? *DB_PASSWORD=.*|DB_PASSWORD=${{ secrets.TF_VAR_DB_PASSWORD }}|" /var/www/back/.env
 
-            # ── Actualizar codigo y dependencias ─────────────────────────
+            # ── Instalar dependencias ─────────────────────────────────────
             cd /var/www/back
-            sudo git fetch origin Back
-            sudo git reset --hard origin/Back
             sudo COMPOSER_ALLOW_SUPERUSER=1 composer update --no-dev --optimize-autoloader
 
             # ── Pasos comunes ─────────────────────────────────────────────

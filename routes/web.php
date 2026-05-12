@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Route;
 
 
 
-Route::get('/', fn() => redirect('/admin'));
+Route::get('/', function () {return view('index');})->name('index');
 
 
 Route::get('/usuarios', [UserController::class, 'index'])->name('usuarios');

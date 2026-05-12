@@ -128,6 +128,14 @@ jobs:
                 echo "==> Aniadiendo ProxyPass /storage al vhost SSL..."
                 sudo sed -i "s|</VirtualHost>|    ProxyPass        /storage http://${BACKEND_IP}:80/storage\n    ProxyPassReverse /storage http://${BACKEND_IP}:80/storage\n</VirtualHost>|" "$SSL_VHOST"
               fi
+              if ! sudo grep -q "ProxyPass /js/filament" "$SSL_VHOST"; then
+                echo "==> Aniadiendo ProxyPass /js/filament al vhost SSL..."
+                sudo sed -i "s|</VirtualHost>|    ProxyPass        /js/filament http://${BACKEND_IP}:80/js/filament\n    ProxyPassReverse /js/filament http://${BACKEND_IP}:80/js/filament\n</VirtualHost>|" "$SSL_VHOST"
+              fi
+              if ! sudo grep -q "ProxyPass /css/filament" "$SSL_VHOST"; then
+                echo "==> Aniadiendo ProxyPass /css/filament al vhost SSL..."
+                sudo sed -i "s|</VirtualHost>|    ProxyPass        /css/filament http://${BACKEND_IP}:80/css/filament\n    ProxyPassReverse /css/filament http://${BACKEND_IP}:80/css/filament\n</VirtualHost>|" "$SSL_VHOST"
+              fi
             fi
 
             sudo systemctl reload apache2

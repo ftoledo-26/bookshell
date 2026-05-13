@@ -1052,6 +1052,305 @@
 	align-items: center;
 }
 
+/* ─── Book preview drawer ──────────────────────────────────── */
+
+.book-preview-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 200;
+	background: rgba(10, 7, 5, 0.62);
+	backdrop-filter: blur(3px);
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.28s ease;
+}
+
+.book-preview-backdrop.visible {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.book-preview-drawer {
+	position: fixed;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 201;
+	width: min(420px, 95vw);
+	display: flex;
+	flex-direction: column;
+	background: #1d120f;
+	border-left: 1px solid var(--line-strong);
+	box-shadow: -12px 0 48px rgba(0, 0, 0, 0.55);
+	transform: translateX(100%);
+	transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	overflow: hidden;
+}
+
+.book-preview-drawer.visible {
+	transform: translateX(0);
+}
+
+/* ── Header ── */
+
+.preview-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 1.2rem 1.2rem 1rem;
+	border-bottom: 1px solid var(--line);
+	flex-shrink: 0;
+}
+
+.preview-eyebrow {
+	margin: 0 0 0.2rem;
+	font-size: 0.68rem;
+	letter-spacing: 0.22em;
+	text-transform: uppercase;
+	color: var(--accent);
+	font-weight: 700;
+}
+
+.preview-head h2 {
+	margin: 0 0 0.15rem;
+	font-size: 1.1rem;
+	line-height: 1.3;
+	letter-spacing: -0.01em;
+}
+
+.preview-head p {
+	margin: 0;
+	color: var(--ink-soft);
+	font-size: 0.85rem;
+}
+
+.close-preview {
+	flex-shrink: 0;
+	margin-top: -0.15rem;
+	font-size: 1.35rem;
+}
+
+/* ── Scrollable body ── */
+
+.book-preview-drawer > *:not(.preview-head):not(.preview-actions) {
+	flex-shrink: 0;
+}
+
+.preview-summary {
+	display: flex;
+	gap: 1rem;
+	padding: 1rem 1.2rem;
+	border-bottom: 1px solid var(--line);
+	flex-shrink: 0;
+}
+
+.preview-cover {
+	width: 80px;
+	height: 114px;
+	border-radius: 0.55rem;
+	overflow: hidden;
+	flex-shrink: 0;
+	background: var(--bg-card);
+	border: 1px solid var(--line);
+}
+
+.preview-cover img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+.preview-summary-copy {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	min-width: 0;
+}
+
+.preview-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+	align-items: center;
+	font-size: 0.8rem;
+	color: var(--ink-soft);
+}
+
+.preview-description {
+	margin: 0;
+	font-size: 0.83rem;
+	color: var(--ink-soft);
+	line-height: 1.5;
+	display: -webkit-box;
+	-webkit-line-clamp: 4;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+/* ── Estado edit ── */
+
+.preview-state-field {
+	display: grid;
+	gap: 0.4rem;
+	padding: 0.9rem 1.2rem;
+	border-bottom: 1px solid var(--line);
+	flex-shrink: 0;
+	font-size: 0.85rem;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--ink-soft);
+}
+
+.preview-state-field select {
+	padding: 0.65rem 0.85rem;
+	border-radius: 0.75rem;
+	border: 1px solid var(--line-strong);
+	background: var(--field-bg);
+	color: var(--ink);
+	font: inherit;
+	font-size: 0.95rem;
+	cursor: pointer;
+	transition: border-color 0.2s ease;
+}
+
+.preview-state-field select:focus {
+	outline: none;
+	border-color: var(--accent);
+}
+
+/* ── Comments ── */
+
+.preview-comments {
+	flex: 1;
+	overflow-y: auto;
+	padding: 0.9rem 1.2rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+}
+
+.preview-comments::-webkit-scrollbar {
+	width: 5px;
+}
+
+.preview-comments::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.preview-comments::-webkit-scrollbar-thumb {
+	background: var(--line-strong);
+	border-radius: 999px;
+}
+
+.preview-comments-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-end;
+	gap: 0.5rem;
+	flex-shrink: 0;
+}
+
+.preview-comments-head > div {
+	display: flex;
+	flex-direction: column;
+	gap: 0.1rem;
+}
+
+.preview-comments-head h3 {
+	margin: 0;
+	font-size: 0.95rem;
+}
+
+.preview-comments-head > span {
+	font-size: 0.8rem;
+	color: var(--ink-soft);
+}
+
+.preview-comment-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.6rem;
+}
+
+.preview-comment-card {
+	padding: 0.7rem 0.85rem;
+	border-radius: 0.85rem;
+	border: 1px solid var(--line);
+	background: rgba(255, 255, 255, 0.03);
+	display: grid;
+	gap: 0.35rem;
+}
+
+.preview-comment-card header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.preview-comment-card header > div {
+	display: flex;
+	align-items: center;
+	gap: 0.45rem;
+}
+
+.preview-comment-card strong {
+	font-size: 0.85rem;
+}
+
+.preview-rating-pill {
+	padding: 0.15rem 0.5rem;
+	border-radius: 999px;
+	border: 1px solid rgba(248, 184, 78, 0.3);
+	background: rgba(248, 184, 78, 0.08);
+	color: var(--accent);
+	font-size: 0.72rem;
+	font-weight: 600;
+}
+
+.preview-like-pill {
+	font-size: 0.75rem;
+	color: var(--ink-soft);
+}
+
+.preview-comment-card p {
+	margin: 0;
+	font-size: 0.83rem;
+	color: var(--ink-soft);
+	line-height: 1.45;
+}
+
+.preview-empty-comments {
+	margin: 0;
+	padding: 1rem;
+	text-align: center;
+	color: var(--ink-soft);
+	font-size: 0.88rem;
+	border-radius: 0.75rem;
+	border: 1px dashed var(--line);
+}
+
+/* ── Footer actions ── */
+
+.preview-actions {
+	display: flex;
+	gap: 0.65rem;
+	padding: 1rem 1.2rem;
+	border-top: 1px solid var(--line);
+	flex-shrink: 0;
+}
+
+.preview-actions .btn-cancel {
+	flex: 1;
+}
+
+.preview-actions .btn-save,
+.preview-actions .btn-edit {
+	flex: 2;
+}
+
 /* ─── Responsive ───────────────────────────────────────────── */
 
 @media (max-width: 900px) {

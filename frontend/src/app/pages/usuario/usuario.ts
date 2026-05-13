@@ -1180,10 +1180,19 @@ export class UsuarioPage implements OnInit {
 		}
 
 		const normalizedState = this.normalizeBookState(this.previewBookState);
-		this.selectedBooks = this.updateInArray(this.selectedBooks, this.previewedBook.id, (book) => ({
-			...book,
-			state: normalizedState
-		}));
+		const bookId = this.previewedBook.id;
+
+		if (this.selectedBooks.some(b => b.id === bookId)) {
+			this.selectedBooks = this.updateInArray(this.selectedBooks, bookId, (book) => ({
+				...book,
+				state: normalizedState
+			}));
+		} else {
+			const backendBook = this.profileBooks.find(b => b.id === bookId);
+			if (backendBook) {
+				this.selectedBooks = [{ ...backendBook, state: normalizedState }, ...this.selectedBooks];
+			}
+		}
 		if (this.currentUserId) this.persistSelectedBooks(this.currentUserId, this.selectedBooks);
 		this.favoriteBooks = this.buildFavoriteBooks(this.profileComments, this.profileBooks, this.selectedBooks, this.hiddenProfileBookIds);
 		this.previewedBook = this.favoriteBooks.find((book) => book.id === this.previewedBook?.id) ?? null;

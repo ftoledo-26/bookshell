@@ -355,6 +355,30 @@
 	white-space: nowrap;
 }
 
+.book-state-pill.state-favorito {
+	border-color: rgba(248, 184, 78, 0.35);
+	background: rgba(248, 184, 78, 0.1);
+	color: var(--accent);
+}
+
+.book-state-pill.state-leido {
+	border-color: rgba(113, 200, 118, 0.35);
+	background: rgba(113, 200, 118, 0.1);
+	color: #7fc882;
+}
+
+.book-state-pill.state-leyendo {
+	border-color: rgba(89, 180, 255, 0.35);
+	background: rgba(89, 180, 255, 0.1);
+	color: #7ec8ff;
+}
+
+.book-state-pill.state-abandonado {
+	border-color: rgba(200, 100, 100, 0.35);
+	background: rgba(200, 100, 100, 0.1);
+	color: #e08080;
+}
+
 /* ─── Action menu ──────────────────────────────────────────── */
 
 .action-menu-wrap {
@@ -1395,5 +1419,69 @@
 
 	.panel {
 		padding: 0.9rem;
+	}
+
+	.book-card {
+		gap: 0.65rem;
+		padding: 0.7rem;
+	}
+
+	.book-cover {
+		width: 52px;
+		height: 74px;
+	}
+
+	.book-head {
+		flex-wrap: wrap;
+	}
+
+	.book-head-actions {
+		width: 100%;
+		justify-content: flex-start;
+		gap: 0.4rem;
+	}
+
+	.book-title-block strong {
+		font-size: 0.88rem;
+	}
+
+	.book-title-block p {
+		font-size: 0.76rem;
+	}
+
+	.book-state-pill {
+		font-size: 0.66rem;
+		padding: 0.18rem 0.45rem;
+	}
+
+	.comment-top {
+		flex-wrap: wrap;
+		gap: 0.3rem;
+	}
+
+	.comment-author {
+		flex: 1 1 auto;
+		font-size: 0.78rem;
+	}
+
+	.book-preview-drawer {
+		width: 100vw;
+	}
+
+	.preview-head {
+		padding: 1rem;
+	}
+
+	.preview-summary {
+		padding: 0.85rem 1rem;
+	}
+
+	.preview-state-field,
+	.preview-actions {
+		padding: 0.75rem 1rem;
+	}
+
+	.preview-comments {
+		padding: 0.75rem 1rem;
 	}
 }

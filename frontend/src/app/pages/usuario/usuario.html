@@ -159,7 +159,7 @@
 									<p>{{ book.author }}</p>
 								</div>
 								<div class="book-head-actions">
-									<span class="book-state-pill">{{ book.stateLabel }}</span>
+									<span class="book-state-pill" [ngClass]="'state-' + book.state">{{ book.stateLabel }}</span>
 									<div class="action-menu-wrap" *ngIf="profileIsEditable">
 										<button type="button" class="menu-trigger" (click)="toggleActionMenu('book', book.id); $event.stopPropagation()" [attr.aria-expanded]="isActionMenuOpen('book', book.id)" aria-label="Opciones">⋮</button>
 										<div class="action-menu" [class.visible]="actionMenuVisible?.kind === 'book' && actionMenuVisible?.id === book.id">
@@ -277,7 +277,7 @@
 
 				<div class="preview-summary-copy">
 					<div class="preview-meta">
-						<span class="book-state-pill">{{ book.stateLabel }}</span>
+						<span class="book-state-pill" [ngClass]="'state-' + book.state">{{ book.stateLabel }}</span>
 						<span>{{ book.commentCount }} comentarios</span>
 						@if(book.averageRating) {
 							<span>{{ book.averageRating }}</span>

@@ -23,6 +23,7 @@ type BookState = 'favorito' | 'leido' | 'leyendo' | 'abandonado';
 type ProfileBookComment = {
 	id: number;
 	author: string;
+	authorId: number | null;
 	content: string;
 	rating: number | null;
 	likes: number;
@@ -686,9 +687,11 @@ export class UsuarioPage implements OnInit {
 				.sort((left, right) => Number(right.id) - Number(left.id))
 				.map((comment) => {
 					const raw = comment as any;
+					const rawAuthorId = raw.UsuarioId ?? raw.usuario_id ?? raw.user_id;
 					return {
 						id: comment.id,
 						author: String(raw.user ?? raw.usuario?.nombre ?? raw.usuarioNombre ?? raw.username ?? 'Usuario desconocido'),
+						authorId: rawAuthorId != null ? Number(rawAuthorId) : null,
 						content: String(raw.contenido ?? raw.comentario ?? raw.comment ?? ''),
 						rating: this.resolveCommentRating(comment) > 0 ? this.resolveCommentRating(comment) : null,
 						likes: this.resolveCommentLikes(comment)
@@ -1010,6 +1013,12 @@ export class UsuarioPage implements OnInit {
 
 	openLikedComment(commentId: number): void {
 		this.router.navigate(['/comentarios', commentId]);
+	}
+
+	navigateToAuthorProfile(authorId: number | null | undefined): void {
+		if (authorId != null && Number.isFinite(authorId)) {
+			this.router.navigate(['/usuario', authorId]);
+		}
 	}
 
 	getUserPhotoUrl(): string {

@@ -179,7 +179,7 @@
 							<div class="book-comments" *ngIf="book.comments.length > 0">
 								<article class="book-comment" *ngFor="let comment of book.comments; trackBy: trackByBookCommentId">
 									<div class="comment-top">
-										<span class="comment-author">{{ comment.author }}</span>
+										<button type="button" class="comment-author comment-author-link" (click)="navigateToAuthorProfile(comment.authorId)">{{ comment.author }}</button>
 										<span class="comment-likes">♡ {{ comment.likes }}</span>
 										<div class="action-menu-wrap" *ngIf="profileIsEditable">
 											<button type="button" class="menu-trigger" (click)="toggleActionMenu('comment', comment.id); $event.stopPropagation()" aria-label="Opciones">⋮</button>
@@ -310,7 +310,7 @@
 					<article class="preview-comment-card" *ngFor="let comment of book.comments; trackBy: trackByBookCommentId">
 						<header>
 							<div>
-								<strong>{{ comment.author }}</strong>
+								<button type="button" class="comment-author-link preview-author-btn" (click)="navigateToAuthorProfile(comment.authorId)">{{ comment.author }}</button>
 								@if(comment.rating) {
 									<span class="preview-rating-pill">{{ comment.rating }} / 5</span>
 								}

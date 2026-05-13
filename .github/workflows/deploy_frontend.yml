@@ -77,6 +77,7 @@ jobs:
               echo 'RewriteCond %{REQUEST_URI} !^/admin'
               echo 'RewriteCond %{REQUEST_URI} !^/filament'
               echo 'RewriteCond %{REQUEST_URI} !^/storage'
+              echo 'RewriteCond %{REQUEST_URI} !^/fotos'
               echo 'RewriteCond %{REQUEST_FILENAME} !-f'
               echo 'RewriteCond %{REQUEST_FILENAME} !-d'
               echo 'RewriteRule . /index.html [L]'
@@ -139,6 +140,10 @@ jobs:
               if ! sudo grep -q "ProxyPass /livewire" "$SSL_VHOST"; then
                 echo "==> Aniadiendo ProxyPass /livewire al vhost SSL..."
                 sudo sed -i "s|</VirtualHost>|    ProxyPass        /livewire http://${BACKEND_IP}:80/livewire\n    ProxyPassReverse /livewire http://${BACKEND_IP}:80/livewire\n</VirtualHost>|" "$SSL_VHOST"
+              fi
+              if ! sudo grep -q "ProxyPass /fotos" "$SSL_VHOST"; then
+                echo "==> Aniadiendo ProxyPass /fotos al vhost SSL..."
+                sudo sed -i "s|</VirtualHost>|    ProxyPass        /fotos http://${BACKEND_IP}:80/fotos\n    ProxyPassReverse /fotos http://${BACKEND_IP}:80/fotos\n</VirtualHost>|" "$SSL_VHOST"
               fi
             fi
 

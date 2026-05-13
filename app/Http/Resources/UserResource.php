@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Str;
 
 class UserResource extends JsonResource
 {
@@ -14,12 +15,21 @@ class UserResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $foto = $this->foto;
+        if (!$foto) {
+            $slug = Str::slug($this->name ?? '');
+            $path = public_path('fotos/' . $slug . '.webp');
+            if ($slug && file_exists($path)) {
+                $foto = '/fotos/' . $slug . '.webp';
+            }
+        }
+
         return [
             'id' => $this->id,
             'name' => $this->name,
             'email' => $this->email,
             'roll' => $this->roll,
-            'foto' => $this->foto,
+            'foto' => $foto,
             'descripcion' => $this->descripcion,
             'reviews' => $this->reviews->map(function ($review) {
                 return [
@@ -37,6 +47,4 @@ class UserResource extends JsonResource
             }),
         ];
     }
-
-
 }

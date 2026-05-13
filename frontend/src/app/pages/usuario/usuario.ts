@@ -1026,7 +1026,7 @@ export class UsuarioPage implements OnInit {
 			return `${this.backendBaseUrl}${foto}`;
 		}
 
-		return `${this.backendBaseUrl}/usuarios/${foto}`;
+		return `${this.backendBaseUrl}/fotos/${foto}`;
 	}
 
 	onAvatarError(): void {

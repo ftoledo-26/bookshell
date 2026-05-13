@@ -3,9 +3,9 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\ComentarioResource\Pages;
-use App\Models\Comentario;
 use App\Models\Libro;
-use App\Models\Usuario;
+use App\Models\Review;
+use App\Models\User;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -14,17 +14,23 @@ use Filament\Tables\Table;
 
 class ComentarioResource extends Resource
 {
-    protected static ?string $model = Comentario::class;
+    protected static ?string $model = Review::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-left-right';
+
+    protected static ?string $navigationLabel = 'Reviews';
+
+    protected static ?string $modelLabel = 'Review';
+
+    protected static ?string $pluralModelLabel = 'Reviews';
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                Forms\Components\Select::make('usuario_id')
+                Forms\Components\Select::make('user_id')
                     ->label('Usuario')
-                    ->options(Usuario::pluck('nombre', 'id'))
+                    ->options(User::pluck('name', 'id'))
                     ->searchable()
                     ->required(),
                 Forms\Components\Select::make('libro_id')
@@ -32,12 +38,15 @@ class ComentarioResource extends Resource
                     ->options(Libro::pluck('titulo', 'id'))
                     ->searchable()
                     ->required(),
-                Forms\Components\Textarea::make('contenido')
+                Forms\Components\Textarea::make('comentario')
                     ->required()
                     ->columnSpanFull(),
-                Forms\Components\TextInput::make('likes')
+                Forms\Components\TextInput::make('valoracion')
+                    ->label('Valoración (1-5)')
                     ->numeric()
-                    ->default(0),
+                    ->minValue(1)
+                    ->maxValue(5)
+                    ->default(5),
             ]);
     }
 
@@ -45,15 +54,16 @@ class ComentarioResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('usuario.nombre')
+                Tables\Columns\TextColumn::make('user.name')
                     ->label('Usuario')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('libro.titulo')
                     ->label('Libro')
                     ->searchable(),
-                Tables\Columns\TextColumn::make('contenido')
-                    ->limit(50),
-                Tables\Columns\TextColumn::make('likes')
+                Tables\Columns\TextColumn::make('comentario')
+                    ->limit(60),
+                Tables\Columns\TextColumn::make('valoracion')
+                    ->label('Valoración')
                     ->numeric()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')

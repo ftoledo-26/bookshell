@@ -14,7 +14,9 @@ Uso:
 """
 
 import argparse
+import os
 import re
+import subprocess
 import time
 import unicodedata
 from io import BytesIO
@@ -77,6 +79,25 @@ def sanitize(title: str) -> str:
     return slug[:120] or "libro"
 
 
+def ensure_writable(img_dir: Path) -> bool:
+    """Intenta que img_dir sea escribible; usa sudo si hace falta."""
+    try:
+        img_dir.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        subprocess.run(["sudo", "mkdir", "-p", str(img_dir)], capture_output=True)
+
+    if os.access(img_dir, os.W_OK):
+        return True
+
+    result = subprocess.run(["sudo", "chmod", "777", str(img_dir)], capture_output=True, text=True)
+    if result.returncode == 0:
+        print(f"[i] Permisos ajustados en {img_dir}")
+        return os.access(img_dir, os.W_OK)
+
+    print(f"[!] Sin acceso a {img_dir}. Ejecuta manualmente: sudo chmod 777 {img_dir}")
+    return False
+
+
 def download_cover(url: str, dest: Path) -> bool:
     try:
         r = requests.get(url, timeout=15)
@@ -121,10 +142,16 @@ def main():
                         help="Directorio donde guardar las portadas")
     parser.add_argument("--env",     default=ENV_FILE,
                         help="Ruta al fichero .env de Laravel")
+    parser.add_argument("--skip-covers", action="store_true",
+                        help="No descargar portadas (mas rapido, foto queda NULL)")
     args = parser.parse_args()
 
     img_dir = Path(args.img_dir)
-    img_dir.mkdir(parents=True, exist_ok=True)
+    covers_enabled = not args.skip_covers
+    if covers_enabled:
+        covers_enabled = ensure_writable(img_dir)
+        if not covers_enabled:
+            print("[!] Portadas desactivadas — continuando sin descargar imagenes")
 
     # ── Conexión BD ───────────────────────────────────────────────────────────
     print(f"[i] Leyendo credenciales de {args.env}")
@@ -139,6 +166,12 @@ def main():
         autocommit=False,
     )
     cur = conn.cursor()
+
+    cur.execute("SHOW COLUMNS FROM libros")
+    db_columns = {row[0] for row in cur.fetchall()}
+    has_anio = "anio_publicacion" in db_columns
+    if not has_anio:
+        print("[!] Columna anio_publicacion no existe en la BD — se omitira del INSERT")
 
     cur.execute("SELECT LOWER(titulo) FROM libros")
     existing = {row[0] for row in cur.fetchall()}
@@ -178,7 +211,7 @@ def main():
 
                     # ── Portada ───────────────────────────────────────────────
                     foto_path = None
-                    if cover_id:
+                    if covers_enabled and cover_id:
                         ext      = ".webp" if PIL_AVAILABLE else ".jpg"
                         filename = sanitize(titulo) + ext
                         dest     = img_dir / filename
@@ -191,15 +224,16 @@ def main():
 
                     # ── Insertar ──────────────────────────────────────────────
                     try:
-                        cur.execute(
-                            """
-                            INSERT INTO libros
-                                (titulo, autor, anio_publicacion,
-                                 genero, descripcion, foto, created_at, updated_at)
-                            VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
-                            """,
-                            (titulo, autor, anio, genero, "", foto_path),
-                        )
+                        if has_anio:
+                            cur.execute(
+                                "INSERT INTO libros (titulo, autor, anio_publicacion, genero, descripcion, foto, created_at, updated_at) VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())",
+                                (titulo, autor, anio, genero, "", foto_path),
+                            )
+                        else:
+                            cur.execute(
+                                "INSERT INTO libros (titulo, autor, genero, descripcion, foto, created_at, updated_at) VALUES (%s, %s, %s, %s, %s, NOW(), NOW())",
+                                (titulo, autor, genero, "", foto_path),
+                            )
                         conn.commit()
                         existing.add(titulo.lower())
                         inserted += 1

@@ -11,6 +11,7 @@ import { BookService } from '../../services/Book.service';
 import { ComentarioService } from '../../services/Comentario.service';
 import { LoginService } from '../../services/Login.service';
 import { UsuarioService } from '../../services/Usuario.service';
+import { FollowService } from '../../services/Follow.service';
 import { environment } from '../../environments/environments';
 
 type ProfileMetric = {
@@ -92,6 +93,7 @@ type ProfileTab = 'Profile' | 'Books' | 'Reviews' | 'Likes';
 export class UsuarioPage implements OnInit {
 	private readonly loginService = inject(LoginService);
 	private readonly usuarioService = inject(UsuarioService);
+	private readonly followService = inject(FollowService);
 	private readonly comentarioService = inject(ComentarioService);
 	private readonly bookService = inject(BookService);
 	private readonly cdr = inject(ChangeDetectorRef);
@@ -202,6 +204,9 @@ export class UsuarioPage implements OnInit {
 	hiddenProfileBookIds: number[] = [];
 	private previewCloseTimer: ReturnType<typeof setTimeout> | null = null;
 	private profileComments: Comentario[] = [];
+	followersCount = 0;
+	isFollowing = false;
+	isTogglingFollow = false;
 	private allComments: Comentario[] = [];
 	private profileBooks: Book[] = [];
 	readonly bookStateOptions: Array<{ value: BookState; label: string }> = [
@@ -215,7 +220,7 @@ export class UsuarioPage implements OnInit {
 	metrics: ProfileMetric[] = [
 		{ value: '0', label: 'Reviews' },
 		{ value: '0', label: 'Books' },
-		{ value: '0', label: 'Likes' }
+		{ value: '0', label: 'Seguidores' }
 	];
 	favoriteBooks: ProfileBook[] = [
 		{
@@ -416,6 +421,7 @@ export class UsuarioPage implements OnInit {
 				}
 				this.isLoading = false;
 				this.cdr.detectChanges();
+				this.loadFollowStatus(result.user.id);
 			},
 			error: () => {
 				this.errorMessage = 'No se pudo cargar el perfil.';
@@ -601,14 +607,38 @@ export class UsuarioPage implements OnInit {
 		return Array.from(new Set(bookIds));
 	}
 
+	private loadFollowStatus(userId: number): void {
+		this.followService.getStatus(userId).subscribe((status) => {
+			this.followersCount = status.followers;
+			this.isFollowing = status.following;
+			this.metrics[2] = { value: String(status.followers), label: 'Seguidores' };
+			this.cdr.detectChanges();
+		});
+	}
+
+	toggleFollow(): void {
+		if (this.isTogglingFollow || !this.viewedUserId) return;
+		this.isTogglingFollow = true;
+		const action$ = this.isFollowing
+			? this.followService.unfollow(this.viewedUserId)
+			: this.followService.follow(this.viewedUserId);
+
+		action$.subscribe((status) => {
+			this.followersCount = status.followers;
+			this.isFollowing = status.following;
+			this.metrics[2] = { value: String(status.followers), label: 'Seguidores' };
+			this.isTogglingFollow = false;
+			this.cdr.detectChanges();
+		});
+	}
+
 	private buildMetrics(comments: Comentario[]): ProfileMetric[] {
-		const totalLikes = comments.reduce((sum, comment) => sum + this.resolveCommentLikes(comment), 0);
 		const reviewedBooks = this.extractDistinctBookIds(comments).length;
 
 		return [
 			{ value: String(comments.length), label: 'Reviews' },
 			{ value: String(reviewedBooks), label: 'Books' },
-			{ value: String(totalLikes), label: 'Likes' }
+			{ value: String(this.followersCount), label: 'Seguidores' }
 		];
 	}
 

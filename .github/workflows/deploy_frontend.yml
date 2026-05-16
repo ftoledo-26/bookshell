@@ -145,6 +145,10 @@ jobs:
                 echo "==> Aniadiendo ProxyPass /fotos al vhost SSL..."
                 sudo sed -i "s|</VirtualHost>|    ProxyPass        /fotos http://${BACKEND_IP}:80/fotos\n    ProxyPassReverse /fotos http://${BACKEND_IP}:80/fotos\n</VirtualHost>|" "$SSL_VHOST"
               fi
+              if ! sudo grep -q "ProxyPass /libros" "$SSL_VHOST"; then
+                echo "==> Aniadiendo ProxyPass /libros al vhost SSL..."
+                sudo sed -i "s|</VirtualHost>|    ProxyPass        /libros http://${BACKEND_IP}:80/libros\n    ProxyPassReverse /libros http://${BACKEND_IP}:80/libros\n</VirtualHost>|" "$SSL_VHOST"
+              fi
             fi
 
             sudo systemctl reload apache2

@@ -12,6 +12,7 @@ import { Usuario } from '../../models/Usuario';
 import { UsuarioService } from '../../services/Usuario.service';
 import { catchError, forkJoin, of, timeout } from 'rxjs';
 import { Router } from '@angular/router';
+import { getRecommendedBooks } from '../../utils/algoBook';
 
 type TimelineComment = Comentario & {
   username: string;
@@ -97,7 +98,7 @@ export class Home implements OnInit {
         const { books, comments, users } = result;
         this.books = books;
         const timelineComments = this.mapTimelineComments(comments, books, users);
-        this.recommendedBooks = this.mapRecommendedBooks(books);
+        this.recommendedBooks = this.mapRecommendedBooks(books, this.getCurrentUserId());
         this.reviews = this.mapFeaturedReviews(timelineComments);
         this.isLoading = false;
         if (books.length === 0 && comments.length === 0) {
@@ -161,8 +162,8 @@ export class Home implements OnInit {
     });
   }
 
-  private mapRecommendedBooks(books: Book[]): RecommendedBook[] {
-    return books.slice(0, 8).map((book) => ({
+  private mapRecommendedBooks(books: Book[], userId: number | null): RecommendedBook[] {
+    return getRecommendedBooks(books, userId, 5).map((book) => ({
       id: book.id,
       title: book.titulo,
       author: (book as any).autor ?? '',

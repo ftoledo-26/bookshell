@@ -1504,3 +1504,26 @@
 		padding: 0.75rem 1rem;
 	}
 }
+
+.btn-follow {
+  padding: 0.4rem 1.1rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--accent, #c8a96e);
+  background: transparent;
+  color: var(--accent, #c8a96e);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+
+.btn-follow.following {
+  background: var(--accent, #c8a96e);
+  color: #1a1209;
+}
+
+.btn-follow:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}

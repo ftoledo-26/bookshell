@@ -54,6 +54,16 @@
 			<div class="hero-actions">
 				<h1>{{ user.nombre }}</h1>
 				<button type="button" class="btn-edit" *ngIf="profileIsEditable" (click)="startEditing()">Modificar usuario</button>
+				<button
+					*ngIf="!profileIsEditable"
+					type="button"
+					class="btn-follow"
+					[class.following]="isFollowing"
+					[disabled]="isTogglingFollow"
+					(click)="toggleFollow()"
+				>
+					{{ isFollowing ? 'Siguiendo' : 'Seguir' }}
+				</button>
 			</div>
 			<p class="hero-subtitle">{{ user.descripcion || 'Sin descripción disponible.' }}</p>
 		</div>

@@ -37,6 +37,7 @@ Route::get('/reviews/{id}', [ReviewController::class, 'show']);
 Route::get('/libros/{libroId}/opiniones', [ReviewController::class, 'opiniones']);
 Route::get('/user_reviews', [User_ReviewController::class, 'index']);
 Route::get('/user_reviews/{id}', [User_ReviewController::class, 'show']);
+Route::get('/usuarios/{id}/followers', [FollowController::class, 'status']);
 
 
 // ----------------------------------------------------------------------
@@ -57,6 +58,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/user_reviews', [User_ReviewController::class, 'store']);
     Route::put('/user_reviews/{id}', [User_ReviewController::class, 'update']);
     Route::delete('/user_reviews/{id}', [User_ReviewController::class, 'destroy']);
+    Route::post('/usuarios/{id}/follow', [FollowController::class, 'follow']);
+    Route::delete('/usuarios/{id}/follow', [FollowController::class, 'unfollow']);
 }); 
 
 

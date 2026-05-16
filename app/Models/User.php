@@ -76,6 +76,16 @@ class User extends Authenticatable implements FilamentUser
         return $this->hasMany(Like::class);
     }
 
+    public function followers()
+    {
+        return $this->hasMany(Follow::class, 'followed_id');
+    }
+
+    public function following()
+    {
+        return $this->hasMany(Follow::class, 'follower_id');
+    }
+
     public function comentariosLikeados()
     {
         return $this->belongsToMany(Comentario::class, 'comentario_usuario', 'user_id', 'comentario_id')->withTimestamps();

@@ -163,7 +163,7 @@ export class Home implements OnInit {
   }
 
   private mapRecommendedBooks(books: Book[], userId: number | null): RecommendedBook[] {
-    return getRecommendedBooks(books, userId, 5).map((book) => ({
+    return getRecommendedBooks(books, userId, 7).map((book) => ({
       id: book.id,
       title: book.titulo,
       author: (book as any).autor ?? '',

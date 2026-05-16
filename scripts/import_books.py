@@ -14,6 +14,7 @@ Uso:
 """
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -180,6 +181,7 @@ def main():
     per_genre   = max(10, args.total // len(GENEROS))
     inserted    = 0
     sin_portada = 0
+    pendientes  = []
 
     for genero, queries in GENEROS.items():
         if inserted >= args.total:
@@ -211,16 +213,23 @@ def main():
 
                     # ── Portada ───────────────────────────────────────────────
                     foto_path = None
-                    if covers_enabled and cover_id:
-                        ext      = ".webp" if PIL_AVAILABLE else ".jpg"
-                        filename = sanitize(titulo) + ext
-                        dest     = img_dir / filename
-                        if dest.exists() or download_cover(OL_COVER.format(cover_id), dest):
-                            foto_path = f"libros/{filename}"
-                        else:
+                    if covers_enabled:
+                        if cover_id:
+                            ext      = ".webp" if PIL_AVAILABLE else ".jpg"
+                            filename = sanitize(titulo) + ext
+                            dest     = img_dir / filename
+                            if dest.exists() or download_cover(OL_COVER.format(cover_id), dest):
+                                foto_path = f"libros/{filename}"
+                        if foto_path is None:
+                            pendientes.append({
+                                "titulo": titulo,
+                                "autor":  autor,
+                                "anio_publicacion": anio if has_anio else None,
+                                "genero": genero,
+                            })
                             sin_portada += 1
-                    else:
-                        sin_portada += 1
+                            print(f"  · sin portada → pendiente: {titulo[:65]}")
+                            continue
 
                     # ── Insertar ──────────────────────────────────────────────
                     try:
@@ -249,6 +258,20 @@ def main():
 
     cur.close()
     conn.close()
+
+    if pendientes:
+        pendientes_path = img_dir / "lista_libros_pendientes.json"
+        if pendientes_path.exists():
+            try:
+                with open(pendientes_path, encoding="utf-8") as f:
+                    prev = json.load(f)
+                titulos_prev = {p["titulo"].lower() for p in prev}
+                pendientes = prev + [p for p in pendientes if p["titulo"].lower() not in titulos_prev]
+            except Exception:
+                pass
+        with open(pendientes_path, "w", encoding="utf-8") as f:
+            json.dump(pendientes, f, ensure_ascii=False, indent=2)
+        print(f"[i] {len(pendientes)} pendientes guardados en {pendientes_path}")
 
     print(f"\n{'='*60}")
     print(f"✅  Libros insertados : {inserted}")

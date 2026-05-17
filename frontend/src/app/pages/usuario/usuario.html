@@ -171,10 +171,12 @@
 							<div class="book-head">
 								<div class="book-title-block">
 									<strong>{{ book.title }}</strong>
-									<p>{{ book.author }}</p>
+									<div class="book-meta-row">
+										<p>{{ book.author }}</p>
+										<span class="book-state-pill" [ngClass]="'state-' + book.state">{{ book.stateLabel }}</span>
+									</div>
 								</div>
 								<div class="book-head-actions">
-									<span class="book-state-pill" [ngClass]="'state-' + book.state">{{ book.stateLabel }}</span>
 									<div class="action-menu-wrap" *ngIf="profileIsEditable">
 										<button type="button" class="menu-trigger" (click)="toggleActionMenu('book', book.id); $event.stopPropagation()" [attr.aria-expanded]="isActionMenuOpen('book', book.id)" aria-label="Opciones">⋮</button>
 										<div class="action-menu" [class.visible]="actionMenuVisible?.kind === 'book' && actionMenuVisible?.id === book.id">

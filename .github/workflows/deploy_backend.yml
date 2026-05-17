@@ -80,8 +80,6 @@ jobs:
 
             # ── Modulos Apache (siempre habilitados) ──────────────────────
             sudo a2enmod rewrite ssl
-            # Desactivar WebDAV: intercepta DELETE/PUT antes de llegar a Laravel
-            sudo a2dismod dav dav_fs dav_lock 2>/dev/null || true
 
             # ── Clonar o actualizar repo ──────────────────────────────────
             if [ ! -d "/var/www/back/.git" ]; then
@@ -135,6 +133,17 @@ jobs:
             sudo sed -i "s|^#\? *DB_DATABASE=.*|DB_DATABASE=laravel|"        /var/www/back/.env
             sudo sed -i "s|^#\? *DB_USERNAME=.*|DB_USERNAME=laravel|"        /var/www/back/.env
             sudo sed -i "s|^#\? *DB_PASSWORD=.*|DB_PASSWORD=${{ secrets.TF_VAR_DB_PASSWORD }}|" /var/www/back/.env
+
+            # ── Directorios requeridos por Laravel (antes de Composer) ──────
+            sudo mkdir -p /var/www/back/bootstrap/cache \
+                          /var/www/back/storage/framework/cache \
+                          /var/www/back/storage/framework/sessions \
+                          /var/www/back/storage/framework/views \
+                          /var/www/back/storage/logs \
+                          /var/www/back/public/fotos \
+                          /var/www/back/public/libros
+            sudo chown -R www-data:www-data /var/www/back/bootstrap/cache /var/www/back/storage
+            sudo chmod -R 775 /var/www/back/bootstrap/cache /var/www/back/storage
 
             # ── Instalar dependencias ─────────────────────────────────────
             cd /var/www/back

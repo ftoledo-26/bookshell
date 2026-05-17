@@ -52,10 +52,30 @@ jobs:
           script: |
             set -e
 
-            # ── Actualizar codigo (reset hard para limpiar conflictos locales) ──
-            cd /var/www/front
-            sudo git fetch origin Front
-            sudo git reset --hard origin/Front
+            # ── Instalar Node.js / git / Apache si no estan (instancia nueva) ─
+            NODE_VER=$(node -v 2>/dev/null | cut -dv -f2 | cut -d. -f1 || echo "0")
+            if ! command -v node &> /dev/null || [ "$NODE_VER" -lt 18 ] 2>/dev/null; then
+              echo "==> Node.js no encontrado — instalando Node 20 LTS..."
+              export DEBIAN_FRONTEND=noninteractive
+              sudo apt-get update -y -q
+              sudo apt-get install -y -q curl git apache2 certbot python3-certbot-apache
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+              sudo apt-get install -y -q nodejs
+              sudo a2enmod rewrite proxy proxy_http
+              sudo systemctl enable apache2
+            fi
+
+            # ── Clonar o actualizar repo ──────────────────────────────────
+            if [ ! -d "/var/www/front/.git" ]; then
+              echo "==> Clonando repositorio..."
+              sudo rm -rf /var/www/front
+              sudo git clone -b Front --single-branch \
+                https://github.com/ftoledo-26/bookshell.git /var/www/front
+            else
+              cd /var/www/front
+              sudo git fetch origin Front
+              sudo git reset --hard origin/Front
+            fi
 
             # ── Build Angular (el proyecto esta en frontend/) ─────────────
             cd /var/www/front/frontend
@@ -76,9 +96,13 @@ jobs:
               echo 'RewriteCond %{REQUEST_URI} !^/api'
               echo 'RewriteCond %{REQUEST_URI} !^/admin'
               echo 'RewriteCond %{REQUEST_URI} !^/filament'
+              echo 'RewriteCond %{REQUEST_URI} !^/js/filament'
+              echo 'RewriteCond %{REQUEST_URI} !^/css/filament'
+              echo 'RewriteCond %{REQUEST_URI} !^/livewire'
               echo 'RewriteCond %{REQUEST_URI} !^/swagger'
               echo 'RewriteCond %{REQUEST_URI} !^/storage'
               echo 'RewriteCond %{REQUEST_URI} !^/fotos'
+              echo 'RewriteCond %{REQUEST_URI} !^/libros'
               echo 'RewriteCond %{REQUEST_FILENAME} !-f'
               echo 'RewriteCond %{REQUEST_FILENAME} !-d'
               echo 'RewriteRule . /index.html [L]'
@@ -89,7 +113,6 @@ jobs:
 
             # ── Corregir puerto proxy en vhost HTTP ───────────────────────
             sudo sed -i "s|:8000/api|:80/api|g" /etc/apache2/sites-available/000-default.conf
-            # Asegurar AllowOverride All en vhost HTTP
             sudo sed -i "s|AllowOverride None|AllowOverride All|g" /etc/apache2/sites-available/000-default.conf
 
             # ── Asegurar ProxyPass /swagger en vhost HTTP ─────────────────
@@ -117,7 +140,6 @@ jobs:
             SSL_VHOST="/etc/apache2/sites-available/000-default-le-ssl.conf"
             if [ -f "$SSL_VHOST" ]; then
               sudo sed -i "s|:8000/api|:80/api|g" "$SSL_VHOST"
-              # AllowOverride: reemplazar cualquier valor, o añadir si no existe
               if sudo grep -q "AllowOverride" "$SSL_VHOST"; then
                 sudo sed -i "s|AllowOverride.*|AllowOverride All|g" "$SSL_VHOST"
               else
@@ -160,6 +182,13 @@ jobs:
                 echo "==> Aniadiendo ProxyPass /swagger al vhost SSL..."
                 sudo sed -i "s|</VirtualHost>|    ProxyPass        /swagger http://${BACKEND_IP}:80/swagger\n    ProxyPassReverse /swagger http://${BACKEND_IP}:80/swagger\n</VirtualHost>|" "$SSL_VHOST"
               fi
+            fi
+
+            # ── ModSecurity: permitir metodos REST (PUT, DELETE, PATCH) ─────
+            if sudo a2query -m security2 2>/dev/null | grep -q enabled; then
+              echo "==> Configurando ModSecurity para permitir metodos REST..."
+              printf '%s\n' 'SecAction "id:9002001,phase:1,nolog,pass,t:none,setvar:'"'"'tx.allowed_methods=GET HEAD POST OPTIONS PUT DELETE PATCH'"'"'"' \
+                | sudo tee /etc/modsecurity/99-rest-methods.conf > /dev/null
             fi
 
             sudo systemctl reload apache2

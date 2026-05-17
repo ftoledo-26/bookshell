@@ -14,8 +14,9 @@ class FollowController extends Controller
         $count = Follow::where('followed_id', $id)->count();
         $isFollowing = false;
 
-        if ($request->user()) {
-            $isFollowing = Follow::where('follower_id', $request->user()->id)
+        $authUser = $request->user('sanctum');
+        if ($authUser) {
+            $isFollowing = Follow::where('follower_id', $authUser->id)
                 ->where('followed_id', $id)
                 ->exists();
         }

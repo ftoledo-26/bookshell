@@ -41,6 +41,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   errorMessage: string = '';
   successMessage: string = '';
   submitError = false;
+  isSubmitting = false;
 
   ngOnInit(): void {
     this.redirectIfLoggedIn();
@@ -143,8 +144,10 @@ export class LoginComponent implements OnInit, OnDestroy {
       return;
     }
 
+    this.isSubmitting = true;
     this.loginService.login(this.email, this.password).subscribe({
       next: (response) => {
+        this.isSubmitting = false;
         const token = response.access_token ?? response.token;
 
         if (token) {
@@ -159,6 +162,7 @@ export class LoginComponent implements OnInit, OnDestroy {
         this.setError('El servidor respondió sin token.');
       },
       error: () => {
+        this.isSubmitting = false;
         this.setError('Usuario o contraseña incorrectos.');
       }
     });

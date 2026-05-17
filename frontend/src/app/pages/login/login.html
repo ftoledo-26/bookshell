@@ -112,7 +112,10 @@
           <div class="status error" *ngIf="errorMessage">{{ errorMessage }}</div>
           <div class="status success" *ngIf="successMessage">{{ successMessage }}</div>
 
-          <button class="submit-btn" type="submit" [class.submit-error]="submitError">Entrar a mi espacio</button>
+          <button class="submit-btn" type="submit" [class.submit-error]="submitError" [disabled]="isSubmitting">
+            <span *ngIf="!isSubmitting">Entrar a mi espacio</span>
+            <span *ngIf="isSubmitting" class="btn-spinner" aria-hidden="true"></span>
+          </button>
         </form>
 
         <ng-template #signInForm>

@@ -11,7 +11,7 @@ import { BookService } from '../../services/Book.service';
 import { ComentarioService } from '../../services/Comentario.service';
 import { LoginService } from '../../services/Login.service';
 import { UsuarioService } from '../../services/Usuario.service';
-import { FollowService } from '../../services/Follow.service';
+import { FollowService, FollowingUser } from '../../services/Follow.service';
 import { environment } from '../../environments/environments';
 
 type ProfileMetric = {
@@ -205,8 +205,12 @@ export class UsuarioPage implements OnInit {
 	private previewCloseTimer: ReturnType<typeof setTimeout> | null = null;
 	private profileComments: Comentario[] = [];
 	followersCount = 0;
+	followingCount = 0;
 	isFollowing = false;
 	isTogglingFollow = false;
+	followingModalVisible = false;
+	followingUsers: FollowingUser[] = [];
+	isLoadingFollowing = false;
 	private allComments: Comentario[] = [];
 	private profileBooks: Book[] = [];
 	readonly bookStateOptions: Array<{ value: BookState; label: string }> = [
@@ -402,6 +406,7 @@ export class UsuarioPage implements OnInit {
 
 				this.user = result.user;
 				this.viewedUserId = result.user.id;
+				this.followingCount = Number((result.user as any).following_count ?? 0);
 				this.editDraft = {
 					nombre: String(result.user.nombre ?? ''),
 					email: String(result.user.email ?? ''),
@@ -638,7 +643,8 @@ export class UsuarioPage implements OnInit {
 		return [
 			{ value: String(comments.length), label: 'Reviews' },
 			{ value: String(reviewedBooks), label: 'Books' },
-			{ value: String(this.followersCount), label: 'Seguidores' }
+			{ value: String(this.followersCount), label: 'Seguidores' },
+			{ value: String(this.followingCount), label: 'Seguidos' }
 		];
 	}
 
@@ -1098,6 +1104,43 @@ export class UsuarioPage implements OnInit {
 
 	trackByLikedCommentId(_index: number, comment: LikedCommentView): number {
 		return comment.id;
+	}
+
+	trackByFollowingUserId(_index: number, user: FollowingUser): number {
+		return user.id;
+	}
+
+	onMetricClick(metric: ProfileMetric): void {
+		if (metric.label === 'Seguidos') {
+			this.openFollowingModal();
+		}
+	}
+
+	openFollowingModal(): void {
+		if (!this.viewedUserId) return;
+		this.followingModalVisible = true;
+		this.isLoadingFollowing = true;
+		this.cdr.detectChanges();
+		this.followService.getFollowing(this.viewedUserId).subscribe((users) => {
+			this.followingUsers = users;
+			this.isLoadingFollowing = false;
+			this.cdr.detectChanges();
+		});
+	}
+
+	closeFollowingModal(): void {
+		this.followingModalVisible = false;
+		this.followingUsers = [];
+		this.cdr.detectChanges();
+	}
+
+	unfollowUser(userId: number): void {
+		this.followService.unfollow(userId).subscribe(() => {
+			this.followingUsers = this.followingUsers.filter((u) => u.id !== userId);
+			this.followingCount = Math.max(0, this.followingCount - 1);
+			this.metrics[3] = { value: String(this.followingCount), label: 'Seguidos' };
+			this.cdr.detectChanges();
+		});
 	}
 
 	normalizeCoverPath(rawCover?: string): string {

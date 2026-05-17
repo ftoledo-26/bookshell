@@ -69,7 +69,12 @@
 		</div>
 
 		<div class="metric-strip">
-			<article *ngFor="let metric of metrics; trackBy: trackByMetricLabel" class="metric-card">
+			<article
+				*ngFor="let metric of metrics; trackBy: trackByMetricLabel"
+				class="metric-card"
+				[class.metric-clickable]="metric.label === 'Seguidos'"
+				(click)="onMetricClick(metric)"
+			>
 				<strong>{{ metric.value }}</strong>
 				<span>{{ metric.label }}</span>
 			</article>
@@ -267,6 +272,26 @@
 			</section>
 		</aside>
 	</section>
+
+	<div class="following-modal-backdrop" *ngIf="followingModalVisible" (click)="closeFollowingModal()"></div>
+	<aside class="following-modal" *ngIf="followingModalVisible">
+		<header class="following-modal-head">
+			<h2>Siguiendo</h2>
+			<button type="button" class="menu-trigger close-preview" (click)="closeFollowingModal()" aria-label="Cerrar">×</button>
+		</header>
+		<p class="empty-state" *ngIf="isLoadingFollowing">Cargando...</p>
+		<p class="empty-state" *ngIf="!isLoadingFollowing && followingUsers.length === 0">No sigue a nadie todavía.</p>
+		<ul class="following-list" *ngIf="!isLoadingFollowing && followingUsers.length > 0">
+			<li class="following-item" *ngFor="let u of followingUsers; trackBy: trackByFollowingUserId">
+				<button type="button" class="following-name-btn" (click)="navigateToAuthorProfile(u.id); closeFollowingModal()">
+					<span class="following-avatar" *ngIf="!u.foto">{{ u.name.charAt(0) }}</span>
+					<img *ngIf="u.foto" [src]="u.foto" [alt]="u.name" class="following-avatar-img" />
+					{{ u.name }}
+				</button>
+				<button *ngIf="profileIsEditable" type="button" class="btn-unfollow" (click)="unfollowUser(u.id)">Dejar de seguir</button>
+			</li>
+		</ul>
+	</aside>
 
 	<div class="book-preview-backdrop" *ngIf="previewedBook || previewDrawerVisible" [class.visible]="previewDrawerVisible" (click)="closeBookPreview()"></div>
 	<aside class="book-preview-drawer" *ngIf="previewedBook || previewDrawerVisible" [class.visible]="previewDrawerVisible">

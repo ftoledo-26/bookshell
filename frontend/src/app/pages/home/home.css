@@ -642,3 +642,35 @@
 		font-size: 0.92rem;
 	}
 }
+
+/* ─── Reviews tabs ──────────────────────────────────────────── */
+
+.reviews-tabs {
+	display: flex;
+	gap: 0.25rem;
+}
+
+.reviews-tab {
+	padding: 0.3rem 0.9rem;
+	border-radius: 999px;
+	border: 1px solid rgba(255, 225, 178, 0.22);
+	background: transparent;
+	color: var(--ink-soft, #cfbca2);
+	font-size: 0.82rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background 0.18s, color 0.18s, border-color 0.18s;
+}
+
+.reviews-tab.active {
+	background: var(--accent, #f8b84e);
+	color: #1a1209;
+	border-color: transparent;
+}
+
+.empty-tab-note {
+	padding: 1.2rem 0.5rem;
+	color: var(--ink-soft, #cfbca2);
+	font-size: 0.92rem;
+	text-align: center;
+}

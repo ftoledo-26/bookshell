@@ -275,6 +275,15 @@ export class ComentarioService {
       );
   }
 
+  getFollowingComentarios(): Observable<Comentario[]> {
+    return this.http
+      .get<ApiResponse<RawComment[]> | RawComment[]>(environment.API_URL + 'reviews/following')
+      .pipe(
+        map((response: any) => (response?.data ?? response ?? []).map((item: RawComment) => this.normalizeComment(item))),
+        catchError(() => of([]))
+      );
+  }
+
   deleteComentario(id: number): Observable<void> {
     return this.http.delete<void>(`${this.apiUrl}/${id}`).pipe(
       map(() => {

@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {return view('index');})->name('index');
 
+Route::get('/swagger', fn() => view('swagger'))->name('swagger');
+
 
 Route::get('/usuarios', [UserController::class, 'index'])->name('usuarios');
 Route::get('/usuarios/{id}', [UserController::class, 'show'])->name('usuarios.show');

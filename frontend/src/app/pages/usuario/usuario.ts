@@ -612,11 +612,38 @@ export class UsuarioPage implements OnInit {
 		return Array.from(new Set(bookIds));
 	}
 
+	private followCacheKey(viewedId: number): string {
+		return `followStatus:${this.currentUserId}:${viewedId}`;
+	}
+
+	private readFollowCache(viewedId: number): boolean | null {
+		try {
+			const raw = localStorage.getItem(this.followCacheKey(viewedId));
+			if (!raw) return null;
+			return Boolean(JSON.parse(raw).following);
+		} catch {
+			return null;
+		}
+	}
+
+	private writeFollowCache(viewedId: number, following: boolean): void {
+		try {
+			localStorage.setItem(this.followCacheKey(viewedId), JSON.stringify({ following }));
+		} catch {}
+	}
+
 	private loadFollowStatus(userId: number): void {
-		this.followService.getStatus(userId).subscribe((status) => {
+		const cached = this.readFollowCache(userId);
+		if (cached !== null) {
+			this.isFollowing = cached;
+			this.cdr.detectChanges();
+		}
+
+		this.followService.getStatus(userId).subscribe((status: FollowStatus) => {
 			this.followersCount = status.followers;
 			this.isFollowing = status.following;
 			this.metrics[2] = { value: String(status.followers), label: 'Seguidores' };
+			this.writeFollowCache(userId, status.following);
 			this.cdr.detectChanges();
 		});
 	}
@@ -638,15 +665,14 @@ export class UsuarioPage implements OnInit {
 
 		action$.subscribe({
 			next: (status: FollowStatus) => {
-				// Confirm with server values
 				this.followersCount = status.followers;
 				this.isFollowing = status.following;
 				this.metrics[2] = { value: String(status.followers), label: 'Seguidores' };
 				this.isTogglingFollow = false;
+				this.writeFollowCache(this.viewedUserId!, status.following);
 				this.cdr.detectChanges();
 			},
 			error: () => {
-				// Rollback on failure
 				this.isFollowing = wasFollowing;
 				this.followersCount += wasFollowing ? 1 : -1;
 				this.metrics[2] = { value: String(this.followersCount), label: 'Seguidores' };

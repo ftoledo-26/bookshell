@@ -80,6 +80,8 @@ jobs:
 
             # ── Modulos Apache (siempre habilitados) ──────────────────────
             sudo a2enmod rewrite ssl
+            # Desactivar WebDAV: intercepta DELETE/PUT antes de llegar a Laravel
+            sudo a2dismod dav dav_fs dav_lock 2>/dev/null || true
 
             # ── Clonar o actualizar repo ──────────────────────────────────
             if [ ! -d "/var/www/back/.git" ]; then

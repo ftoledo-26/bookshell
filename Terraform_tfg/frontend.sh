@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # Script de arranque del frontend (Angular + Apache).
 # Terraform lo procesa como templatefile() — sustituye ${backend_ip},
 # ${domain}, ${repo_url} y ${repo_branch} antes de pasarselo a EC2.
@@ -27,6 +27,22 @@ rm -rf /var/www/html/*
 DIST_DIR=$(find /var/www/front/frontend/dist -name "index.html" -exec dirname {} \; | head -1)
 cp -r $DIST_DIR/* /var/www/html/
 
+# .htaccess para Angular routing (evita 404 al recargar pagina)
+cat > /var/www/html/.htaccess <<'HTACCESS'
+Options -MultiViews
+RewriteEngine On
+RewriteBase /
+RewriteRule ^index\.html$ - [L]
+RewriteCond %%{REQUEST_URI} !^/api
+RewriteCond %%{REQUEST_URI} !^/admin
+RewriteCond %%{REQUEST_URI} !^/filament
+RewriteCond %%{REQUEST_URI} !^/swagger
+RewriteCond %%{REQUEST_URI} !^/storage
+RewriteCond %%{REQUEST_FILENAME} !-f
+RewriteCond %%{REQUEST_FILENAME} !-d
+RewriteRule . /index.html [L]
+HTACCESS
+
 # Apache VirtualHost — proxy /api al backend
 # Los placeholders se reemplazan por sed despues del heredoc
 cat > /etc/apache2/sites-available/000-default.conf <<'VHOST'
@@ -41,8 +57,24 @@ cat > /etc/apache2/sites-available/000-default.conf <<'VHOST'
     </Directory>
 
     ProxyPreserveHost On
-    ProxyPass        /api http://BACKEND_IP_HERE:80/api
-    ProxyPassReverse /api http://BACKEND_IP_HERE:80/api
+
+    # API Laravel
+    ProxyPass        /api      http://BACKEND_IP_HERE:80/api
+    ProxyPassReverse /api      http://BACKEND_IP_HERE:80/api
+
+    # Panel de administracion Filament (/admin) y sus assets (/filament)
+    ProxyPass        /admin    http://BACKEND_IP_HERE:80/admin
+    ProxyPassReverse /admin    http://BACKEND_IP_HERE:80/admin
+    ProxyPass        /filament http://BACKEND_IP_HERE:80/filament
+    ProxyPassReverse /filament http://BACKEND_IP_HERE:80/filament
+
+    # Documentacion Swagger UI
+    ProxyPass        /swagger  http://BACKEND_IP_HERE:80/swagger
+    ProxyPassReverse /swagger  http://BACKEND_IP_HERE:80/swagger
+
+    # Storage publico (portadas de libros)
+    ProxyPass        /storage  http://BACKEND_IP_HERE:80/storage
+    ProxyPassReverse /storage  http://BACKEND_IP_HERE:80/storage
 
     ErrorLog /var/log/apache2/error.log
     CustomLog /var/log/apache2/access.log combined
@@ -73,4 +105,13 @@ certbot --apache -d ${domain} \
   -m franciscomanueltoledo@gmail.com \
   --redirect || echo "[frontend.sh] AVISO: certbot fallo — HTTPS no activo. Ejecutar via workflow deploy_frontend cuando DuckDNS apunte aqui."
 
+
+# ── OWASP ModSecurity WAF ────────────────────────────────────────────────────
+apt-get install -y libapache2-mod-security2 modsecurity-crs
+if [ ! -f /etc/modsecurity/modsecurity.conf ]; then
+  cp /etc/modsecurity/modsecurity.conf-recommended /etc/modsecurity/modsecurity.conf
+fi
+sed -i "s|SecRuleEngine DetectionOnly|SecRuleEngine On|" /etc/modsecurity/modsecurity.conf
+a2enmod security2
+systemctl reload apache2
 echo "[frontend.sh] Instalacion completada. Dominio: ${domain}, Backend: ${backend_ip}"

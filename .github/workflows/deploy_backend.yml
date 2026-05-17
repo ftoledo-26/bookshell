@@ -2,11 +2,10 @@ name: Deploy Backend (Laravel)
 
 # Despliega el backend Laravel en la instancia EC2 Backend via SSH a traves del bastion.
 # Secrets requeridos en GitHub:
-#   BASTION_EIP         — IP publica del bastion (terraform output bastion_eip)
-#   BACKEND_PRIVATE_IP  — IP privada del backend  (terraform output backend_private_ip)
 #   SSH_PRIVATE_KEY     — Clave privada PEM del Key Pair de AWS (sin passphrase)
-#   RDS_ENDPOINT        — Endpoint del RDS MySQL   (terraform output rds_endpoint)
 #   TF_VAR_DB_PASSWORD  — Contrasena de la base de datos RDS
+# Variables de repositorio:
+#   BASTION_EIP, BACKEND_PRIVATE_IP, RDS_ENDPOINT
 
 on:
   push:
@@ -17,6 +16,9 @@ on:
       - 'composer.json'
       - 'routes/**'
       - 'app/**'
+      - '.apache/**'
+      - 'scripts/**'
+      - '.github/workflows/deploy_backend.yml'
   workflow_dispatch:
 
 jobs:
@@ -31,19 +33,20 @@ jobs:
       - name: Pull y desplegar en backend (via bastion)
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.BACKEND_PRIVATE_IP }}
+          host: ${{ vars.BACKEND_PRIVATE_IP }}
           username: ubuntu
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          proxy_host: ${{ secrets.BASTION_EIP }}
+          proxy_host: ${{ vars.BASTION_EIP }}
           proxy_username: ubuntu
           proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
           command_timeout: 30m
           script: |
             set -e
 
-            # ── Instalar PHP/Composer/Apache si no estan presentes ────────
-            if ! command -v composer &> /dev/null; then
-              echo "==> Instalando dependencias del sistema..."
+            # ── Instalar PHP 8.4 / Composer / Apache si no estan presentes ─
+            PHP_VER=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null || echo "0.0")
+            if ! command -v composer &> /dev/null || [ "$PHP_VER" != "8.4" ]; then
+              echo "==> PHP actual: $PHP_VER — instalando/actualizando a 8.4..."
               export DEBIAN_FRONTEND=noninteractive
               sudo apt-get update -y -q
               sudo apt-get install -y -q software-properties-common
@@ -51,73 +54,110 @@ jobs:
               sudo apt-get update -y -q
               sudo apt-get install -y -q \
                 apache2 \
-                php8.2 php8.2-cli php8.2-mysql php8.2-xml php8.2-mbstring \
-                php8.2-curl php8.2-zip php8.2-intl php8.2-bcmath \
+                php8.4 php8.4-cli php8.4-mysql php8.4-xml php8.4-mbstring \
+                php8.4-curl php8.4-zip php8.4-intl php8.4-bcmath \
+                libapache2-mod-php8.4 \
+                python3 python3-pip \
                 git curl unzip
+
+              sudo a2enmod php8.4
+              sudo a2dismod php8.2 2>/dev/null || true
+              sudo update-alternatives --set php /usr/bin/php8.4
 
               echo "==> Instalando Composer..."
               curl -sS https://getcomposer.org/installer | sudo php -- \
                 --install-dir=/usr/local/bin --filename=composer
 
-              sudo a2enmod rewrite
-
-              # VirtualHost para Laravel
-              sudo tee /etc/apache2/sites-available/000-default.conf > /dev/null <<'VHOST'
-            <VirtualHost *:80>
-                DocumentRoot /var/www/back/public
-                <Directory /var/www/back/public>
-                    Options Indexes FollowSymLinks
-                    AllowOverride All
-                    Require all granted
-                </Directory>
-                ErrorLog /var/log/apache2/error.log
-                CustomLog /var/log/apache2/access.log combined
-            </VirtualHost>
-            VHOST
-
               sudo systemctl enable apache2
             fi
 
-            # ── Clonar repo si el directorio no existe o esta incompleto ─
+            # ── Python / pip (si el bloque PHP ya existia en el servidor) ─
+            if ! command -v pip3 &> /dev/null; then
+              export DEBIAN_FRONTEND=noninteractive
+              sudo apt-get update -y -q
+              sudo apt-get install -y -q python3 python3-pip
+            fi
+
+            # ── Modulos Apache (siempre habilitados) ──────────────────────
+            sudo a2enmod rewrite ssl
+
+            # ── Clonar o actualizar repo ──────────────────────────────────
             if [ ! -d "/var/www/back/.git" ]; then
               echo "==> Clonando repositorio..."
               sudo rm -rf /var/www/back
               sudo git clone -b Back --single-branch \
                 https://github.com/ftoledo-26/bookshell.git /var/www/back
+            else
+              cd /var/www/back
+              sudo git fetch origin Back
+              sudo git reset --hard origin/Back
             fi
 
-            # ── Crear .env si no existe (solo genera APP_KEY una vez) ──
+            # ── Dependencias Python para scripts/ ────────────────────────
+            sudo pip3 install -q -r /var/www/back/scripts/requirements.txt
+
+            # ── Config global: rewrite rules directos (no depende de AllowOverride) ──
+            sudo cp /var/www/back/.apache/laravel.conf \
+              /etc/apache2/conf-available/laravel.conf
+            sudo a2enconf laravel
+
+            # ── VirtualHost HTTP (copiado desde el repo) ──────────────────
+            sudo cp /var/www/back/.apache/000-default.conf \
+              /etc/apache2/sites-available/000-default.conf
+
+            # ── VirtualHost HTTPS (copiado desde el repo si existe el cert)
+            if [ -f "/etc/letsencrypt/live/bookshell.duckdns.org/fullchain.pem" ]; then
+              sudo cp /var/www/back/.apache/000-default-le-ssl.conf \
+                /etc/apache2/sites-available/000-default-le-ssl.conf
+              sudo a2ensite 000-default-le-ssl.conf 2>/dev/null || true
+
+              # Hook para que certbot no rompa AllowOverride tras cada renovacion
+              sudo mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+              sudo cp /var/www/back/.apache/000-default-le-ssl.conf \
+                /etc/letsencrypt/renewal-hooks/deploy/bookshell-ssl.conf
+              sudo cp /var/www/back/.apache/apache-allowoverride.sh \
+                /etc/letsencrypt/renewal-hooks/deploy/apache-allowoverride.sh
+              sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/apache-allowoverride.sh
+            fi
+
+            # ── Crear .env si no existe ───────────────────────────────
             if [ ! -f "/var/www/back/.env" ]; then
               echo "==> Creando .env desde ejemplo..."
               sudo cp /var/www/back/.env.example /var/www/back/.env
-              cd /var/www/back
-              sudo php artisan key:generate --force
             fi
 
             # ── Actualizar credenciales DB siempre (por si cambia el RDS) ─
-            # Las lineas DB_* en el .env.example de Laravel vienen comentadas (# DB_HOST=...)
-            # Los patrones ^#\? *DB_*= manejan tanto lineas comentadas como no comentadas
-            sudo sed -i "s|^DB_CONNECTION=.*|DB_CONNECTION=mysql|"                                      /var/www/back/.env
-            sudo sed -i "s|^#\? *DB_HOST=.*|DB_HOST=${{ secrets.RDS_ENDPOINT }}|"                 /var/www/back/.env
-            sudo sed -i "s|^#\? *DB_PORT=.*|DB_PORT=3306|"                                          /var/www/back/.env
-            sudo sed -i "s|^#\? *DB_DATABASE=.*|DB_DATABASE=laravel|"                               /var/www/back/.env
-            sudo sed -i "s|^#\? *DB_USERNAME=.*|DB_USERNAME=laravel|"                               /var/www/back/.env
-            sudo sed -i "s|^#\? *DB_PASSWORD=.*|DB_PASSWORD=${{ secrets.TF_VAR_DB_PASSWORD }}|"   /var/www/back/.env
+            sudo sed -i "s|^DB_CONNECTION=.*|DB_CONNECTION=mysql|"           /var/www/back/.env
+            sudo sed -i "s|^#\? *DB_HOST=.*|DB_HOST=${{ vars.RDS_ENDPOINT }}|"  /var/www/back/.env
+            sudo sed -i "s|^#\? *DB_PORT=.*|DB_PORT=3306|"                   /var/www/back/.env
+            sudo sed -i "s|^#\? *DB_DATABASE=.*|DB_DATABASE=laravel|"        /var/www/back/.env
+            sudo sed -i "s|^#\? *DB_USERNAME=.*|DB_USERNAME=laravel|"        /var/www/back/.env
+            sudo sed -i "s|^#\? *DB_PASSWORD=.*|DB_PASSWORD=${{ secrets.TF_VAR_DB_PASSWORD }}|" /var/www/back/.env
 
-            # ── Actualizar codigo y dependencias ─────────────────────────
+            # ── Instalar dependencias ─────────────────────────────────────
             cd /var/www/back
-            sudo git pull origin Back
-            sudo composer install --no-dev --optimize-autoloader
+            sudo COMPOSER_ALLOW_SUPERUSER=1 composer update --no-dev --optimize-autoloader
+
+            # ── Asegurar APP_KEY (genera si esta vacio, vendor ya actualizado) ──
+            if ! sudo grep -q "^APP_KEY=.\+" /var/www/back/.env; then
+              echo "==> APP_KEY vacio — generando..."
+              sudo php artisan key:generate --force
+            fi
 
             # ── Pasos comunes ─────────────────────────────────────────────
             echo "==> .env DB lines:" && sudo grep "^DB_" /var/www/back/.env
             sudo php artisan config:clear
-            sudo php artisan migrate --force
+            sudo php artisan cache:clear
+            sudo php artisan route:clear
+            sudo php artisan view:clear
+            sudo php artisan migrate --force || echo "[deploy] Aviso: alguna migracion ya existia en la BD, continua el despliegue."
             sudo php artisan config:cache
             sudo php artisan route:cache
             sudo php artisan view:cache
-            sudo chown -R www-data:www-data /var/www/back/storage /var/www/back/bootstrap/cache
-            sudo chmod -R 775 /var/www/back/storage /var/www/back/bootstrap/cache
+            sudo php artisan storage:link --force 2>/dev/null || true
+            sudo php artisan filament:assets
+            sudo chown -R www-data:www-data /var/www/back/storage /var/www/back/bootstrap/cache /var/www/back/public/fotos /var/www/back/public/libros
+            sudo chmod -R 775 /var/www/back/storage /var/www/back/bootstrap/cache /var/www/back/public/fotos /var/www/back/public/libros
             sudo systemctl restart apache2
 
             echo "Backend desplegado — $(date)"

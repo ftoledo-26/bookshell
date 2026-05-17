@@ -38,4 +38,30 @@ yarn-error.log*
 *.njsproj
 *.sln
 *.sw?
+.DS_Store
+/.fleet
+/.nova
+/.zed
+
+# Laravel
+.phpactor.json
+.phpunit.result.cache
+/.phpunit.cache
+/auth.json
+/public/build
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+Homestead.json
+Homestead.yaml
+Thumbs.db
+
+# Terraform
+.terraform/
+**/.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+*.tfvars
 Terraform_tfg/

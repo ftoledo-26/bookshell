@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class UserController extends Controller
 {
@@ -68,7 +69,16 @@ class UserController extends Controller
             'email' => 'string|email|max:255|unique:users,email,' . $id,
             'password' => 'string|min:8',
             'descripcion' => 'string|max:255|nullable',
+            'foto' => 'sometimes|nullable|file|image|max:5120',
         ]);
+
+        if ($request->hasFile('foto')) {
+            $filename = Str::slug($usuario->name) . '.webp';
+            $request->file('foto')->move(public_path('fotos'), $filename);
+            $validated['foto'] = '/fotos/' . $filename;
+        } else {
+            unset($validated['foto']);
+        }
 
         $usuario->update($validated);
 

@@ -1,0 +1,61 @@
+name: Seed Libros (Open Library)
+
+# Workflow manual para poblar la BD con libros desde Open Library.
+# Requiere que el backend ya este desplegado (deploy_backend.yml ejecutado al menos una vez).
+# Secrets/Vars: SSH_PRIVATE_KEY, BASTION_EIP, BACKEND_PRIVATE_IP
+
+on:
+  workflow_dispatch:
+    inputs:
+      limite:
+        description: 'Numero de libros a insertar desde Open Library (ej: 500, 1000, 5000)'
+        required: false
+        default: '1000'
+
+jobs:
+  seed-libros:
+    name: Poblar libros en BD
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Seed libros en backend (via bastion)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ vars.BACKEND_PRIVATE_IP }}
+          username: ubuntu
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          proxy_host: ${{ vars.BASTION_EIP }}
+          proxy_username: ubuntu
+          proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 120m
+          script: |
+            set -e
+
+            if [ ! -d "/var/www/back/.git" ]; then
+              echo "ERROR: Backend no desplegado. Ejecuta deploy_backend.yml primero."
+              exit 1
+            fi
+
+            # ── Actualizar codigo para tener el script mas reciente ───────
+            cd /var/www/back
+            sudo git fetch origin Back
+            sudo git reset --hard origin/Back
+
+            # ── Instalar dependencias Python ──────────────────────────────
+            echo "==> Instalando dependencias Python..."
+            sudo apt-get update -y -q
+            sudo apt-get install -y -q python3-pymysql python3-pil python3-requests
+
+            # ── Directorios de imagenes ───────────────────────────────────
+            sudo mkdir -p /var/www/back/public/libros
+            sudo chown ubuntu:ubuntu /var/www/back/public/libros
+
+            # ── Bulk seed desde Open Library (inserta directo en MySQL) ───
+            echo "==> Iniciando bulk seed (${{ github.event.inputs.limite }} libros)..."
+            python3 /var/www/back/scripts/poblar_libros.py ${{ github.event.inputs.limite }}
+
+            # ── Permisos finales ──────────────────────────────────────────
+            sudo chown -R www-data:www-data /var/www/back/public/libros
+            sudo chmod -R 755 /var/www/back/public/libros
+
+            echo "Seed completado — $(date)"

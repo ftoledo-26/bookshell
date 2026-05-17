@@ -1527,3 +1527,132 @@
   opacity: 0.6;
   cursor: wait;
 }
+
+/* ─── Metric clickable ──────────────────────────────────────── */
+
+.metric-clickable {
+	cursor: pointer;
+	transition: border-color 0.18s, background 0.18s;
+}
+
+.metric-clickable:hover {
+	border-color: var(--accent);
+	background: rgba(248, 184, 78, 0.08);
+}
+
+/* ─── Following modal ───────────────────────────────────────── */
+
+.following-modal-backdrop {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.55);
+	backdrop-filter: blur(2px);
+	z-index: 200;
+}
+
+.following-modal {
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	z-index: 201;
+	width: min(420px, 92vw);
+	max-height: 70vh;
+	display: flex;
+	flex-direction: column;
+	background: var(--bg-card);
+	border: 1px solid var(--line-strong);
+	border-radius: 1.2rem;
+	overflow: hidden;
+}
+
+.following-modal-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 1rem 1.2rem;
+	border-bottom: 1px solid var(--line);
+}
+
+.following-modal-head h2 {
+	margin: 0;
+	font-size: 1.05rem;
+	color: var(--ink);
+}
+
+.following-list {
+	list-style: none;
+	margin: 0;
+	padding: 0.5rem 0;
+	overflow-y: auto;
+	flex: 1;
+}
+
+.following-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	padding: 0.55rem 1.2rem;
+	border-bottom: 1px solid var(--line);
+}
+
+.following-item:last-child {
+	border-bottom: none;
+}
+
+.following-name-btn {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	background: none;
+	border: none;
+	color: var(--ink);
+	font-size: 0.92rem;
+	cursor: pointer;
+	padding: 0;
+	text-align: left;
+}
+
+.following-name-btn:hover {
+	color: var(--accent);
+}
+
+.following-avatar {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	background: var(--accent);
+	color: #1a1209;
+	font-size: 0.85rem;
+	font-weight: 700;
+	flex-shrink: 0;
+}
+
+.following-avatar-img {
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	object-fit: cover;
+	flex-shrink: 0;
+}
+
+.btn-unfollow {
+	padding: 0.28rem 0.75rem;
+	border-radius: 999px;
+	border: 1px solid var(--line-strong);
+	background: transparent;
+	color: var(--ink-soft);
+	font-size: 0.78rem;
+	cursor: pointer;
+	white-space: nowrap;
+	transition: border-color 0.18s, color 0.18s;
+}
+
+.btn-unfollow:hover {
+	border-color: #c84040;
+	color: #ffd9d2;
+}

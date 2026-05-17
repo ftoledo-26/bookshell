@@ -314,6 +314,25 @@
   animation: btn-shake 0.42s ease-out;
 }
 
+.submit-btn:disabled {
+  opacity: 0.75;
+  cursor: wait;
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid rgba(27, 17, 10, 0.35);
+  border-top-color: #1b110a;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 @keyframes btn-shake {
   0%, 100% { transform: translateX(0); }
   18%       { transform: translateX(-6px); }

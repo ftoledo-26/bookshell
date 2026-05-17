@@ -14,6 +14,8 @@ import { catchError, forkJoin, of, timeout } from 'rxjs';
 import { Router } from '@angular/router';
 import { getRecommendedBooks } from '../../utils/algoBook';
 
+type ReviewsTab = 'para-ti' | 'seguidos';
+
 type TimelineComment = Comentario & {
   username: string;
   bookTitle: string;
@@ -55,6 +57,9 @@ export class Home implements OnInit {
   books: Book[] = [];
   recommendedBooks: RecommendedBook[] = [];
   reviews: FeaturedReview[] = [];
+  followingReviews: FeaturedReview[] = [];
+  activeReviewsTab: ReviewsTab = 'para-ti';
+  isLoadingFollowing = false;
   isLoading = true;
   errorMessage = '';
 
@@ -74,6 +79,57 @@ export class Home implements OnInit {
 
   ngOnInit(): void {
     this.loadHomeData();
+    if (localStorage.getItem('token')) {
+      this.loadFollowingReviews();
+    }
+  }
+
+  isLoggedIn(): boolean {
+    return !!localStorage.getItem('token');
+  }
+
+  setReviewsTab(tab: ReviewsTab): void {
+    this.activeReviewsTab = tab;
+    if (tab === 'seguidos' && this.followingReviews.length === 0 && !this.isLoadingFollowing && localStorage.getItem('token')) {
+      this.loadFollowingReviews();
+    }
+    this.cdr.markForCheck();
+  }
+
+  get displayedReviews(): FeaturedReview[] {
+    return this.activeReviewsTab === 'seguidos' ? this.followingReviews : this.reviews;
+  }
+
+  private loadFollowingReviews(): void {
+    this.isLoadingFollowing = true;
+    this.comentarioService.getFollowingComentarios().subscribe({
+      next: (comments) => {
+        const coverByBookId = new Map<number, string>(this.books.map((book) => [book.id, book.portada]));
+        this.followingReviews = comments.map((item) => {
+          const c = item as any;
+          const rawRating = Number(c.rating ?? c.valoracion ?? 0);
+          const hasRating = rawRating > 0;
+          const bookId = Number(c.BookId ?? c.libro_id ?? 0);
+          return {
+            id: item.id,
+            titulo: String(c.libro ?? c.libroData?.titulo ?? 'Libro desconocido'),
+            year: '2026',
+            username: String(c.user ?? c.usuario?.nombre ?? 'Usuario'),
+            likes: this.comentarioService.getCommentLikeCount(item),
+            score: hasRating ? `${rawRating.toFixed(1)} / 5` : 'Sin rating',
+            hasRating,
+            content: String(c.contenido ?? c.comentario ?? c.comment ?? ''),
+            cover: coverByBookId.get(bookId) ?? String(c.portada ?? '')
+          };
+        });
+        this.isLoadingFollowing = false;
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.isLoadingFollowing = false;
+        this.cdr.markForCheck();
+      }
+    });
   }
 
   loadHomeData(): void {
@@ -291,12 +347,31 @@ export class Home implements OnInit {
       return;
     }
     const userId = this.getCurrentUserId();
-    this.closeBookDrawer();
-    if (userId) {
-      this.router.navigate(['/usuario', userId]);
-    } else {
+    if (!userId) {
+      this.closeBookDrawer();
       this.router.navigate(['/login']);
+      return;
     }
+
+    const book = this.selectedBook;
+    const storageKey = `profileBooks:${userId}`;
+    let saved: any[] = [];
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) saved = JSON.parse(raw);
+      if (!Array.isArray(saved)) saved = [];
+    } catch { saved = []; }
+
+    if (!saved.some((b: any) => b.id === book.id)) {
+      saved = [
+        { id: book.id, titulo: book.title, autor: book.author, descripcion: book.description, portada: book.cover, state: 'favorito' },
+        ...saved
+      ];
+      localStorage.setItem(storageKey, JSON.stringify(saved));
+    }
+
+    this.closeBookDrawer();
+    this.router.navigate(['/usuario', userId]);
   }
 
   goToCreateReviewForBook(): void {

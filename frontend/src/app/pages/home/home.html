@@ -47,15 +47,39 @@
       </div>
     </section>
 
-    <section class="reviews-zone" *ngIf="!isLoading && reviews.length > 0">
+    <section class="reviews-zone" *ngIf="!isLoading">
       <header class="section-head">
-        <h2>Popular reviews this week</h2>
+        <h2>Reviews</h2>
+        <div class="reviews-tabs">
+          <button
+            type="button"
+            class="reviews-tab"
+            [class.active]="activeReviewsTab === 'para-ti'"
+            (click)="setReviewsTab('para-ti')"
+          >Para ti</button>
+          <button
+            type="button"
+            class="reviews-tab"
+            [class.active]="activeReviewsTab === 'seguidos'"
+            (click)="setReviewsTab('seguidos')"
+          >Seguidos</button>
+        </div>
       </header>
 
-      <div class="reviews-scroll">
+      <p class="status" *ngIf="activeReviewsTab === 'seguidos' && isLoadingFollowing">Cargando reviews de seguidos...</p>
+
+      <p class="empty-tab-note" *ngIf="activeReviewsTab === 'seguidos' && !isLoadingFollowing && !isLoggedIn()">
+        Inicia sesión para ver las reviews de las personas que sigues.
+      </p>
+
+      <p class="empty-tab-note" *ngIf="activeReviewsTab === 'seguidos' && !isLoadingFollowing && isLoggedIn() && followingReviews.length === 0">
+        Las reviews de los usuarios que sigues aparecerán aquí.
+      </p>
+
+      <div class="reviews-scroll" *ngIf="displayedReviews.length > 0">
         <article
           class="review-card"
-          *ngFor="let review of reviews; trackBy: trackByReviewId"
+          *ngFor="let review of displayedReviews; trackBy: trackByReviewId"
           role="button"
           tabindex="0"
           (click)="openReviewDetail(review.id)"

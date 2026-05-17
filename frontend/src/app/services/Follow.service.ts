@@ -9,6 +9,12 @@ export interface FollowStatus {
   following: boolean;
 }
 
+export interface FollowingUser {
+  id: number;
+  name: string;
+  foto: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class FollowService {
   private readonly base = environment.API_URL + 'usuarios';
@@ -31,5 +37,11 @@ export class FollowService {
     return this.http
       .delete<FollowStatus>(`${this.base}/${userId}/follow`)
       .pipe(catchError(() => of({ followers: 0, following: false })));
+  }
+
+  getFollowing(userId: number): Observable<FollowingUser[]> {
+    return this.http
+      .get<FollowingUser[]>(`${this.base}/${userId}/following`)
+      .pipe(catchError(() => of([])));
   }
 }

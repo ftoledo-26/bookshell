@@ -112,6 +112,10 @@ if [ ! -f /etc/modsecurity/modsecurity.conf ]; then
   cp /etc/modsecurity/modsecurity.conf-recommended /etc/modsecurity/modsecurity.conf
 fi
 sed -i "s|SecRuleEngine DetectionOnly|SecRuleEngine On|" /etc/modsecurity/modsecurity.conf
+# Permitir metodos REST: PUT, DELETE, PATCH (necesarios para la API Laravel)
+cat > /etc/modsecurity/99-rest-methods.conf << 'MODSEC'
+SecAction "id:9002001,phase:1,nolog,pass,t:none,setvar:'tx.allowed_methods=GET HEAD POST OPTIONS PUT DELETE PATCH'"
+MODSEC
 a2enmod security2
 systemctl reload apache2
 echo "[frontend.sh] Instalacion completada. Dominio: ${domain}, Backend: ${backend_ip}"

@@ -36,6 +36,7 @@ RewriteRule ^index\.html$ - [L]
 RewriteCond %%{REQUEST_URI} !^/api
 RewriteCond %%{REQUEST_URI} !^/admin
 RewriteCond %%{REQUEST_URI} !^/filament
+RewriteCond %%{REQUEST_URI} !^/swagger
 RewriteCond %%{REQUEST_URI} !^/storage
 RewriteCond %%{REQUEST_FILENAME} !-f
 RewriteCond %%{REQUEST_FILENAME} !-d
@@ -66,6 +67,10 @@ cat > /etc/apache2/sites-available/000-default.conf <<'VHOST'
     ProxyPassReverse /admin    http://BACKEND_IP_HERE:80/admin
     ProxyPass        /filament http://BACKEND_IP_HERE:80/filament
     ProxyPassReverse /filament http://BACKEND_IP_HERE:80/filament
+
+    # Documentacion Swagger UI
+    ProxyPass        /swagger  http://BACKEND_IP_HERE:80/swagger
+    ProxyPassReverse /swagger  http://BACKEND_IP_HERE:80/swagger
 
     # Storage publico (portadas de libros)
     ProxyPass        /storage  http://BACKEND_IP_HERE:80/storage

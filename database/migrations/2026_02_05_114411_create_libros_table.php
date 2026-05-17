@@ -13,12 +13,25 @@ return new class extends Migration
     {
         Schema::create('libros', function (Blueprint $table) {
             $table->id();
-            $table->string('titulo')->notNullable();
-            $table->string('autor')->notNullable();
-            $table->string('genero')->notNullable();
-            $table->text('descripcion')->notNullable();
-            $table->string('foto')->default('default.png');
-            
+            $table->string('titulo')->nullable();
+            $table->string('autor')->nullable();
+            $table->string('editorial')->nullable();
+            $table->string('anio_publicacion')->nullable();
+            $table->enum('genero', [
+                'novela',
+                'fantasia',
+                'ciencia_ficcion',
+                'terror',
+                'misterio',
+                'romance',
+                'historia',
+                'biografia',
+                'poesia',
+                'ensayo',
+                'otro',
+            ])->nullable();
+            $table->text('descripcion')->nullable();
+            $table->string('foto')->nullable();
             $table->timestamps();
         });
     }

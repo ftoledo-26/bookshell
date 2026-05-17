@@ -17,6 +17,7 @@ on:
       - 'routes/**'
       - 'app/**'
       - '.apache/**'
+      - 'scripts/**'
       - '.github/workflows/deploy_backend.yml'
   workflow_dispatch:
 
@@ -42,9 +43,10 @@ jobs:
           script: |
             set -e
 
-            # ── Instalar PHP/Composer/Apache si no estan presentes ────────
-            if ! command -v composer &> /dev/null; then
-              echo "==> Instalando dependencias del sistema..."
+            # ── Instalar PHP 8.4 / Composer / Apache si no estan presentes ─
+            PHP_VER=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null || echo "0.0")
+            if ! command -v composer &> /dev/null || [ "$PHP_VER" != "8.4" ]; then
+              echo "==> PHP actual: $PHP_VER — instalando/actualizando a 8.4..."
               export DEBIAN_FRONTEND=noninteractive
               sudo apt-get update -y -q
               sudo apt-get install -y -q software-properties-common
@@ -52,15 +54,28 @@ jobs:
               sudo apt-get update -y -q
               sudo apt-get install -y -q \
                 apache2 \
-                php8.2 php8.2-cli php8.2-mysql php8.2-xml php8.2-mbstring \
-                php8.2-curl php8.2-zip php8.2-intl php8.2-bcmath \
+                php8.4 php8.4-cli php8.4-mysql php8.4-xml php8.4-mbstring \
+                php8.4-curl php8.4-zip php8.4-intl php8.4-bcmath \
+                libapache2-mod-php8.4 \
+                python3 python3-pip \
                 git curl unzip
+
+              sudo a2enmod php8.4
+              sudo a2dismod php8.2 2>/dev/null || true
+              sudo update-alternatives --set php /usr/bin/php8.4
 
               echo "==> Instalando Composer..."
               curl -sS https://getcomposer.org/installer | sudo php -- \
                 --install-dir=/usr/local/bin --filename=composer
 
               sudo systemctl enable apache2
+            fi
+
+            # ── Python / pip (si el bloque PHP ya existia en el servidor) ─
+            if ! command -v pip3 &> /dev/null; then
+              export DEBIAN_FRONTEND=noninteractive
+              sudo apt-get update -y -q
+              sudo apt-get install -y -q python3 python3-pip
             fi
 
             # ── Modulos Apache (siempre habilitados) ──────────────────────
@@ -77,6 +92,9 @@ jobs:
               sudo git fetch origin Back
               sudo git reset --hard origin/Back
             fi
+
+            # ── Dependencias Python para scripts/ ────────────────────────
+            sudo pip3 install -q -r /var/www/back/scripts/requirements.txt
 
             # ── Config global: rewrite rules directos (no depende de AllowOverride) ──
             sudo cp /var/www/back/.apache/laravel.conf \
@@ -102,12 +120,10 @@ jobs:
               sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/apache-allowoverride.sh
             fi
 
-            # ── Crear .env si no existe (solo genera APP_KEY una vez) ──
+            # ── Crear .env si no existe ───────────────────────────────
             if [ ! -f "/var/www/back/.env" ]; then
               echo "==> Creando .env desde ejemplo..."
               sudo cp /var/www/back/.env.example /var/www/back/.env
-              cd /var/www/back
-              sudo php artisan key:generate --force
             fi
 
             # ── Actualizar credenciales DB siempre (por si cambia el RDS) ─
@@ -122,13 +138,24 @@ jobs:
             cd /var/www/back
             sudo COMPOSER_ALLOW_SUPERUSER=1 composer update --no-dev --optimize-autoloader
 
+            # ── Asegurar APP_KEY (genera si esta vacio, vendor ya actualizado) ──
+            if ! sudo grep -q "^APP_KEY=.\+" /var/www/back/.env; then
+              echo "==> APP_KEY vacio — generando..."
+              sudo php artisan key:generate --force
+            fi
+
             # ── Pasos comunes ─────────────────────────────────────────────
             echo "==> .env DB lines:" && sudo grep "^DB_" /var/www/back/.env
             sudo php artisan config:clear
+            sudo php artisan cache:clear
+            sudo php artisan route:clear
+            sudo php artisan view:clear
             sudo php artisan migrate --force || echo "[deploy] Aviso: alguna migracion ya existia en la BD, continua el despliegue."
             sudo php artisan config:cache
             sudo php artisan route:cache
             sudo php artisan view:cache
+            sudo php artisan storage:link --force 2>/dev/null || true
+            sudo php artisan filament:assets
             sudo chown -R www-data:www-data /var/www/back/storage /var/www/back/bootstrap/cache /var/www/back/public/fotos /var/www/back/public/libros
             sudo chmod -R 775 /var/www/back/storage /var/www/back/bootstrap/cache /var/www/back/public/fotos /var/www/back/public/libros
             sudo systemctl restart apache2

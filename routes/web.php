@@ -5,18 +5,12 @@ use App\Http\Controllers\User_ReviewController;
 use App\Http\Controllers\ReviewsController;
 use App\Http\Controllers\LibrosController;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\LibrosController;
 
-Route::get('/', function () {
-    return view('welcome');
-});
-
-Route::get('/libros/{id}/comentarios', [LibrosController::class, 'comentarios'])->name('libros.comentarios');
-
-Route::get('/libros/top-rated', [LibrosController::class, 'topRated'])->name('libros.topRated');
 
 
 Route::get('/', function () {return view('index');})->name('index');
+
+Route::get('/swagger', fn() => view('swagger'))->name('swagger');
 
 
 Route::get('/usuarios', [UserController::class, 'index'])->name('usuarios');

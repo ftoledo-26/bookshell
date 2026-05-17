@@ -243,6 +243,16 @@ export class UsuarioPage implements OnInit {
 		{ title: 'Sin actividad reciente', detail: 'Cuando publiques reviews aparecerán aquí.', time: 'Ahora' }
 	];
 
+	get recentBooks(): ProfileBook[] {
+		const base = this.favoriteBooks.filter((b) => b.id !== 0);
+		if (base.length === 0) return [];
+		const viaSelected = this.selectedBooks
+			.slice(0, 4)
+			.map((sb) => base.find((fb) => fb.id === sb.id))
+			.filter((fb): fb is ProfileBook => fb != null);
+		return viaSelected.length > 0 ? viaSelected : base.slice(0, 4);
+	}
+
 	ngOnInit(): void {
 		this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
 			const rawId = params.get('id');

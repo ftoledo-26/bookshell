@@ -1638,3 +1638,143 @@
 	border-color: #c84040;
 	color: #ffd9d2;
 }
+
+/* ─── Recent books panel ────────────────────────────────────── */
+
+.recent-featured {
+	border-radius: 0.9rem;
+	overflow: hidden;
+	cursor: pointer;
+	position: relative;
+}
+
+.recent-featured-cover {
+	position: relative;
+	width: 100%;
+	height: 190px;
+	overflow: hidden;
+}
+
+.recent-featured-cover img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+	transition: transform 0.35s ease;
+}
+
+.recent-featured:hover .recent-featured-cover img {
+	transform: scale(1.05);
+}
+
+.recent-featured-overlay {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	padding: 1.8rem 0.85rem 0.85rem;
+	background: linear-gradient(to top, rgba(8, 4, 2, 0.95) 0%, rgba(8, 4, 2, 0.55) 60%, transparent 100%);
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+}
+
+.recent-featured-overlay .book-state-pill {
+	align-self: flex-start;
+	margin-bottom: 0.15rem;
+}
+
+.recent-featured-overlay strong {
+	font-size: 0.95rem;
+	line-height: 1.3;
+	color: #fff;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.recent-featured-overlay p {
+	margin: 0;
+	font-size: 0.76rem;
+	color: rgba(255, 255, 255, 0.6);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.recent-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.recent-item {
+	display: flex;
+	gap: 0.7rem;
+	align-items: center;
+	padding: 0.6rem 0.35rem;
+	border-radius: 0.75rem;
+	cursor: pointer;
+	transition: background 0.16s ease;
+	border-bottom: 1px solid var(--line);
+}
+
+.recent-item:last-child {
+	border-bottom: none;
+}
+
+.recent-item:hover {
+	background: rgba(248, 184, 78, 0.07);
+}
+
+.recent-cover {
+	width: 42px;
+	height: 60px;
+	border-radius: 0.4rem;
+	overflow: hidden;
+	flex-shrink: 0;
+	background: var(--bg-card);
+	border: 1px solid var(--line);
+}
+
+.recent-cover img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+.recent-copy {
+	display: flex;
+	flex-direction: column;
+	gap: 0.18rem;
+	min-width: 0;
+	flex: 1;
+}
+
+.recent-copy strong {
+	font-size: 0.85rem;
+	line-height: 1.3;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.recent-copy p {
+	margin: 0;
+	font-size: 0.75rem;
+	color: var(--ink-soft);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.recent-copy .book-state-pill {
+	align-self: flex-start;
+	font-size: 0.66rem;
+	padding: 0.16rem 0.45rem;
+}

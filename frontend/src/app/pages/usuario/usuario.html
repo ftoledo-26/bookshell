@@ -258,7 +258,44 @@
 				</div>
 			</section>
 		</div>
+		<aside class="side-column">
+			<section class="panel recent-panel">
+				<header class="panel-head">
+					<h2>Últimas lecturas</h2>
+					<button type="button" class="btn-edit panel-action" (click)="setActiveTab('Books')">Ver todos</button>
+				</header>
 
+				<p class="empty-state" *ngIf="recentBooks.length === 0">
+					Añade libros a tu perfil para verlos aquí.
+				</p>
+
+				<ng-container *ngIf="recentBooks.length > 0">
+					<div class="recent-featured" (click)="openBookPreview(recentBooks[0])">
+						<div class="recent-featured-cover">
+							<img [src]="recentBooks[0].coverUrl" [alt]="recentBooks[0].title" loading="lazy" />
+							<div class="recent-featured-overlay">
+								<span class="book-state-pill" [ngClass]="'state-' + recentBooks[0].state">{{ recentBooks[0].stateLabel }}</span>
+								<strong>{{ recentBooks[0].title }}</strong>
+								<p>{{ recentBooks[0].author }}</p>
+							</div>
+						</div>
+					</div>
+
+					<ul class="recent-list" *ngIf="recentBooks.length > 1">
+						<li class="recent-item" *ngFor="let book of recentBooks.slice(1); trackBy: trackByBookId" (click)="openBookPreview(book)">
+							<div class="recent-cover">
+								<img [src]="book.coverUrl" [alt]="book.title" loading="lazy" />
+							</div>
+							<div class="recent-copy">
+								<strong>{{ book.title }}</strong>
+								<p>{{ book.author }}</p>
+								<span class="book-state-pill" [ngClass]="'state-' + book.state">{{ book.stateLabel }}</span>
+							</div>
+						</li>
+					</ul>
+				</ng-container>
+			</section>
+		</aside>
 	</section>
 
 	<div class="following-modal-backdrop" *ngIf="followingModalVisible" (click)="closeFollowingModal()"></div>

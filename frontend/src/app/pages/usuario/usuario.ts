@@ -81,7 +81,7 @@ type EmbeddedUserReview = {
 	libroData?: { titulo?: string; portada?: string };
 };
 
-type ProfileTab = 'Profile' | 'Books' | 'Reviews' | 'Likes';
+type ProfileTab = 'Perfil' | 'Libros' | 'Comentarios' | 'Likes';
 
 @Component({
 	selector: 'app-usuario-page',

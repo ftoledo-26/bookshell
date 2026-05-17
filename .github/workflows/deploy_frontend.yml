@@ -162,16 +162,5 @@ jobs:
               fi
             fi
 
-            # ── OWASP ModSecurity WAF ─────────────────────────────────────
-            if ! dpkg -l libapache2-mod-security2 2>/dev/null | grep -q '^ii'; then
-              echo "==> Instalando ModSecurity + OWASP CRS..."
-              sudo apt-get install -y libapache2-mod-security2 modsecurity-crs
-            fi
-            if [ ! -f /etc/modsecurity/modsecurity.conf ]; then
-              sudo cp /etc/modsecurity/modsecurity.conf-recommended /etc/modsecurity/modsecurity.conf
-            fi
-            sudo sed -i "s|SecRuleEngine DetectionOnly|SecRuleEngine On|" /etc/modsecurity/modsecurity.conf
-            sudo a2enmod security2
-
             sudo systemctl reload apache2
             echo "Frontend desplegado — $(date)"

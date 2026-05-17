@@ -46,7 +46,7 @@
 					</label>
 
 					<div class="edit-actions">
-						<button type="button" class="like-button" (click)="saveComment()" [disabled]="isSavingComment">
+						<button type="button" class="like-button" (click)="saveComment()" [disabled]="isSavingComment || !commentDraft.trim()">
 							<span>{{ isSavingComment ? 'Guardando...' : 'Guardar cambios' }}</span>
 						</button>
 						<button type="button" class="secondary-button" (click)="cancelEditingComment()">Cancelar</button>

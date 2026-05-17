@@ -21,8 +21,8 @@ export class SiteHeaderComponent {
 	private readonly router = inject(Router);
 
 	readonly navItems = [
-		{ label: 'Books', path: '/' },
-		{ label: 'Profile', path: '/usuario' },
+		{ label: 'Inicio', path: '/' },
+		{ label: 'Perfil', path: '/usuario' },
 	];
 	isAvatarMenuOpen = false;
 	isSearchOpen = false;

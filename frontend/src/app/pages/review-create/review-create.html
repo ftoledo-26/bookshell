@@ -41,7 +41,7 @@
         </p>
 
         <div class="finder-results" *ngIf="bookSearchResults.length > 0">
-          <article class="finder-result" *ngFor="let book of bookSearchResults">
+          <article class="finder-result" *ngFor="let book of bookSearchResults" (click)="selectBook(book)" role="button" tabindex="0" (keydown.enter)="selectBook(book)">
             <div class="finder-cover">
               @if(!book.portada) {
                 <img src="/prueba.webp" [alt]="book.titulo" loading="lazy" />
@@ -54,9 +54,6 @@
               <p>{{ book.autor }}</p>
               <span>{{ book.descripcion || 'Sin descripción' }}</span>
             </div>
-            <button type="button" class="btn-select" (click)="selectBook(book)" [disabled]="isSearchingBooks">
-              Seleccionar
-            </button>
           </article>
         </div>
       </div>
@@ -103,7 +100,7 @@
       </label>
 
       <div class="actions">
-        <button type="submit" class="btn-save" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar review' }}</button>
+        <button type="submit" class="btn-save" [disabled]="isSaving || !selectedBook || rating < 1 || !comentario.trim()">{{ isSaving ? 'Guardando...' : 'Guardar review' }}</button>
         <button type="button" class="btn-cancel" (click)="cancel()">Cancelar</button>
       </div>
     </form>

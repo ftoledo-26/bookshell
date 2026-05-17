@@ -81,7 +81,7 @@ type EmbeddedUserReview = {
 	libroData?: { titulo?: string; portada?: string };
 };
 
-type ProfileTab = 'Profile' | 'Books' | 'Reviews' | 'Likes';
+type ProfileTab = 'Perfil' | 'Libros' | 'Comentarios' | 'Likes';
 
 @Component({
 	selector: 'app-usuario-page',
@@ -184,7 +184,7 @@ export class UsuarioPage implements OnInit {
 	isSaving = false;
 	errorMessage = '';
 	successMessage = '';
-	activeTab: ProfileTab = 'Profile';
+	activeTab: ProfileTab = 'Perfil';
 	bookSearchOpen = false;
 	bookSearchQuery = '';
 	isSearchingBooks = false;
@@ -220,10 +220,10 @@ export class UsuarioPage implements OnInit {
 		{ value: 'abandonado', label: 'Abandonado' }
 	];
 
-	readonly profileTabs: ProfileTab[] = ['Profile', 'Books', 'Reviews', 'Likes'];
+	readonly profileTabs: ProfileTab[] = ['Perfil', 'Libros', 'Comentarios', 'Likes'];
 	metrics: ProfileMetric[] = [
-		{ value: '0', label: 'Reviews' },
-		{ value: '0', label: 'Books' },
+		{ value: '0', label: 'Comentarios' },
+		{ value: '0', label: 'Libros' },
 		{ value: '0', label: 'Seguidores' }
 	];
 	favoriteBooks: ProfileBook[] = [
@@ -810,7 +810,7 @@ export class UsuarioPage implements OnInit {
 		}
 
 		this.bookSearchOpen = true;
-		this.activeTab = 'Books';
+		this.activeTab = 'Libros';
 		this.clearMessages();
 		this.cdr.detectChanges();
 	}

@@ -181,7 +181,7 @@ jobs:
             # ── ModSecurity: permitir metodos REST (PUT, DELETE, PATCH) ─────
             if sudo a2query -m security2 2>/dev/null | grep -q enabled; then
               echo "==> Configurando ModSecurity para permitir metodos REST..."
-              echo 'SecAction "id:1000001,phase:1,nolog,pass,t:none,setvar:tx.allowed_methods=GET HEAD POST OPTIONS PUT DELETE PATCH"' \
+              printf "SecAction \"id:1000001,phase:1,nolog,pass,t:none,setvar:'tx.allowed_methods=GET HEAD POST OPTIONS PUT DELETE PATCH'\"\n" \
                 | sudo tee /etc/modsecurity/99-rest-methods.conf > /dev/null
             fi
 

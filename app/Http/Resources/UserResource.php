@@ -40,7 +40,8 @@ class UserResource extends JsonResource
                     'comentario' => $review->comentario,
                 ];
             }),
-                        'followers_count' => $this->followers()->count(),
+            'followers_count' => $this->followers()->count(),
+            'following_count' => $this->following()->count(),
             'likes' => $this->likes->map(function ($like) {
                 return [
                     'estado' => $like->estado,

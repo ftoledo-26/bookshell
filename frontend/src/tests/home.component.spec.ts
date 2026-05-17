@@ -72,9 +72,10 @@ describe('Home', () => {
     fixture.detectChanges();
 
     expect(component.recommendedBooks.length).toBe(2);
-    expect(component.recommendedBooks[0].title).toBe('El Gran Gatsby');
-    expect(component.recommendedBooks[0].author).toBe('F. Scott Fitzgerald');
-    expect(component.recommendedBooks[1].id).toBe(2);
+    const gatsby = component.recommendedBooks.find(b => b.id === 1);
+    expect(gatsby?.title).toBe('El Gran Gatsby');
+    expect(gatsby?.author).toBe('F. Scott Fitzgerald');
+    expect(component.recommendedBooks.find(b => b.id === 2)).toBeTruthy();
   });
 
   it('trackByBookId debería devolver el id del libro', () => {

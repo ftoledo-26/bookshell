@@ -36,12 +36,7 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-/**
- * Devuelve `count` libros recomendados para el usuario.
- * - Si el usuario tiene libros guardados: prioriza géneros que más lee.
- * - Si no tiene libros guardados o no hay userId: 5 aleatorios.
- * - Nunca devuelve un libro que el usuario ya tiene guardado.
- */
+
 export function getRecommendedBooks(
   allBooks: Book[],
   userId: number | null,
@@ -72,7 +67,6 @@ export function getRecommendedBooks(
     }
   }
 
-  // Sort genre-matched books by how frequent that genre is in user's library
   withGenre.sort((a, b) => {
     const sa = genreScores.get((a.genero ?? '').toLowerCase().trim()) ?? 0;
     const sb = genreScores.get((b.genero ?? '').toLowerCase().trim()) ?? 0;

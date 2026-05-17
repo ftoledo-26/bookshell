@@ -81,7 +81,7 @@ jobs:
             # ── Build Angular ─────────────────────────────────────────────
             cd /var/www/front
             sudo npm install
-            sudo npm run build -- --configuration production
+            sudo npm run build
 
             # ── Copiar build al DocumentRoot ──────────────────────────────
             sudo rm -rf /var/www/html/*

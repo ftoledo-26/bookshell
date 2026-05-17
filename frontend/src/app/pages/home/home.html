@@ -116,12 +116,45 @@
         </article>
       </div>
 
-      <!-- Seguidos: feed de comentarios usando CommentsFeedComponent (@Input + @Output) -->
-      <app-comments-feed
-        *ngIf="activeReviewsTab === 'seguidos' && followingReviews.length > 0"
-        [comments]="reviewsAsHomeComments"
-        (commentClick)="openReviewDetail($event)"
-      ></app-comments-feed>
+      <!-- Seguidos: mismas tarjetas que Para ti -->
+      <div class="reviews-scroll" *ngIf="activeReviewsTab === 'seguidos' && followingReviews.length > 0">
+        <article
+          class="review-card"
+          *ngFor="let review of followingReviews; trackBy: trackByReviewId"
+          role="button"
+          tabindex="0"
+          (click)="openReviewDetail(review.id)"
+          (keydown.enter)="openReviewDetail(review.id)"
+        >
+          <div class="review-cover">
+            @if(!review.cover) {
+              <img src="/prueba.webp" alt="Portada no disponible" loading="eager" />
+            } @else {
+              <img [src]="review.cover" [alt]="review.titulo" loading="eager" />
+            }
+          </div>
+
+          <div class="review-body">
+            <header>
+              <p class="user-row">{{ review.username }}</p>
+              <h3>
+                {{ review.titulo }}
+                <span>{{ review.year }}</span>
+              </h3>
+              <div class="meta-row">
+                <span class="score">{{ review.score }}</span>
+                @if(review.hasRating) {
+                  <span>{{ review.likes }} likes</span>
+                } @else {
+                  <span>sin likes</span>
+                }
+              </div>
+            </header>
+
+            <p class="review-copy">{{ review.content }}</p>
+          </div>
+        </article>
+      </div>
     </section>
 
     <p class="status" *ngIf="!isLoading && reviews.length === 0">

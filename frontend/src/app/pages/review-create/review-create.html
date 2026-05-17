@@ -42,17 +42,19 @@
 
         <div class="finder-results" *ngIf="bookSearchResults.length > 0">
           <article class="finder-result" *ngFor="let book of bookSearchResults">
-            <div class="finder-cover">
-              @if(!book.portada) {
-                <img src="/prueba.webp" [alt]="book.titulo" loading="lazy" />
-              } @else {
-                <img [src]="book.portada" [alt]="book.titulo" loading="lazy" />
-              }
-            </div>
-            <div class="finder-copy">
-              <strong>{{ book.titulo }}</strong>
-              <p>{{ book.autor }}</p>
-              <span>{{ book.descripcion || 'Sin descripción' }}</span>
+            <div class="finder-main">
+              <div class="finder-cover">
+                @if(!book.portada) {
+                  <img src="/prueba.webp" [alt]="book.titulo" loading="lazy" />
+                } @else {
+                  <img [src]="book.portada" [alt]="book.titulo" loading="lazy" />
+                }
+              </div>
+              <div class="finder-copy">
+                <strong>{{ book.titulo }}</strong>
+                <p>{{ book.autor }}</p>
+                <span>{{ book.descripcion || 'Sin descripción' }}</span>
+              </div>
             </div>
             <button type="button" class="btn-select" (click)="selectBook(book)" [disabled]="isSearchingBooks">
               Seleccionar

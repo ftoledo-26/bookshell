@@ -33,7 +33,7 @@ export class BookService {
         const lowered = raw.toLowerCase();
 
         // Map any placeholder the backend may return to the local fallback image.
-        if (['default.pdf', 'default.png', 'default.jpg', '/default.jpg', '/default.png'].includes(lowered)) {
+        if (['default.pdf', 'prueba.webp', 'default.jpg', '/default.jpg', '/prueba.webp'].includes(lowered)) {
             return '/prueba.webp';
         }
 

@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject, catchError, debounceTime, distinctUntilChanged, map, of, switchMap } from 'rxjs';
 import { Book } from '../../models/Book';
@@ -19,12 +19,14 @@ import { LoginService } from '../../services/Login.service';
 })
 export class ReviewCreatePage implements OnInit {
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly loginService = inject(LoginService);
   private readonly bookService = inject(BookService);
   private readonly comentarioService = inject(ComentarioService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly destroyRef = inject(DestroyRef);
   private readonly bookSearchInput$ = new Subject<string>();
+  private preselectedBookId: number | null = null;
 
   books: Book[] = [];
   selectedBookId: number | null = null;
@@ -44,6 +46,10 @@ export class ReviewCreatePage implements OnInit {
       this.router.navigate(['/login']);
       return;
     }
+
+    const qp = this.route.snapshot.queryParamMap;
+    const raw = qp.get('bookId');
+    this.preselectedBookId = raw ? Number(raw) : null;
 
     this.setupLiveBookSearch();
     this.loadBooks();
@@ -92,6 +98,10 @@ export class ReviewCreatePage implements OnInit {
     ).subscribe((books) => {
       this.books = books;
       this.isLoadingBooks = false;
+      if (this.preselectedBookId) {
+        const found = books.find((b) => b.id === this.preselectedBookId);
+        if (found) this.selectBook(found);
+      }
       this.cdr.detectChanges();
     });
   }

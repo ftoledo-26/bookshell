@@ -1,8 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
-import { shareReplay } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
+import { map, catchError, shareReplay } from 'rxjs/operators';
 import { Comentario } from '../models/Comentario';
 import { environment } from '../environments/environments';
 
@@ -272,6 +271,15 @@ export class ComentarioService {
           this.commentByIdCache.clear();
           return this.normalizeComment(response?.data ?? response);
         })
+      );
+  }
+
+  getFollowingComentarios(): Observable<Comentario[]> {
+    return this.http
+      .get<ApiResponse<RawComment[]> | RawComment[]>(environment.API_URL + 'reviews/following')
+      .pipe(
+        map((response: any) => (response?.data ?? response ?? []).map((item: RawComment) => this.normalizeComment(item))),
+        catchError(() => of([]))
       );
   }
 

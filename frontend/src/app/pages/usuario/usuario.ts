@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Observable, catchError, forkJoin, map, of, switchMap, distinctUntilChanged } from 'rxjs';
+import { Observable, Subject, catchError, debounceTime, distinctUntilChanged, filter, forkJoin, map, of, switchMap } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Book } from '../../models/Book';
 import { Comentario } from '../../models/Comentario';
@@ -11,6 +11,7 @@ import { BookService } from '../../services/Book.service';
 import { ComentarioService } from '../../services/Comentario.service';
 import { LoginService } from '../../services/Login.service';
 import { UsuarioService } from '../../services/Usuario.service';
+import { FollowService, FollowStatus, FollowingUser } from '../../services/Follow.service';
 import { environment } from '../../environments/environments';
 
 type ProfileMetric = {
@@ -23,6 +24,7 @@ type BookState = 'favorito' | 'leido' | 'leyendo' | 'abandonado';
 type ProfileBookComment = {
 	id: number;
 	author: string;
+	authorId: number | null;
 	content: string;
 	rating: number | null;
 	likes: number;
@@ -91,6 +93,7 @@ type ProfileTab = 'Profile' | 'Books' | 'Reviews' | 'Likes';
 export class UsuarioPage implements OnInit {
 	private readonly loginService = inject(LoginService);
 	private readonly usuarioService = inject(UsuarioService);
+	private readonly followService = inject(FollowService);
 	private readonly comentarioService = inject(ComentarioService);
 	private readonly bookService = inject(BookService);
 	private readonly cdr = inject(ChangeDetectorRef);
@@ -101,8 +104,6 @@ export class UsuarioPage implements OnInit {
 	private currentUserId: number | null = this.loginService.getUserId();
 	private viewedUserId: number | null = null;
 	profileIsEditable = false;
-
-	// ============ Centralized Helper Methods ============
 
 	private clearMessages(): void {
 		this.errorMessage = '';
@@ -159,8 +160,6 @@ export class UsuarioPage implements OnInit {
 		});
 	}
 
-	// ============ End Centralized Helpers ============
-
 	user: Usuario = {
 		id: 0,
 		nombre: 'Cargando...',
@@ -189,6 +188,7 @@ export class UsuarioPage implements OnInit {
 	bookSearchOpen = false;
 	bookSearchQuery = '';
 	isSearchingBooks = false;
+	private readonly bookSearch$ = new Subject<string>();
 	isSavingBook = false;
 	bookSearchResults: Book[] = [];
 	selectedBooks: ProfileBookEntry[] = [];
@@ -204,6 +204,13 @@ export class UsuarioPage implements OnInit {
 	hiddenProfileBookIds: number[] = [];
 	private previewCloseTimer: ReturnType<typeof setTimeout> | null = null;
 	private profileComments: Comentario[] = [];
+	followersCount = 0;
+	followingCount = 0;
+	isFollowing = false;
+	isTogglingFollow = false;
+	followingModalVisible = false;
+	followingUsers: FollowingUser[] = [];
+	isLoadingFollowing = false;
 	private allComments: Comentario[] = [];
 	private profileBooks: Book[] = [];
 	readonly bookStateOptions: Array<{ value: BookState; label: string }> = [
@@ -217,7 +224,7 @@ export class UsuarioPage implements OnInit {
 	metrics: ProfileMetric[] = [
 		{ value: '0', label: 'Reviews' },
 		{ value: '0', label: 'Books' },
-		{ value: '0', label: 'Likes' }
+		{ value: '0', label: 'Seguidores' }
 	];
 	favoriteBooks: ProfileBook[] = [
 		{
@@ -236,6 +243,16 @@ export class UsuarioPage implements OnInit {
 		{ title: 'Sin actividad reciente', detail: 'Cuando publiques reviews aparecerán aquí.', time: 'Ahora' }
 	];
 
+	get recentBooks(): ProfileBook[] {
+		const base = this.favoriteBooks.filter((b) => b.id !== 0);
+		if (base.length === 0) return [];
+		const viaSelected = this.selectedBooks
+			.slice(0, 4)
+			.map((sb) => base.find((fb) => fb.id === sb.id))
+			.filter((fb): fb is ProfileBook => fb != null);
+		return viaSelected.length > 0 ? viaSelected : base.slice(0, 4);
+	}
+
 	ngOnInit(): void {
 		this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
 			const rawId = params.get('id');
@@ -243,17 +260,48 @@ export class UsuarioPage implements OnInit {
 			this.loadProfile(Number.isFinite(targetUserId ?? NaN) ? targetUserId : null, false);
 		});
 
-		// Listen to query params to detect refresh from comment creation
 		this.route.queryParams.pipe(
-			map((params) => params['refresh']),
+			map((params) => String(params['refresh'] ?? '')),
+			filter((refresh) => refresh.length > 0),
 			distinctUntilChanged(),
 			takeUntilDestroyed(this.destroyRef)
 		).subscribe(() => {
-			// Re-fetch comments with force refresh when redirected from review creation
 			const rawId = this.route.snapshot.paramMap.get('id');
 			const targetUserId = rawId ? Number(rawId) : null;
 			this.loadProfile(Number.isFinite(targetUserId ?? NaN) ? targetUserId : null, true);
 		});
+
+		this.bookSearch$.pipe(
+			debounceTime(380),
+			distinctUntilChanged(),
+			filter((q) => q.length >= 2),
+			switchMap((q) => {
+				this.isSearchingBooks = true;
+				this.cdr.detectChanges();
+				return this.bookService.searchBook(q).pipe(catchError(() => of([] as Book[])));
+			}),
+			takeUntilDestroyed(this.destroyRef)
+		).subscribe((results) => {
+			this.bookSearchResults = results;
+			for (const book of results) {
+				if (this.bookSearchStates[book.id] == null) {
+					this.bookSearchStates[book.id] = 'favorito';
+				}
+			}
+			this.isSearchingBooks = false;
+			this.cdr.detectChanges();
+		});
+	}
+
+	onBookSearchChange(value: string): void {
+		this.bookSearchQuery = value;
+		if (value.trim().length >= 2) {
+			this.isSearchingBooks = true;
+			this.bookSearch$.next(value.trim());
+		} else {
+			this.bookSearchResults = [];
+			this.isSearchingBooks = false;
+		}
 	}
 
 	private loadProfile(targetUserId: number | null, forceRefreshComments = false): void {
@@ -368,6 +416,7 @@ export class UsuarioPage implements OnInit {
 
 				this.user = result.user;
 				this.viewedUserId = result.user.id;
+				this.followingCount = Number(result.user.following_count ?? 0);
 				this.editDraft = {
 					nombre: String(result.user.nombre ?? ''),
 					email: String(result.user.email ?? ''),
@@ -380,14 +429,14 @@ export class UsuarioPage implements OnInit {
 				this.metrics = this.buildMetrics(this.profileComments);
 				this.favoriteBooks = this.buildFavoriteBooks(this.profileComments, this.profileBooks, this.selectedBooks, this.hiddenProfileBookIds);
 				this.activity = this.buildActivityFeed(this.profileComments, this.profileBooks);
-				this.bookSearchOpen = this.canEditProfile() && this.favoriteBooks.length === 1 && this.selectedBooks.length === 0;
-								this.bookSearchOpen = this.profileIsEditable && this.favoriteBooks.length === 1 && this.selectedBooks.length === 0;
-								this.profileIsEditable = this.canEditProfile();
+				this.profileIsEditable = this.canEditProfile();
+				this.bookSearchOpen = this.profileIsEditable && this.favoriteBooks.length === 1 && this.selectedBooks.length === 0;
 				if (this.activeTab === 'Likes') {
 					this.loadLikedComments(forceRefreshComments);
 				}
 				this.isLoading = false;
 				this.cdr.detectChanges();
+				this.loadFollowStatus(result.user.id);
 			},
 			error: () => {
 				this.errorMessage = 'No se pudo cargar el perfil.';
@@ -573,14 +622,84 @@ export class UsuarioPage implements OnInit {
 		return Array.from(new Set(bookIds));
 	}
 
+	private followCacheKey(viewedId: number): string {
+		return `followStatus:${this.currentUserId}:${viewedId}`;
+	}
+
+	private readFollowCache(viewedId: number): boolean | null {
+		try {
+			const raw = localStorage.getItem(this.followCacheKey(viewedId));
+			if (!raw) return null;
+			return Boolean(JSON.parse(raw).following);
+		} catch {
+			return null;
+		}
+	}
+
+	private writeFollowCache(viewedId: number, following: boolean): void {
+		try {
+			localStorage.setItem(this.followCacheKey(viewedId), JSON.stringify({ following }));
+		} catch {}
+	}
+
+	private loadFollowStatus(userId: number): void {
+		const cached = this.readFollowCache(userId);
+		if (cached !== null) {
+			this.isFollowing = cached;
+			this.cdr.detectChanges();
+		}
+
+		this.followService.getStatus(userId).subscribe((status: FollowStatus) => {
+			this.followersCount = status.followers;
+			this.isFollowing = status.following;
+			this.metrics[2] = { value: String(status.followers), label: 'Seguidores' };
+			this.writeFollowCache(userId, status.following);
+			this.cdr.detectChanges();
+		});
+	}
+
+	toggleFollow(): void {
+		if (this.isTogglingFollow || !this.viewedUserId) return;
+		this.isTogglingFollow = true;
+
+		// Optimistic update — UI responds immediately
+		const wasFollowing = this.isFollowing;
+		this.isFollowing = !wasFollowing;
+		this.followersCount += wasFollowing ? -1 : 1;
+		this.metrics[2] = { value: String(this.followersCount), label: 'Seguidores' };
+		this.cdr.detectChanges();
+
+		const action$ = wasFollowing
+			? this.followService.unfollow(this.viewedUserId)
+			: this.followService.follow(this.viewedUserId);
+
+		action$.subscribe({
+			next: (status: FollowStatus) => {
+				this.followersCount = status.followers;
+				this.isFollowing = status.following;
+				this.metrics[2] = { value: String(status.followers), label: 'Seguidores' };
+				this.isTogglingFollow = false;
+				this.writeFollowCache(this.viewedUserId!, status.following);
+				this.cdr.detectChanges();
+			},
+			error: () => {
+				this.isFollowing = wasFollowing;
+				this.followersCount += wasFollowing ? 1 : -1;
+				this.metrics[2] = { value: String(this.followersCount), label: 'Seguidores' };
+				this.isTogglingFollow = false;
+				this.cdr.detectChanges();
+			}
+		});
+	}
+
 	private buildMetrics(comments: Comentario[]): ProfileMetric[] {
-		const totalLikes = comments.reduce((sum, comment) => sum + this.resolveCommentLikes(comment), 0);
 		const reviewedBooks = this.extractDistinctBookIds(comments).length;
 
 		return [
 			{ value: String(comments.length), label: 'Reviews' },
 			{ value: String(reviewedBooks), label: 'Books' },
-			{ value: String(totalLikes), label: 'Likes' }
+			{ value: String(this.followersCount), label: 'Seguidores' },
+			{ value: String(this.followingCount), label: 'Seguidos' }
 		];
 	}
 
@@ -659,9 +778,11 @@ export class UsuarioPage implements OnInit {
 				.sort((left, right) => Number(right.id) - Number(left.id))
 				.map((comment) => {
 					const raw = comment as any;
+					const rawAuthorId = raw.UsuarioId ?? raw.usuario_id ?? raw.user_id;
 					return {
 						id: comment.id,
 						author: String(raw.user ?? raw.usuario?.nombre ?? raw.usuarioNombre ?? raw.username ?? 'Usuario desconocido'),
+						authorId: rawAuthorId != null ? Number(rawAuthorId) : null,
 						content: String(raw.contenido ?? raw.comentario ?? raw.comment ?? ''),
 						rating: this.resolveCommentRating(comment) > 0 ? this.resolveCommentRating(comment) : null,
 						likes: this.resolveCommentLikes(comment)
@@ -919,7 +1040,6 @@ export class UsuarioPage implements OnInit {
 		this.isSaving = true;
 		this.clearMessages();
 
-		// Si hay una foto, convertirla a WebP y enviar como FormData
 		if (this.editDraft.foto) {
 			this.convertImageToWebP(this.editDraft.foto, nombre).then((webpBlob) => {
 				const formData = new FormData();
@@ -931,7 +1051,7 @@ export class UsuarioPage implements OnInit {
 
 				this.usuarioService.updateUsuarioWithPhoto(userId, formData).subscribe({
 					next: (updatedUser) => this.handleProfileUpdateSuccess(updatedUser),
-					error: () => this.handleProfileUpdateError()
+					error: (err) => this.handleProfileUpdateError(err)
 				});
 			}).catch(() => {
 				this.setMessage('error', 'No se pudo procesar la imagen. Por favor, intenta con otra.', false);
@@ -939,10 +1059,9 @@ export class UsuarioPage implements OnInit {
 				this.cdr.detectChanges();
 			});
 		} else {
-			// Sin foto, solo actualizar datos básicos
 			this.usuarioService.updateUsuario(userId, { nombre, email, descripcion }).subscribe({
 				next: (updatedUser) => this.handleProfileUpdateSuccess(updatedUser),
-				error: () => this.handleProfileUpdateError()
+				error: (err) => this.handleProfileUpdateError(err)
 			});
 		}
 	}
@@ -987,6 +1106,12 @@ export class UsuarioPage implements OnInit {
 		this.router.navigate(['/comentarios', commentId]);
 	}
 
+	navigateToAuthorProfile(authorId: number | null | undefined): void {
+		if (authorId != null && Number.isFinite(authorId)) {
+			this.router.navigate(['/usuario', authorId]);
+		}
+	}
+
 	getUserPhotoUrl(): string {
 		const foto = String(this.user.foto ?? '').trim();
 		if (!foto) {
@@ -1001,46 +1126,87 @@ export class UsuarioPage implements OnInit {
 			return `${this.backendBaseUrl}${foto}`;
 		}
 
-		return `${this.backendBaseUrl}/usuarios/${foto}`;
+		return `${this.backendBaseUrl}/fotos/${foto}`;
 	}
 
-	trackByBookCommentId(index: number, comment: ProfileBookComment): number {
+	onAvatarError(): void {
+		this.user.foto = '';
+	}
+
+	trackByBookCommentId(_index: number, comment: ProfileBookComment): number {
 		return comment.id;
 	}
 
-	trackByMetricLabel(index: number, metric: ProfileMetric): string {
+	trackByMetricLabel(_index: number, metric: ProfileMetric): string {
 		return metric.label;
 	}
 
-	trackByTab(index: number, tab: ProfileTab): ProfileTab {
+	trackByTab(_index: number, tab: ProfileTab): ProfileTab {
 		return tab;
 	}
 
-	trackByBookId(index: number, book: ProfileBook): number {
+	trackByBookId(_index: number, book: ProfileBook): number {
 		return book.id;
 	}
 
-	trackByBookSearchResultId(index: number, book: Book): number {
+	trackByBookSearchResultId(_index: number, book: Book): number {
 		return book.id;
 	}
 
-	trackByActivityItem(index: number, item: ProfileActivity): string {
+	trackByActivityItem(_index: number, item: ProfileActivity): string {
 		return `${item.title}-${item.time}`;
 	}
 
-	trackByLikedCommentId(index: number, comment: LikedCommentView): number {
+	trackByLikedCommentId(_index: number, comment: LikedCommentView): number {
 		return comment.id;
 	}
 
-	private normalizeCoverPath(rawCover?: string): string {
+	trackByFollowingUserId(_index: number, user: FollowingUser): number {
+		return user.id;
+	}
+
+	onMetricClick(metric: ProfileMetric): void {
+		if (metric.label === 'Seguidos') {
+			this.openFollowingModal();
+		}
+	}
+
+	openFollowingModal(): void {
+		if (!this.viewedUserId) return;
+		this.followingModalVisible = true;
+		this.isLoadingFollowing = true;
+		this.cdr.detectChanges();
+		this.followService.getFollowing(this.viewedUserId).subscribe((users) => {
+			this.followingUsers = users;
+			this.isLoadingFollowing = false;
+			this.cdr.detectChanges();
+		});
+	}
+
+	closeFollowingModal(): void {
+		this.followingModalVisible = false;
+		this.followingUsers = [];
+		this.cdr.detectChanges();
+	}
+
+	unfollowUser(userId: number): void {
+		this.followService.unfollow(userId).subscribe(() => {
+			this.followingUsers = this.followingUsers.filter((u) => u.id !== userId);
+			this.followingCount = Math.max(0, this.followingCount - 1);
+			this.metrics[3] = { value: String(this.followingCount), label: 'Seguidos' };
+			this.cdr.detectChanges();
+		});
+	}
+
+	normalizeCoverPath(rawCover?: string): string {
 		const raw = String(rawCover ?? '').trim();
 		if (!raw) {
 			return '/prueba.webp';
 		}
 
 		const lowered = raw.toLowerCase();
-		if (lowered === 'default.png' || lowered === 'default.jpg' || lowered === '/default.jpg' || lowered === '/default.png') {
-			return '/default.png';
+		if (lowered === 'prueba.webp' || lowered === 'default.jpg' || lowered === '/default.jpg' || lowered === '/prueba.webp') {
+			return '/prueba.webp';
 		}
 
 		if (/^https?:\/\//i.test(raw) || raw.startsWith('/')) {
@@ -1151,10 +1317,19 @@ export class UsuarioPage implements OnInit {
 		}
 
 		const normalizedState = this.normalizeBookState(this.previewBookState);
-		this.selectedBooks = this.updateInArray(this.selectedBooks, this.previewedBook.id, (book) => ({
-			...book,
-			state: normalizedState
-		}));
+		const bookId = this.previewedBook.id;
+
+		if (this.selectedBooks.some(b => b.id === bookId)) {
+			this.selectedBooks = this.updateInArray(this.selectedBooks, bookId, (book) => ({
+				...book,
+				state: normalizedState
+			}));
+		} else {
+			const backendBook = this.profileBooks.find(b => b.id === bookId);
+			if (backendBook) {
+				this.selectedBooks = [{ ...backendBook, state: normalizedState }, ...this.selectedBooks];
+			}
+		}
 		if (this.currentUserId) this.persistSelectedBooks(this.currentUserId, this.selectedBooks);
 		this.favoriteBooks = this.buildFavoriteBooks(this.profileComments, this.profileBooks, this.selectedBooks, this.hiddenProfileBookIds);
 		this.previewedBook = this.favoriteBooks.find((book) => book.id === this.previewedBook?.id) ?? null;
@@ -1186,23 +1361,20 @@ export class UsuarioPage implements OnInit {
 
 		this.clearMessages();
 
-		// Remove the book from selectedBooks
 		this.selectedBooks = this.removeFromArray(this.selectedBooks, bookId);
 		this.hiddenProfileBookIds = [...new Set([...this.hiddenProfileBookIds, bookId])];
-		
-		// Persist the changes
+
 		if (this.currentUserId) {
 			this.persistSelectedBooks(this.currentUserId, this.selectedBooks);
 			this.persistHiddenBookIds(this.currentUserId, this.hiddenProfileBookIds);
 		}
-		
-		// Rebuild the favorite books list
+
 		this.favoriteBooks = this.buildFavoriteBooks(this.profileComments, this.profileBooks, this.selectedBooks, this.hiddenProfileBookIds);
 		if (this.previewedBook?.id === bookId) {
 			this.closeBookPreview();
 		}
 		this.closeActionMenus();
-		
+
 		this.successMessage = 'Libro eliminado de tu perfil.';
 		this.cdr.detectChanges();
 	}
@@ -1220,14 +1392,10 @@ export class UsuarioPage implements OnInit {
 
 		this.withLoadingFlag('isSaving' as any, () => this.comentarioService.deleteComentario(commentId),
 			() => {
-				// Remove the comment from allComments
 				this.allComments = this.removeFromArray(this.allComments, commentId);
 				this.profileComments = this.removeFromArray(this.profileComments, commentId);
-
-				// Rebuild the favorite books list
 				this.favoriteBooks = this.buildFavoriteBooks(this.profileComments, this.profileBooks, this.selectedBooks, this.hiddenProfileBookIds);
 				this.closeActionMenus();
-
 				this.setMessage('success', 'Comentario eliminado correctamente.', false);
 			},
 			() => {
@@ -1246,7 +1414,6 @@ export class UsuarioPage implements OnInit {
 			return;
 		}
 
-		// Validar que sea una imagen
 		if (!file.type.startsWith('image/')) {
 			this.setMessage('error', 'Por favor selecciona un archivo de imagen válido.', false);
 			this.editDraft.foto = null;
@@ -1254,8 +1421,7 @@ export class UsuarioPage implements OnInit {
 			return;
 		}
 
-		// Validar tamaño máximo (ej: 5MB)
-		const maxSize = 5 * 1024 * 1024; // 5MB
+		const maxSize = 5 * 1024 * 1024;
 		if (file.size > maxSize) {
 			this.setMessage('error', 'La imagen debe pesar menos de 5MB.', false);
 			this.editDraft.foto = null;
@@ -1265,7 +1431,6 @@ export class UsuarioPage implements OnInit {
 
 		this.editDraft.foto = file;
 
-		// Crear preview
 		const reader = new FileReader();
 		reader.onload = (e) => {
 			this.photoPreview = e.target?.result as string;
@@ -1276,7 +1441,7 @@ export class UsuarioPage implements OnInit {
 		this.clearMessages();
 	}
 
-	private convertImageToWebP(file: File, username: string): Promise<Blob> {
+	private convertImageToWebP(file: File, _username: string): Promise<Blob> {
 		return new Promise((resolve, reject) => {
 			const reader = new FileReader();
 
@@ -1304,7 +1469,7 @@ export class UsuarioPage implements OnInit {
 							}
 						},
 						'image/webp',
-						0.85 // Calidad
+						0.85
 					);
 				};
 

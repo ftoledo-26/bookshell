@@ -9,4 +9,6 @@ export interface Usuario {
     descripcion?: string;
     reviews?: any[];
     likes?: any[];
+    followers_count?: number;
+    following_count?: number;
 }

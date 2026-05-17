@@ -1205,8 +1205,8 @@ export class UsuarioPage implements OnInit {
 		}
 
 		const lowered = raw.toLowerCase();
-		if (lowered === 'default.png' || lowered === 'default.jpg' || lowered === '/default.jpg' || lowered === '/default.png') {
-			return '/default.png';
+		if (lowered === 'prueba.webp' || lowered === 'default.jpg' || lowered === '/default.jpg' || lowered === '/prueba.webp') {
+			return '/prueba.webp';
 		}
 
 		if (/^https?:\/\//i.test(raw) || raw.startsWith('/')) {

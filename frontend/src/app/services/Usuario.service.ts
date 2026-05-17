@@ -9,7 +9,7 @@ interface ApiResponse<T> {
   data: T;
 }
 
-type RawUsuario = Partial<Usuario> & { name?: string, reviews?: any[], likes?: any[], descripcion?: string };
+type RawUsuario = Partial<Usuario> & { name?: string, reviews?: any[], likes?: any[], descripcion?: string, followers_count?: number, following_count?: number };
 
 @Injectable({
   providedIn: 'root'
@@ -37,7 +37,9 @@ export class UsuarioService {
       phone: String(raw.phone ?? ''),
       descripcion: String(raw.descripcion ?? ''),
       reviews: raw.reviews ?? [],
-      likes: raw.likes ?? []
+      likes: raw.likes ?? [],
+      followers_count: Number(raw.followers_count ?? 0),
+      following_count: Number(raw.following_count ?? 0)
     };
   }
 

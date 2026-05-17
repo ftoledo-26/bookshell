@@ -406,7 +406,7 @@ export class UsuarioPage implements OnInit {
 
 				this.user = result.user;
 				this.viewedUserId = result.user.id;
-				this.followingCount = Number((result.user as any).following_count ?? 0);
+				this.followingCount = Number(result.user.following_count ?? 0);
 				this.editDraft = {
 					nombre: String(result.user.nombre ?? ''),
 					email: String(result.user.email ?? ''),

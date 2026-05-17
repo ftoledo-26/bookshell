@@ -1,0 +1,111 @@
+<main class="review-shell">
+  <section class="review-card">
+    <header class="review-head">
+      <p class="eyebrow">Nueva review</p>
+      <h1>Comparte tu opinion</h1>
+      <p>Selecciona un libro, puntua y deja tu reseña.</p>
+    </header>
+
+    <p class="status" *ngIf="isLoadingBooks">Cargando libros...</p>
+    <p class="status error" *ngIf="errorMessage">{{ errorMessage }}</p>
+    <p class="status success" *ngIf="successMessage">{{ successMessage }}</p>
+
+    <form class="review-form" (ngSubmit)="saveReview()" *ngIf="!isLoadingBooks">
+      <div class="book-selector" *ngIf="!selectedBook">
+        <label>
+          <span>Libro</span>
+          <p class="book-selector-hint">Busca y selecciona el libro para reseñar</p>
+        </label>
+        <div class="finder-toolbar">
+          <input
+            type="text"
+            [(ngModel)]="bookSearchQuery"
+            (ngModelChange)="onSearchInput($event)"
+            name="bookSearchQuery"
+            placeholder="Busca por título o autor..."
+            autocomplete="off"
+            class="search-input"
+          />
+          <button
+            type="button"
+            class="btn-search"
+            (click)="searchBooks()"
+            [disabled]="isSearchingBooks || bookSearchQuery.trim().length < 2"
+          >
+            {{ isSearchingBooks ? 'Buscando...' : 'Buscar' }}
+          </button>
+        </div>
+
+        <p class="finder-empty" *ngIf="!isSearchingBooks && bookSearchResults.length === 0 && bookSearchQuery.trim().length > 0">
+          No se encontraron libros con esa búsqueda.
+        </p>
+
+        <div class="finder-results" *ngIf="bookSearchResults.length > 0">
+          <article class="finder-result" *ngFor="let book of bookSearchResults">
+            <div class="finder-cover">
+              @if(!book.portada) {
+                <img src="/prueba.webp" [alt]="book.titulo" loading="lazy" />
+              } @else {
+                <img [src]="book.portada" [alt]="book.titulo" loading="lazy" />
+              }
+            </div>
+            <div class="finder-copy">
+              <strong>{{ book.titulo }}</strong>
+              <p>{{ book.autor }}</p>
+              <span>{{ book.descripcion || 'Sin descripción' }}</span>
+            </div>
+            <button type="button" class="btn-select" (click)="selectBook(book)" [disabled]="isSearchingBooks">
+              Seleccionar
+            </button>
+          </article>
+        </div>
+      </div>
+
+      <div class="book-selected" *ngIf="selectedBook">
+        <div class="selected-book-card">
+          <div class="book-selected-cover">
+            @if(!selectedBook.portada) {
+              <img src="/prueba.webp" [alt]="selectedBook.titulo" loading="lazy" />
+            } @else {
+              <img [src]="selectedBook.portada" [alt]="selectedBook.titulo" loading="lazy" />
+            }
+          </div>
+          <div class="book-selected-info">
+            <div>
+              <strong>{{ selectedBook.titulo }}</strong>
+              <p>{{ selectedBook.autor }}</p>
+            </div>
+            <button type="button" class="btn-change" (click)="clearBookSelection()">Cambiar</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="rating-wrap" aria-label="Valoracion">
+        <span>Puntuacion</span>
+        <div class="stars">
+          <button
+            type="button"
+            *ngFor="let star of [1,2,3,4,5]"
+            (click)="setRating(star)"
+            [class.active]="star <= rating"
+            [attr.aria-label]="'Valorar con ' + star"
+            [attr.aria-pressed]="star <= rating"
+          >
+            ★
+          </button>
+        </div>
+        <p class="rating-value" *ngIf="rating > 0">Puntuacion seleccionada: {{ rating }}/5</p>
+      </div>
+
+      <label>
+        <span>Comentario</span>
+        <textarea [(ngModel)]="comentario" name="comentario" rows="6" placeholder="Escribe tu review..."></textarea>
+      </label>
+
+      <div class="actions">
+        <button type="submit" class="btn-save" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar review' }}</button>
+        <button type="button" class="btn-cancel" (click)="cancel()">Cancelar</button>
+      </div>
+    </form>
+  </section>
+</main>

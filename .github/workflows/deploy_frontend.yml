@@ -184,17 +184,10 @@ jobs:
             # ── ModSecurity: permitir metodos REST (PUT, DELETE, PATCH) ─────
             if sudo a2query -m security2 2>/dev/null | grep -q enabled; then
               echo "==> Configurando ModSecurity para permitir metodos REST..."
-<<<<<<< HEAD
               printf "SecAction \"id:1000001,phase:1,nolog,pass,t:none,setvar:'tx.allowed_methods=GET HEAD POST OPTIONS PUT DELETE PATCH'\"\n" \
                 | sudo tee /etc/modsecurity/99-rest-methods.conf > /dev/null
             fi
 
             sudo apache2ctl configtest
-=======
-              printf '%s\n' 'SecAction "id:9002001,phase:1,nolog,pass,t:none,setvar:'"'"'tx.allowed_methods=GET HEAD POST OPTIONS PUT DELETE PATCH'"'"'"' \
-                | sudo tee /etc/modsecurity/99-rest-methods.conf > /dev/null
-            fi
-
->>>>>>> origin/main
             sudo systemctl reload apache2
             echo "Frontend desplegado — $(date)"

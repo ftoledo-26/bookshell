@@ -134,6 +134,17 @@ jobs:
             sudo sed -i "s|^#\? *DB_USERNAME=.*|DB_USERNAME=laravel|"        /var/www/back/.env
             sudo sed -i "s|^#\? *DB_PASSWORD=.*|DB_PASSWORD=${{ secrets.TF_VAR_DB_PASSWORD }}|" /var/www/back/.env
 
+            # ── Directorios requeridos por Laravel (antes de Composer) ──────
+            sudo mkdir -p /var/www/back/bootstrap/cache \
+                          /var/www/back/storage/framework/cache \
+                          /var/www/back/storage/framework/sessions \
+                          /var/www/back/storage/framework/views \
+                          /var/www/back/storage/logs \
+                          /var/www/back/public/fotos \
+                          /var/www/back/public/libros
+            sudo chown -R www-data:www-data /var/www/back/bootstrap/cache /var/www/back/storage
+            sudo chmod -R 775 /var/www/back/bootstrap/cache /var/www/back/storage
+
             # ── Instalar dependencias ─────────────────────────────────────
             cd /var/www/back
             sudo COMPOSER_ALLOW_SUPERUSER=1 composer update --no-dev --optimize-autoloader

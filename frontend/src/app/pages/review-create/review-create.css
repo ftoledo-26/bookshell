@@ -160,19 +160,12 @@
   border: 1px solid rgba(255, 225, 178, 0.15);
   background: rgba(12, 9, 7, 0.5);
   transition: all 0.2s ease;
-}
-
-.finder-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  gap: 0.8rem;
-  align-items: center;
+  cursor: pointer;
 }
 
 .finder-result:hover {
-  border-color: rgba(255, 225, 178, 0.3);
-  background: rgba(12, 9, 7, 0.7);
+  border-color: rgba(255, 204, 122, 0.5);
+  background: rgba(255, 177, 89, 0.08);
 }
 
 .finder-cover {
@@ -225,28 +218,6 @@
   white-space: nowrap;
 }
 
-.btn-select {
-  padding: 0.6rem 1rem;
-  border-radius: 0.6rem;
-  border: 1px solid rgba(255, 204, 122, 0.35);
-  background: linear-gradient(95deg, #f8b84e, #ff8f3c);
-  color: #1c130f;
-  font-weight: 700;
-  cursor: pointer;
-  font-size: 0.85rem;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: all 0.2s ease;
-}
-
-.btn-select:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.btn-select:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
 
 /* Selected Book */
 .book-selected {
@@ -428,18 +399,6 @@
 
   .btn-search {
     width: 100%;
-  }
-
-  .finder-result {
-    flex-wrap: wrap;
-  }
-
-  .finder-main {
-    flex: 1 1 100%;
-  }
-
-  .finder-result .btn-select {
-    flex: 1 1 100%;
   }
 
   .finder-cover {

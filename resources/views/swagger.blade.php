@@ -17,7 +17,7 @@
 
   <script src="https://unpkg.com/swagger-ui-dist@5.18.2/swagger-ui-bundle.js"></script>
   <script>
-    const BASE_URL = '{{ rtrim(config("app.url"), "/") }}';
+    const BASE_URL = window.location.origin;
 
     const spec = {
       openapi: '3.0.0',

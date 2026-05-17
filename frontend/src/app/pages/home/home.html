@@ -76,10 +76,11 @@
         Las reviews de los usuarios que sigues aparecerán aquí.
       </p>
 
-      <div class="reviews-scroll" *ngIf="displayedReviews.length > 0">
+      <!-- Para ti: tarjetas de review completas -->
+      <div class="reviews-scroll" *ngIf="activeReviewsTab === 'para-ti' && reviews.length > 0">
         <article
           class="review-card"
-          *ngFor="let review of displayedReviews; trackBy: trackByReviewId"
+          *ngFor="let review of reviews; trackBy: trackByReviewId"
           role="button"
           tabindex="0"
           (click)="openReviewDetail(review.id)"
@@ -114,6 +115,13 @@
           </div>
         </article>
       </div>
+
+      <!-- Seguidos: feed de comentarios usando CommentsFeedComponent (@Input + @Output) -->
+      <app-comments-feed
+        *ngIf="activeReviewsTab === 'seguidos' && followingReviews.length > 0"
+        [comments]="reviewsAsHomeComments"
+        (commentClick)="openReviewDetail($event)"
+      ></app-comments-feed>
     </section>
 
     <p class="status" *ngIf="!isLoading && reviews.length === 0">

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input } from '@angular/core';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { Comentario } from '../../models/Comentario';
 
 export type HomeComment = Comentario & {
@@ -18,6 +18,7 @@ export type HomeComment = Comentario & {
 })
 export class CommentsFeedComponent {
   @Input({ required: true }) comments: HomeComment[] = [];
+  @Output() commentClick = new EventEmitter<number>();
 
   trackByCommentId(index: number, comment: HomeComment): number {
     return comment.id;

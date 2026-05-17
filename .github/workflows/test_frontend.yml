@@ -1,4 +1,4 @@
-name: Test Frontend (Angular)
+name: Angular Tests
 
 on:
   push:
@@ -8,32 +8,28 @@ on:
       - 'frontend/package.json'
       - 'frontend/angular.json'
       - 'frontend/tsconfig*.json'
-      - '.github/workflows/test_frontend.yml'
   pull_request:
     branches: [main]
 
 jobs:
-  test-frontend:
-    name: Ejecutar tests unitarios Angular
+  test:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configurar Node.js 22
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
       - name: Instalar dependencias
-        working-directory: frontend
         run: npm ci
+        working-directory: frontend
 
       - name: Ejecutar tests unitarios
+        run: npx ng test --watch=false
         working-directory: frontend
-        run: npm test
         env:
           CI: true

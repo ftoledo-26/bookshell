@@ -149,11 +149,11 @@
   gap: 0.6rem;
   max-height: 400px;
   overflow-y: auto;
-  overflow-x: hidden;
 }
 
 .finder-result {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   gap: 0.8rem;
   align-items: center;
   padding: 0.8rem;
@@ -424,18 +424,18 @@
   }
 
   .finder-result {
-    flex-direction: column;
-    text-align: center;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .finder-result .btn-select {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 
   .finder-cover {
     width: 60px;
     height: 85px;
-    margin: 0 auto;
-  }
-
-  .btn-select {
-    width: 100%;
   }
 
   .selected-book-card {

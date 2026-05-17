@@ -168,22 +168,16 @@
 							<img [src]="book.coverUrl" [alt]="book.title" loading="lazy" />
 						</div>
 						<div class="book-info">
-							<div class="book-head">
-								<div class="book-title-block">
-									<strong>{{ book.title }}</strong>
-									<div class="book-meta-row">
-										<p>{{ book.author }}</p>
-										<span class="book-state-pill" [ngClass]="'state-' + book.state">{{ book.stateLabel }}</span>
-									</div>
-								</div>
-								<div class="book-head-actions">
-									<div class="action-menu-wrap" *ngIf="profileIsEditable">
-										<button type="button" class="menu-trigger" (click)="toggleActionMenu('book', book.id); $event.stopPropagation()" [attr.aria-expanded]="isActionMenuOpen('book', book.id)" aria-label="Opciones">⋮</button>
-										<div class="action-menu" [class.visible]="actionMenuVisible?.kind === 'book' && actionMenuVisible?.id === book.id">
-											<button type="button" class="action-item action-danger" (click)="deleteBook(book.id)">Borrar</button>
-											<button type="button" class="action-item" (click)="openBookPreview(book, 'edit')">Modificar</button>
-											<button type="button" class="action-item" (click)="openBookPreview(book)">Ir al libro</button>
-										</div>
+							<strong class="book-title">{{ book.title }}</strong>
+							<p class="book-author">{{ book.author }}</p>
+							<div class="book-foot">
+								<span class="book-state-pill" [ngClass]="'state-' + book.state">{{ book.stateLabel }}</span>
+								<div class="action-menu-wrap" *ngIf="profileIsEditable">
+									<button type="button" class="menu-trigger" (click)="toggleActionMenu('book', book.id); $event.stopPropagation()" [attr.aria-expanded]="isActionMenuOpen('book', book.id)" aria-label="Opciones">⋮</button>
+									<div class="action-menu" [class.visible]="actionMenuVisible?.kind === 'book' && actionMenuVisible?.id === book.id">
+										<button type="button" class="action-item action-danger" (click)="deleteBook(book.id)">Borrar</button>
+										<button type="button" class="action-item" (click)="openBookPreview(book, 'edit')">Modificar</button>
+										<button type="button" class="action-item" (click)="openBookPreview(book)">Ir al libro</button>
 									</div>
 								</div>
 							</div>

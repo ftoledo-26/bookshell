@@ -1,0 +1,39 @@
+name: Test Frontend (Angular)
+
+on:
+  push:
+    branches: [main, Front, Back, Curro]
+    paths:
+      - 'frontend/src/**'
+      - 'frontend/package.json'
+      - 'frontend/angular.json'
+      - 'frontend/tsconfig*.json'
+      - '.github/workflows/test_frontend.yml'
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-frontend:
+    name: Ejecutar tests unitarios Angular
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: frontend
+        run: npm ci
+
+      - name: Ejecutar tests unitarios
+        working-directory: frontend
+        run: npm test
+        env:
+          CI: true

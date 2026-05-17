@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\ReviewController;
 use App\Http\Controllers\Api\LikeController;
 use App\Http\Controllers\Api\User_ReviewController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\FollowController;
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');

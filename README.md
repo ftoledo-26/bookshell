@@ -1,167 +1,292 @@
-# bookshell
+# 📚 Bookshell
 
-``` bash
-frontend/
-├── src/
-│   ├── app/
-│   │   ├── components/        # Componentes reutilizables
-│   │   │   ├── book-card/
-│   │   │   ├── review-card/
-│   │   │   ├── navbar/
-│   │   │   └── rating/
-│   │   │
-│   │   ├── pages/             # Páginas principales
-│   │   │   ├── home/
-│   │   │   ├── books/
-│   │   │   ├── book-detail/
-│   │   │   ├── profile/
-│   │   │   └── auth/
-│   │   │
-│   │   ├── services/          # Servicios para consumir API
-│   │   │   ├── book.service.ts
-│   │   │   ├── review.service.ts
-│   │   │   └── auth.service.ts
-│   │   │
-│   │   ├── guards/            # Guards de rutas (login, roles, etc.)
-│   │   ├── interceptors/      # Interceptores HTTP (token JWT)
-│   │   ├── models/            # Interfaces y modelos TS
-│   │   │   ├── book.model.ts
-│   │   │   ├── review.model.ts
-│   │   │   └── user.model.ts
-│   │   └── app-routing.module.ts
-│   │
-│   ├── assets/                # Imágenes, fuentes y recursos estáticos
-│   └── styles/                # CSS global / Tailwind / variables
-│
-├── angular.json               # Configuración Angular CLI
-├── package.json               # Dependencias y scripts npm
-├── tsconfig.json              # Configuración TypeScript
-└── README.md
+> Plataforma web para descubrir libros, escribir reseñas y seguir a otros lectores.
 
+![Angular](https://img.shields.io/badge/Angular-21-DD0031?logo=angular&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![Laravel](https://img.shields.io/badge/Laravel-12-FF2D20?logo=laravel&logoColor=white)
+![PHP](https://img.shields.io/badge/PHP-8.2-777BB4?logo=php&logoColor=white)
+![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-EC2%20%7C%20RDS%20%7C%20ALB-FF9900?logo=amazonaws&logoColor=white)
+![Terraform](https://img.shields.io/badge/Terraform-IaC-7B42BC?logo=terraform&logoColor=white)
+![Apache](https://img.shields.io/badge/Apache-2.4-D22128?logo=apache&logoColor=white)
+![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?logo=githubactions&logoColor=white)
 
+---
 
+## Descripción
 
-ng serve --host 0.0.0.0
+Bookshell es una aplicación fullstack de gestión de biblioteca personal y red social literaria. Los usuarios pueden:
+
+- Explorar un catálogo de libros importado desde la Open Library API
+- Escribir y gestionar reseñas con puntuación
+- Añadir libros a su librería personal
+- Seguir a otros usuarios y ver sus reseñas
+- Administrar el sistema mediante un panel Filament (solo administradores)
+
+---
+
+## Tecnologías utilizadas
+
+| Capa | Tecnología |
+|---|---|
+| **Frontend** | Angular 21, TypeScript 5, CSS |
+| **Backend** | Laravel 12, PHP 8.2, Sanctum (JWT) |
+| **Base de datos** | MySQL 8.0 (AWS RDS) |
+| **Servidor web** | Apache 2.4 con mod_proxy, mod_rewrite |
+| **Infraestructura** | AWS EC2, RDS, ALB, Elastic IP |
+| **IaC** | Terraform |
+| **CI/CD** | GitHub Actions |
+| **DNS** | DuckDNS + Let's Encrypt (HTTPS) |
+| **Seguridad** | OWASP ModSecurity WAF |
+| **Documentación API** | Swagger UI |
+
+---
+
+## Arquitectura
+
+```
+Internet
+   │
+   ├── HTTPS/HTTP ──► [ ALB bookshell-alb ]
+   │                          │
+   │                          ▼
+   ├── HTTPS/HTTP ──► [ EC2 Frontend ]          ← Angular + Apache + HTTPS
+   │                  bookshell.duckdns.org      ← Elastic IP pública
+   │                          │ ProxyPass /api, /swagger, /filament…
+   │                          ▼
+   │                  [ EC2 Backend ]            ← Laravel + Apache
+   │                  (IP privada)               ← Acceso SSH solo via bastion
+   │                          │ MySQL :3306
+   │                          ▼
+   │                  [ RDS MySQL 8.0 ]          ← Base de datos gestionada
+   │
+   └── SSH ─────────► [ EC2 Bastion ]  ──SSH──► Frontend / Backend
 ```
 
-## Plan TFG (entrega: 15 de mayo)
+### Instancias EC2
 
-### Objetivo general
-- Llegar a la entrega con una app funcional, testeada y documentada.
-- Separar trabajo de autenticacion (login/sign in) para no bloquear el desarrollo.
+| Instancia | Rol | Acceso |
+|---|---|---|
+| **Bastion** | Puerta de entrada SSH | Elastic IP pública |
+| **Frontend** | Angular + Apache + HTTPS + ModSecurity WAF | Elastic IP → `bookshell.duckdns.org` |
+| **Backend** | Laravel + Apache + MySQL client | Solo IP privada (vía bastion) |
 
-### Roadmap por semanas
+---
 
-#### 15-21 abril
-- Comentarios CRUD completo: crear, editar, borrar.
-- Validaciones de formulario (longitud, campos obligatorios) y mensajes de error.
-- Estados de carga y errores en UI.
+## Estructura del repositorio
 
-#### 22-28 abril
-- Busqueda de libros por texto.
-- Filtros por autor y orden (popularidad/fecha).
-- Limpieza de UX en filtros (aplicar, limpiar, mantener estado).
+```
+bookshell/
+├── .github/
+│   └── workflows/
+│       ├── terraform.yml          # Crea/actualiza infraestructura AWS
+│       ├── deploy_backend.yml     # Despliega Laravel via SSH (rama Back)
+│       └── deploy_frontend.yml    # Despliega Angular + HTTPS (rama Front)
+│
+├── Terraform_tfg/
+│   ├── main.tf                    # EC2, RDS, ALB, EIPs, Security Groups
+│   ├── variables.tf               # Variables configurables
+│   ├── backend.sh                 # Script arranque EC2 backend
+│   └── frontend.sh                # Script arranque EC2 frontend + ModSecurity
+│
+├── frontend/                      # Rama Front — Angular 21
+│   ├── src/
+│   │   └── app/
+│   │       ├── components/        # Componentes reutilizables
+│   │       ├── pages/             # Páginas principales
+│   │       ├── services/          # Servicios HTTP
+│   │       ├── guards/            # Guards de autenticación
+│   │       ├── models/            # Interfaces TypeScript
+│   │       └── environments/      # Variables de entorno
+│   ├── angular.json
+│   └── package.json
+│
+├── app/                           # Rama Back — Laravel 12
+│   └── Http/
+│       ├── Controllers/Api/       # Controladores REST
+│       └── Resources/             # API Resources (transformadores JSON)
+├── routes/
+│   ├── api.php                    # Rutas API REST
+│   └── web.php                    # Rutas web (Swagger, Filament)
+└── resources/views/
+    └── swagger.blade.php          # Swagger UI
+```
 
-#### 29 abril-5 mayo
-- Paginacion en backend para libros/comentarios.
-- Infinite scroll en frontend consumiendo paginas reales.
-- Control de fin de resultados y errores de red.
+---
 
-#### 6-10 mayo
-- Tests unitarios de servicios y componentes clave.
-- 2-3 flujos e2e criticos.
-- Correccion de bugs detectados en pruebas.
+## Ramas
 
-#### 11-13 mayo
-- Documentacion tecnica: arquitectura, decisiones, endpoints, pruebas.
-- Capturas de funcionalidades principales.
+| Rama | Contenido | Deploy automático |
+|---|---|---|
+| `main` | Infraestructura Terraform + workflows CI/CD | — |
+| `Back` | Backend Laravel (API REST, modelos, migraciones) | Push a `Back` → deploy backend |
+| `Front` | Frontend Angular (componentes, servicios, páginas) | Push a `Front` → deploy frontend |
 
-#### 14-15 mayo
-- Buffer final para incidencias de ultima hora.
-- Preparacion de demo (8-10 min) con guion y datos de prueba.
+---
 
-### Reparto de trabajo (equipo)
-- Companero: login/sign in.
-- Este repositorio (tu foco): comentarios, busqueda/filtros, paginacion, testing y documentacion.
-- Integracion final de auth cuando login este estable.
+## Requisitos cumplidos
 
-### Entregables minimos
-- App funcional con comentarios CRUD.
-- Busqueda + filtros operativos.
-- Paginacion real (API + frontend).
-- Tests ejecutados y documentados.
-- Memoria tecnica y demo preparada.
+### DAWEC — Desarrollo de Aplicaciones Web en Entorno Cliente (Angular)
 
-### Riesgos y mitigacion
-- Si la API de paginacion no llega a tiempo: usar contrato definido + mock temporal.
-- Si la integracion de auth se retrasa: mantener flujos desacoplados y activar guards al final.
-- Si falta tiempo para documentacion: redactar en paralelo desde la semana del 29 de abril.
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+| Requisito | Estado | Detalle |
+|---|---|---|
+| Angular CLI 21 LTS | ✅ | Generado con `ng new`, versión 21.2.3 |
+| Git + GitHub + ramas | ✅ | Ramas `main`, `Front`, `Back` + PRs |
+| README con descripción y tecnologías | ✅ | Este documento |
+| Routing | ✅ | `app.routes.ts` con rutas para Home, Login, Usuario, Librería, Reseñas, Comentarios |
+| Token en LocalStorage | ✅ | `Login.service.ts` almacena el token Sanctum |
+| Módulo administración solo para admin | ✅ | Panel Filament en `/filament` protegido por rol |
+| Comunicación entre componentes (inputs/outputs) | ✅ | Uso de `@Input()`, `@Output()` y `EventEmitter` |
+| Services | ✅ | `Book.service`, `Usuario.service`, `Comentario.service`, `Login.service`… |
+| Manejo de errores con `try…catch` | ✅ | En todas las peticiones HTTP de los services |
+| Conexión con API externa (DAWES) | ✅ | Consumo de la API Laravel via `HttpClient` |
+| Tests unitarios + GitHub Actions | ✅ | Tests con Vitest + workflow `test_ng.yml` |
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+### DAWES — Desarrollo de Aplicaciones Web en Entorno Servidor (Laravel)
 
-## About Laravel
+| Requisito | Estado | Detalle |
+|---|---|---|
+| API REST completa | ✅ | Endpoints para libros, usuarios, reseñas, comentarios, likes, follows |
+| Autenticación | ✅ | Laravel Sanctum con tokens Bearer |
+| ORM + migraciones | ✅ | Eloquent ORM, migraciones versionadas |
+| Panel de administración | ✅ | Filament 3 con gestión de modelos |
+| API Resources | ✅ | `LibroResource`, `ComentarioResource`, `UserResource`… |
+| Documentación API | ✅ | Swagger UI en `https://bookshell.duckdns.org/swagger` |
+| Integración Open Library | ✅ | Importación de portadas y descripciones |
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+### DAWEB — Despliegue de Aplicaciones Web (AWS + Terraform)
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+#### Requisitos mínimos
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+| Requisito | Estado | Detalle |
+|---|---|---|
+| Despliegue en AWS | ✅ | 3 instancias EC2 (bastion, frontend, backend) |
+| Al menos una instancia EC2 | ✅ | EC2 `t2.micro` x3 |
+| Sin Beanstalk ni aprovisionamiento sencillo | ✅ | Todo configurado manualmente |
+| Infraestructura en Terraform | ✅ | `Terraform_tfg/main.tf` completo |
+| Pipeline CI/CD | ✅ | GitHub Actions (terraform.yml, deploy_backend.yml, deploy_frontend.yml) |
+| Servidor web con todos los recursos | ✅ | Apache + PHP + MySQL en EC2 backend |
+| IP elástica + acceso SSH | ✅ | Bastion con Elastic IP, frontend con Elastic IP |
+| HTTPS | ✅ | Let's Encrypt via Certbot + `bookshell.duckdns.org` |
 
-## Learning Laravel
+#### Requisitos adicionales
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+| Requisito | Estado | Detalle |
+|---|---|---|
+| RDS para base de datos | ✅ | RDS MySQL 8.0 `db.t3.micro`, `deletion_protection = true` |
+| Balanceador de carga (ALB) | ✅ | Application Load Balancer con health checks |
+| WAF OWASP ModSecurity | ✅ | `libapache2-mod-security2` + OWASP CRS, `SecRuleEngine On` |
+| DNS | ⚙️ | DuckDNS (`bookshell.duckdns.org`) — no Route53 |
+| Servidor FTP | ❌ | No implementado |
+| AWS CodeDeploy | ❌ | Se usa GitHub Actions en su lugar |
+| BD en EC2 dedicado / Docker | ❌ | Se usa RDS |
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+### DIW — Diseño de Interfaces Web
 
-## Laravel Sponsors
+| Requisito | Estado | Detalle |
+|---|---|---|
+| Principios del diseño | ✅ | Layout coherente, tipografía, paleta de colores |
+| Buenas prácticas en estilos | ✅ | CSS por componente en Angular, sin estilos inline |
+| Framework / librería UI | ✅ | CSS propio + componentes Angular nativos |
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+---
 
-### Premium Partners
+## API REST — Endpoints principales
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+| Método | Endpoint | Descripción | Auth |
+|---|---|---|---|
+| `POST` | `/api/login` | Autenticación, devuelve token | ❌ |
+| `POST` | `/api/register` | Registro de usuario | ❌ |
+| `GET` | `/api/libros` | Listado de libros | ✅ |
+| `GET` | `/api/libros/{id}` | Detalle de un libro | ✅ |
+| `GET` | `/api/usuarios/{id}` | Perfil de usuario | ✅ |
+| `GET` | `/api/usuarios/{id}/following` | Usuarios seguidos | ✅ |
+| `POST` | `/api/follow/{id}` | Seguir a un usuario | ✅ |
+| `DELETE` | `/api/follow/{id}` | Dejar de seguir | ✅ |
+| `GET` | `/api/reviews` | Listado de reseñas | ✅ |
+| `POST` | `/api/reviews` | Crear reseña | ✅ |
+| `GET` | `/api/comentarios/{libro_id}` | Comentarios de un libro | ✅ |
+| `POST` | `/api/comentarios` | Crear comentario | ✅ |
+| `POST` | `/api/likes/{review_id}` | Dar like a reseña | ✅ |
 
-## Contributing
+Documentación interactiva completa: **`https://bookshell.duckdns.org/swagger`**
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+---
 
-## Code of Conduct
+## Despliegue
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### Infraestructura (Terraform)
 
-## Security Vulnerabilities
+```bash
+cd Terraform_tfg
+terraform init
+terraform plan
+terraform apply -auto-approve
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+O via GitHub Actions → workflow **Terraform CI/CD**.
 
-## License
+### Variables de entorno necesarias (GitHub Secrets)
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+| Secret | Descripción |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | Credenciales AWS |
+| `AWS_SECRET_ACCESS_KEY` | Credenciales AWS |
+| `SSH_PRIVATE_KEY` | Clave privada PEM del Key Pair |
+| `TF_VAR_DB_PASSWORD` | Contraseña de la base de datos |
+| `DUCKDNS_TOKEN` | Token de DuckDNS |
+| `CERTBOT_EMAIL` | Email para Let's Encrypt |
+| `BASTION_EIP` | IP pública del bastion (output Terraform) |
+| `FRONTEND_PRIVATE_IP` | IP privada del frontend (output Terraform) |
+| `FRONTEND_EIP` | IP pública del frontend (output Terraform) |
+| `BACKEND_PRIVATE_IP` | IP privada del backend (output Terraform) |
 
-# Enlaces
+### CI/CD — GitHub Actions
 
-## Video Youtube
+| Workflow | Trigger | Acción |
+|---|---|---|
+| `terraform.yml` | Push a `main` / manual | Crea/actualiza infraestructura AWS |
+| `deploy_backend.yml` | Push a `Back` | Git pull + composer + migrate + reload Apache |
+| `deploy_frontend.yml` | Push a `Front` | Git pull + npm build + copy dist + HTTPS |
 
-https://youtu.be/NuBrAkYFazA?si=-IFGRMvcEkk9d-mY
+---
 
-## Plan de empresa
+## Desarrollo local
 
-https://canva.link/6knr3oj449jrfy7
+### Backend (Laravel)
+
+```bash
+cd /ruta/rama/Back
+composer install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate --seed
+php artisan serve
+```
+
+### Frontend (Angular)
+
+```bash
+cd frontend
+npm install
+ng serve
+# Acceder en http://localhost:4200
+```
+
+---
+
+## URL de producción
+
+🌐 **https://bookshell.duckdns.org**
+
+📖 **https://bookshell.duckdns.org/swagger** — Documentación API
+
+🛠️ **https://bookshell.duckdns.org/filament** — Panel de administración
+
+---
+
+## Seguimiento del proyecto
+
+- 📋 Trello: gestión de tareas por sprints
+- 🎨 Canva — Plan de empresa: https://canva.link/6knr3oj449jrfy7

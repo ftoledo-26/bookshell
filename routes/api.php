@@ -39,6 +39,7 @@ Route::get('/libros/{libroId}/opiniones', [ReviewController::class, 'opiniones']
 Route::get('/user_reviews', [User_ReviewController::class, 'index']);
 Route::get('/user_reviews/{id}', [User_ReviewController::class, 'show']);
 Route::get('/usuarios/{id}/followers', [FollowController::class, 'status']);
+Route::get('/usuarios/{id}/following', [FollowController::class, 'following']);
 
 
 // ----------------------------------------------------------------------

@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # Script de arranque del frontend (Angular + Apache).
 # Terraform lo procesa como templatefile() — sustituye ${backend_ip},
 # ${domain}, ${repo_url} y ${repo_branch} antes de pasarselo a EC2.
@@ -105,4 +105,13 @@ certbot --apache -d ${domain} \
   -m franciscomanueltoledo@gmail.com \
   --redirect || echo "[frontend.sh] AVISO: certbot fallo — HTTPS no activo. Ejecutar via workflow deploy_frontend cuando DuckDNS apunte aqui."
 
+
+# ── OWASP ModSecurity WAF ────────────────────────────────────────────────────
+apt-get install -y libapache2-mod-security2 modsecurity-crs
+if [ ! -f /etc/modsecurity/modsecurity.conf ]; then
+  cp /etc/modsecurity/modsecurity.conf-recommended /etc/modsecurity/modsecurity.conf
+fi
+sed -i "s|SecRuleEngine DetectionOnly|SecRuleEngine On|" /etc/modsecurity/modsecurity.conf
+a2enmod security2
+systemctl reload apache2
 echo "[frontend.sh] Instalacion completada. Dominio: ${domain}, Backend: ${backend_ip}"

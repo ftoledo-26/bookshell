@@ -288,5 +288,5 @@ ng serve
 
 ## Seguimiento del proyecto
 
-- 📋 Trello: gestión de tareas por sprints
+- 📋 Trello: https://trello.com/invite/b/6a09deb05b2468e0e2a4d076/ATTI084f2fa54473dbdb8b657ef39a28d34eD6665206/bookshelf
 - 🎨 Canva — Plan de empresa: https://canva.link/6knr3oj449jrfy7

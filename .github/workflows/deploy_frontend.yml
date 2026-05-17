@@ -80,7 +80,7 @@ jobs:
 
             # ── Build Angular ─────────────────────────────────────────────
             cd /var/www/front/frontend
-            sudo npm ci
+            sudo npm install
             sudo npm run build -- --configuration production
 
             # ── Copiar build al DocumentRoot ──────────────────────────────

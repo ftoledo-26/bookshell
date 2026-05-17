@@ -32,9 +32,9 @@ export class BookService {
 
         const lowered = raw.toLowerCase();
 
-        // Keep a single canonical default image path present in /public.
-        if (lowered === 'default.png' || lowered === 'default.jpg' || lowered === '/default.jpg' || lowered === '/default.png') {
-            return '/default.png';
+        // Map any placeholder the backend may return to the local fallback image.
+        if (['default.pdf', 'prueba.webp', 'default.jpg', '/default.jpg', '/prueba.webp'].includes(lowered)) {
+            return '/prueba.webp';
         }
 
         if (/^https?:\/\//i.test(raw) || raw.startsWith('/')) {

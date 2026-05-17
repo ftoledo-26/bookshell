@@ -7,7 +7,7 @@ import {tap} from "rxjs/operators";
 type LoginResponse = {
     access_token?: string,
     token?: string,
-    user: { id: number, name?: string, username?: string, foto?: string }
+    user: { id: number, name?: string, username?: string, foto?: string, roll?: string }
 };
 
 @Injectable({providedIn: 'root'})
@@ -38,6 +38,10 @@ export class LoginService {
                 if (response.user.foto) {
                     localStorage.setItem('foto', response.user.foto);
                 }
+
+                if (response.user.roll) {
+                    localStorage.setItem('roll', response.user.roll);
+                }
             }
         ));
     }
@@ -47,7 +51,16 @@ export class LoginService {
         localStorage.removeItem('userId');
         localStorage.removeItem('username');
         localStorage.removeItem('foto');
+        localStorage.removeItem('roll');
         this.router.navigate(['/login']);
+    }
+
+    getRole(): string | null {
+        return localStorage.getItem('roll');
+    }
+
+    isAdmin(): boolean {
+        return this.getRole() === 'admin';
     }
 
     getToken(): string | null {

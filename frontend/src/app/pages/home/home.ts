@@ -12,6 +12,10 @@ import { Usuario } from '../../models/Usuario';
 import { UsuarioService } from '../../services/Usuario.service';
 import { catchError, forkJoin, of, timeout } from 'rxjs';
 import { Router } from '@angular/router';
+import { getRecommendedBooks } from '../../utils/algoBook';
+import { CommentsFeedComponent, HomeComment } from '../../components/comments-feed/comments-feed';
+
+type ReviewsTab = 'para-ti' | 'seguidos';
 
 type TimelineComment = Comentario & {
   username: string;
@@ -22,7 +26,9 @@ type TimelineComment = Comentario & {
 type RecommendedBook = {
   id: number;
   title: string;
+  author: string;
   cover: string;
+  description: string;
 };
 
 type FeaturedReview = {
@@ -40,7 +46,7 @@ type FeaturedReview = {
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, CommentsFeedComponent],
   templateUrl: './home.html',
   styleUrls: ['./home.css'],
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -52,8 +58,14 @@ export class Home implements OnInit {
   books: Book[] = [];
   recommendedBooks: RecommendedBook[] = [];
   reviews: FeaturedReview[] = [];
+  followingReviews: FeaturedReview[] = [];
+  activeReviewsTab: ReviewsTab = 'para-ti';
+  isLoadingFollowing = false;
   isLoading = true;
   errorMessage = '';
+
+  selectedBook: RecommendedBook | null = null;
+  bookDrawerVisible = false;
 
   private isRecommendedSwiping = false;
   private recommendedTouchStartX = 0;
@@ -68,6 +80,68 @@ export class Home implements OnInit {
 
   ngOnInit(): void {
     this.loadHomeData();
+    if (localStorage.getItem('token')) {
+      this.loadFollowingReviews();
+    }
+  }
+
+  isLoggedIn(): boolean {
+    return !!localStorage.getItem('token');
+  }
+
+  setReviewsTab(tab: ReviewsTab): void {
+    this.activeReviewsTab = tab;
+    if (tab === 'seguidos' && this.followingReviews.length === 0 && !this.isLoadingFollowing && localStorage.getItem('token')) {
+      this.loadFollowingReviews();
+    }
+    this.cdr.markForCheck();
+  }
+
+  get displayedReviews(): FeaturedReview[] {
+    return this.activeReviewsTab === 'seguidos' ? this.followingReviews : this.reviews;
+  }
+
+  get reviewsAsHomeComments(): HomeComment[] {
+    return this.displayedReviews.map(r => ({
+      id: r.id,
+      contenido: r.content,
+      likes: r.likes,
+      username: r.username,
+      movieTitle: r.titulo,
+      createdAt: r.year
+    }));
+  }
+
+  private loadFollowingReviews(): void {
+    this.isLoadingFollowing = true;
+    this.comentarioService.getFollowingComentarios().subscribe({
+      next: (comments) => {
+        const coverByBookId = new Map<number, string>(this.books.map((book) => [book.id, book.portada]));
+        this.followingReviews = comments.map((item) => {
+          const c = item as any;
+          const rawRating = Number(c.rating ?? c.valoracion ?? 0);
+          const hasRating = rawRating > 0;
+          const bookId = Number(c.BookId ?? c.libro_id ?? 0);
+          return {
+            id: item.id,
+            titulo: String(c.libro ?? c.libroData?.titulo ?? 'Libro desconocido'),
+            year: '2026',
+            username: String(c.user ?? c.usuario?.nombre ?? 'Usuario'),
+            likes: this.comentarioService.getCommentLikeCount(item),
+            score: hasRating ? `${rawRating.toFixed(1)} / 5` : 'Sin rating',
+            hasRating,
+            content: String(c.contenido ?? c.comentario ?? c.comment ?? ''),
+            cover: coverByBookId.get(bookId) ?? String(c.portada ?? '')
+          };
+        });
+        this.isLoadingFollowing = false;
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.isLoadingFollowing = false;
+        this.cdr.markForCheck();
+      }
+    });
   }
 
   loadHomeData(): void {
@@ -92,7 +166,7 @@ export class Home implements OnInit {
         const { books, comments, users } = result;
         this.books = books;
         const timelineComments = this.mapTimelineComments(comments, books, users);
-        this.recommendedBooks = this.mapRecommendedBooks(books);
+        this.recommendedBooks = this.mapRecommendedBooks(books, this.getCurrentUserId());
         this.reviews = this.mapFeaturedReviews(timelineComments);
         this.isLoading = false;
         if (books.length === 0 && comments.length === 0) {
@@ -156,11 +230,13 @@ export class Home implements OnInit {
     });
   }
 
-  private mapRecommendedBooks(books: Book[]): RecommendedBook[] {
-    return books.slice(0, 8).map((book) => ({
+  private mapRecommendedBooks(books: Book[], userId: number | null): RecommendedBook[] {
+    return getRecommendedBooks(books, userId, 7).map((book) => ({
       id: book.id,
       title: book.titulo,
-      cover: book.portada
+      author: (book as any).autor ?? '',
+      cover: book.portada,
+      description: (book as any).descripcion ?? ''
     }));
   }
 
@@ -256,15 +332,83 @@ export class Home implements OnInit {
     this.isRecommendedSwiping = false;
   }
 
-  openReviewDetail(reviewId: number): void {
-    this.router.navigate(['/comentarios', reviewId]);
+  openBookDrawer(book: RecommendedBook): void {
+    this.selectedBook = book;
+    this.cdr.detectChanges();
+    requestAnimationFrame(() => {
+      this.bookDrawerVisible = true;
+      this.cdr.detectChanges();
+    });
   }
 
-  trackByBookId(index: number, book: RecommendedBook): number {
-    return book.id;
+  closeBookDrawer(): void {
+    this.bookDrawerVisible = false;
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      this.selectedBook = null;
+      this.cdr.detectChanges();
+    }, 300);
   }
 
-  trackByReviewId(index: number, review: FeaturedReview): number {
-    return review.id;
+  addBookToFavorites(): void {
+    if (!this.selectedBook) return;
+    const token = localStorage.getItem('token');
+    if (!token) {
+      this.closeBookDrawer();
+      this.router.navigate(['/login']);
+      return;
+    }
+    const userId = this.getCurrentUserId();
+    if (!userId) {
+      this.closeBookDrawer();
+      this.router.navigate(['/login']);
+      return;
+    }
+
+    const book = this.selectedBook;
+    const storageKey = `profileBooks:${userId}`;
+    let saved: any[] = [];
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) saved = JSON.parse(raw);
+      if (!Array.isArray(saved)) saved = [];
+    } catch { saved = []; }
+
+    if (!saved.some((b: any) => b.id === book.id)) {
+      saved = [
+        { id: book.id, titulo: book.title, autor: book.author, descripcion: book.description, portada: book.cover, state: 'favorito' },
+        ...saved
+      ];
+      localStorage.setItem(storageKey, JSON.stringify(saved));
+    }
+
+    this.closeBookDrawer();
+    this.router.navigate(['/usuario', userId]);
+  }
+
+  goToCreateReviewForBook(): void {
+    if (!this.selectedBook) return;
+    const token = localStorage.getItem('token');
+    if (!token) {
+      this.closeBookDrawer();
+      this.router.navigate(['/login']);
+      return;
+    }
+    const bookId = this.selectedBook.id;
+    this.closeBookDrawer();
+    this.router.navigate(['/reviews/nueva'], { queryParams: { bookId } });
+  }
+
+  private getCurrentUserId(): number | null {
+    const raw = localStorage.getItem('userId') ?? localStorage.getItem('user_id');
+    if (raw) return Number(raw);
+    const token = localStorage.getItem('token');
+    if (!token) return null;
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.id ?? payload.userId ?? null;
+    } catch {
+      return null;
+    }
   }
 }

@@ -3,7 +3,7 @@
     <button class="create-review-fab" type="button" aria-label="Crear review" (click)="goToCreateReview()">+</button>
 
     <header class="hero-head">
-      <h1>Books para ti</h1>
+      <h1>Para ti</h1>
       <p>Descubre recomendaciones recientes y reviews destacadas de la comunidad.</p>
     </header>
 
@@ -12,7 +12,7 @@
 
     <section class="recommended-zone" *ngIf="!isLoading && recommendedBooks.length > 0">
       <header class="section-head">
-        <h2>New on Bookshell</h2>
+        <h2>Nuevas en Bookshell</h2>
       </header>
 
       <div
@@ -23,7 +23,14 @@
         (touchend)="onRecommendedTouchEnd()"
         (touchcancel)="onRecommendedTouchEnd()"
       >
-        <article class="book-tile" *ngFor="let book of recommendedBooks; trackBy: trackByBookId">
+        <article
+          class="book-tile"
+          *ngFor="let book of recommendedBooks; trackBy: trackByBookId"
+          role="button"
+          tabindex="0"
+          (click)="openBookDrawer(book)"
+          (keydown.enter)="openBookDrawer(book)"
+        >
           <div class="cover-wrap">
             @if(!book.cover) {
               <img src="/prueba.webp" [alt]="book.title" loading="eager" />
@@ -40,12 +47,37 @@
       </div>
     </section>
 
-    <section class="reviews-zone" *ngIf="!isLoading && reviews.length > 0">
+    <section class="reviews-zone" *ngIf="!isLoading">
       <header class="section-head">
-        <h2>Popular reviews this week</h2>
+        <h2>Reviews</h2>
+        <div class="reviews-tabs">
+          <button
+            type="button"
+            class="reviews-tab"
+            [class.active]="activeReviewsTab === 'para-ti'"
+            (click)="setReviewsTab('para-ti')"
+          >Para ti</button>
+          <button
+            type="button"
+            class="reviews-tab"
+            [class.active]="activeReviewsTab === 'seguidos'"
+            (click)="setReviewsTab('seguidos')"
+          >Seguidos</button>
+        </div>
       </header>
 
-      <div class="reviews-scroll">
+      <p class="status" *ngIf="activeReviewsTab === 'seguidos' && isLoadingFollowing">Cargando reviews de seguidos...</p>
+
+      <p class="empty-tab-note" *ngIf="activeReviewsTab === 'seguidos' && !isLoadingFollowing && !isLoggedIn()">
+        Inicia sesión para ver las reviews de las personas que sigues.
+      </p>
+
+      <p class="empty-tab-note" *ngIf="activeReviewsTab === 'seguidos' && !isLoadingFollowing && isLoggedIn() && followingReviews.length === 0">
+        Las reviews de los usuarios que sigues aparecerán aquí.
+      </p>
+
+      <!-- Para ti: tarjetas de review completas -->
+      <div class="reviews-scroll" *ngIf="activeReviewsTab === 'para-ti' && reviews.length > 0">
         <article
           class="review-card"
           *ngFor="let review of reviews; trackBy: trackByReviewId"
@@ -83,10 +115,52 @@
           </div>
         </article>
       </div>
+
+      <!-- Seguidos: feed de comentarios usando CommentsFeedComponent (@Input + @Output) -->
+      <app-comments-feed
+        *ngIf="activeReviewsTab === 'seguidos' && followingReviews.length > 0"
+        [comments]="reviewsAsHomeComments"
+        (commentClick)="openReviewDetail($event)"
+      ></app-comments-feed>
     </section>
 
     <p class="status" *ngIf="!isLoading && reviews.length === 0">
       Todavia no hay reviews para mostrar.
     </p>
   </section>
+
+  <div
+    class="book-drawer-backdrop"
+    *ngIf="selectedBook || bookDrawerVisible"
+    [class.visible]="bookDrawerVisible"
+    (click)="closeBookDrawer()"
+  ></div>
+
+  <aside
+    class="book-drawer"
+    *ngIf="selectedBook || bookDrawerVisible"
+    [class.visible]="bookDrawerVisible"
+  >
+    @if(selectedBook; as book) {
+      <header class="drawer-head">
+        <div class="drawer-cover">
+          <img [src]="book.cover || '/prueba.webp'" [alt]="book.title" loading="lazy" />
+        </div>
+        <div class="drawer-title">
+          <p class="drawer-author">{{ book.author || 'Autor desconocido' }}</p>
+          <h2>{{ book.title }}</h2>
+          <p class="drawer-desc" *ngIf="book.description">{{ book.description }}</p>
+        </div>
+        <button type="button" class="drawer-close" (click)="closeBookDrawer()" aria-label="Cerrar">×</button>
+      </header>
+      <div class="drawer-actions">
+        <button type="button" class="btn-drawer-fav" (click)="addBookToFavorites()">
+          Añadir a favoritos
+        </button>
+        <button type="button" class="btn-drawer-review" (click)="goToCreateReviewForBook()">
+          Hacer review
+        </button>
+      </div>
+    }
+  </aside>
 </main>

@@ -77,6 +77,7 @@ jobs:
               echo 'RewriteCond %{REQUEST_URI} !^/api'
               echo 'RewriteCond %{REQUEST_URI} !^/admin'
               echo 'RewriteCond %{REQUEST_URI} !^/filament'
+              echo 'RewriteCond %{REQUEST_URI} !^/swagger'
               echo 'RewriteCond %{REQUEST_URI} !^/storage'
               echo 'RewriteCond %{REQUEST_FILENAME} !-f'
               echo 'RewriteCond %{REQUEST_FILENAME} !-d'
@@ -88,6 +89,12 @@ jobs:
 
             # ── Corregir puerto proxy en vhost HTTP ───────────────────────
             sudo sed -i "s|:8000/api|:80/api|g" /etc/apache2/sites-available/000-default.conf
+
+            # ── Asegurar ProxyPass /swagger en vhost HTTP ─────────────────
+            if ! sudo grep -q "ProxyPass.*/swagger" /etc/apache2/sites-available/000-default.conf; then
+              BACKEND_IP="${{ vars.BACKEND_PRIVATE_IP }}"
+              sudo sed -i "s|</VirtualHost>|    ProxyPass        /swagger http://${BACKEND_IP}:80/swagger\n    ProxyPassReverse /swagger http://${BACKEND_IP}:80/swagger\n</VirtualHost>|" /etc/apache2/sites-available/000-default.conf
+            fi
 
             # ── HTTPS con certbot ─────────────────────────────────────────
             if [ ! -d "/etc/letsencrypt/live/bookshell.duckdns.org" ]; then
@@ -120,6 +127,12 @@ jobs:
                 sudo sed -i "s|</VirtualHost>|    <Directory /var/www/html>\n        AllowOverride All\n        Require all granted\n    </Directory>\n</VirtualHost>|" "$SSL_VHOST"
               fi
               sudo a2enmod rewrite
+
+              # ── Asegurar ProxyPass /swagger en vhost SSL ─────────────────
+              if ! sudo grep -q "ProxyPass.*/swagger" "$SSL_VHOST"; then
+                BACKEND_IP="${{ vars.BACKEND_PRIVATE_IP }}"
+                sudo sed -i "s|</VirtualHost>|    ProxyPass        /swagger http://${BACKEND_IP}:80/swagger\n    ProxyPassReverse /swagger http://${BACKEND_IP}:80/swagger\n</VirtualHost>|" "$SSL_VHOST"
+              fi
             fi
 
             sudo systemctl reload apache2

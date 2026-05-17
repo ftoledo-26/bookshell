@@ -103,7 +103,7 @@
       </label>
 
       <div class="actions">
-        <button type="submit" class="btn-save" [disabled]="isSaving">{{ isSaving ? 'Guardando...' : 'Guardar review' }}</button>
+        <button type="submit" class="btn-save" [disabled]="isSaving || !selectedBook || rating < 1 || !comentario.trim()">{{ isSaving ? 'Guardando...' : 'Guardar review' }}</button>
         <button type="button" class="btn-cancel" (click)="cancel()">Cancelar</button>
       </div>
     </form>

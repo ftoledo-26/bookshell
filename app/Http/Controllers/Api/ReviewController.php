@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Models\Follow;
 use App\Models\Review;
 use App\Http\Resources\ReviewResource;
 
@@ -15,6 +16,18 @@ class ReviewController extends Controller
     public function index()
     {
         $reviews = Review::with('libro', 'user')->get();
+        return ReviewResource::collection($reviews);
+    }
+
+    public function following(Request $request)
+    {
+        $followedIds = Follow::where('follower_id', $request->user()->id)->pluck('followed_id');
+
+        $reviews = Review::with('libro', 'user')
+            ->whereIn('user_id', $followedIds)
+            ->latest()
+            ->get();
+
         return ReviewResource::collection($reviews);
     }
 

@@ -34,6 +34,7 @@ Route::get('/libros', [LibroController::class, 'index']);
 Route::get('/libros/{id}', [LibroController::class, 'show']);
 Route::get('/libros/buscar/{title}', [LibroController::class, 'searchByTitle']);
 Route::get('/reviews', [ReviewController::class, 'index']);
+Route::get('/reviews/following', [ReviewController::class, 'following'])->middleware('auth:sanctum');
 Route::get('/reviews/{id}', [ReviewController::class, 'show']);
 Route::get('/libros/{libroId}/opiniones', [ReviewController::class, 'opiniones']);
 Route::get('/user_reviews', [User_ReviewController::class, 'index']);

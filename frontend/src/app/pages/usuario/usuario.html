@@ -97,16 +97,16 @@
 
 	<section class="profile-grid" *ngIf="!isLoading && !isEditing">
 		<div class="main-column">
-			<section class="panel" *ngIf="activeTab === 'Profile' || activeTab === 'Books'">
+			<section class="panel" *ngIf="activeTab === 'Perfil' || activeTab === 'Libros'">
 				<header class="panel-head">
 					<h2>Favorite books</h2>
 					<span>Selecciona tus lecturas favoritas.</span>
-					<button type="button" class="btn-edit panel-action" *ngIf="activeTab === 'Books' && profileIsEditable && !bookSearchOpen" (click)="openBookFinder()">
+					<button type="button" class="btn-edit panel-action" *ngIf="activeTab === 'Libros' && profileIsEditable && !bookSearchOpen" (click)="openBookFinder()">
 						Añadir libro
 					</button>
 				</header>
 
-				<section class="book-finder" *ngIf="activeTab === 'Books' && bookSearchOpen && profileIsEditable">
+				<section class="book-finder" *ngIf="activeTab === 'Libros' && bookSearchOpen && profileIsEditable">
 					<div class="finder-toolbar">
 						<input
 							type="text"
@@ -153,12 +153,12 @@
 					</div>
 				</section>
 
-				<p class="empty-state" *ngIf="activeTab === 'Books' && selectedBooks.length === 0 && metrics[0].value === '0' && profileIsEditable">
+				<p class="empty-state" *ngIf="activeTab === 'Libros' && selectedBooks.length === 0 && metrics[0].value === '0' && profileIsEditable">
 					Todavía no tienes libros en tu perfil.
 					<button type="button" class="btn-edit inline-action" (click)="openBookFinder()">Buscar y añadir un libro</button>
 				</p>
 
-				<p class="empty-state read-only-note" *ngIf="activeTab === 'Books' && !profileIsEditable">
+				<p class="empty-state read-only-note" *ngIf="activeTab === 'Libros' && !profileIsEditable">
 					Este perfil pertenece a otro usuario. Puedes consultar sus libros y actividad, pero no añadir contenido.
 				</p>
 
@@ -209,11 +209,11 @@
 				</div>
 			</section>
 
-			<section class="panel" *ngIf="activeTab === 'Profile' || activeTab === 'Reviews'">
+			<section class="panel" *ngIf="activeTab === 'Perfil' || activeTab === 'Comentarios'">
 				<header class="panel-head">
 					<h2>Reviews</h2>
 					<span>Reseñas y actividad reciente.</span>
-					<button type="button" class="btn-edit panel-action" *ngIf="activeTab === 'Reviews' && profileIsEditable" (click)="goToCreateReview()">
+					<button type="button" class="btn-edit panel-action" *ngIf="activeTab === 'Comentarios' && profileIsEditable" (click)="goToCreateReview()">
 						Añadir review
 					</button>
 				</header>
@@ -262,7 +262,7 @@
 			<section class="panel recent-panel">
 				<header class="panel-head">
 					<h2>Últimas lecturas</h2>
-					<button type="button" class="btn-edit panel-action" (click)="setActiveTab('Books')">Ver todos</button>
+					<button type="button" class="btn-edit panel-action" (click)="setActiveTab('Libros')">Ver todos</button>
 				</header>
 
 				<p class="empty-state" *ngIf="recentBooks.length === 0">

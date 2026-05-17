@@ -210,30 +210,9 @@ export class ReviewCreatePage implements OnInit {
     };
 
     this.comentarioService.createComentario(payload).subscribe({
-      next: (createdReview) => {
-        const createdId = Number(createdReview?.id ?? 0);
-
-        // Some backend store implementations persist the row but ignore rating/comment on create.
-        // Force a follow-up update on the same record to guarantee final values.
-        if (Number.isFinite(createdId) && createdId > 0) {
-          this.comentarioService.updateComentario(createdId, payload).subscribe({
-            next: () => {
-              this.successMessage = 'Review creada correctamente.';
-              this.isSaving = false;
-              this.router.navigate(['/usuario'], { queryParams: { refresh: Date.now() } });
-            },
-            error: () => {
-              this.errorMessage = 'La review se creó, pero no se pudieron actualizar puntuación/comentario.';
-              this.isSaving = false;
-              this.cdr.detectChanges();
-            }
-          });
-          return;
-        }
-
+      next: () => {
         this.successMessage = 'Review creada correctamente.';
         this.isSaving = false;
-        // Force reload of usuario profile to show new comment immediately
         this.router.navigate(['/usuario'], { queryParams: { refresh: Date.now() } });
       },
       error: () => {

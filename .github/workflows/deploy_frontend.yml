@@ -79,13 +79,13 @@ jobs:
             fi
 
             # ── Build Angular ─────────────────────────────────────────────
-            cd /var/www/front/frontend
+            cd /var/www/front
             sudo npm install
             sudo npm run build -- --configuration production
 
             # ── Copiar build al DocumentRoot ──────────────────────────────
             sudo rm -rf /var/www/html/*
-            DIST_DIR=$(sudo find /var/www/front/frontend/dist -name "index.html" -exec dirname {} \; | head -1)
+            DIST_DIR=$(sudo find /var/www/front/dist -name "index.html" -exec dirname {} \; | head -1)
             sudo cp -r "$DIST_DIR"/* /var/www/html/
 
             # ── .htaccess para Angular routing ────────────────────────────

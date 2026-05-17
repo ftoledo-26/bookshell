@@ -11,7 +11,7 @@ import { BookService } from '../../services/Book.service';
 import { ComentarioService } from '../../services/Comentario.service';
 import { LoginService } from '../../services/Login.service';
 import { UsuarioService } from '../../services/Usuario.service';
-import { FollowService, FollowingUser } from '../../services/Follow.service';
+import { FollowService, FollowStatus, FollowingUser } from '../../services/Follow.service';
 import { environment } from '../../environments/environments';
 
 type ProfileMetric = {
@@ -624,16 +624,35 @@ export class UsuarioPage implements OnInit {
 	toggleFollow(): void {
 		if (this.isTogglingFollow || !this.viewedUserId) return;
 		this.isTogglingFollow = true;
-		const action$ = this.isFollowing
+
+		// Optimistic update — UI responds immediately
+		const wasFollowing = this.isFollowing;
+		this.isFollowing = !wasFollowing;
+		this.followersCount += wasFollowing ? -1 : 1;
+		this.metrics[2] = { value: String(this.followersCount), label: 'Seguidores' };
+		this.cdr.detectChanges();
+
+		const action$ = wasFollowing
 			? this.followService.unfollow(this.viewedUserId)
 			: this.followService.follow(this.viewedUserId);
 
-		action$.subscribe((status) => {
-			this.followersCount = status.followers;
-			this.isFollowing = status.following;
-			this.metrics[2] = { value: String(status.followers), label: 'Seguidores' };
-			this.isTogglingFollow = false;
-			this.cdr.detectChanges();
+		action$.subscribe({
+			next: (status: FollowStatus) => {
+				// Confirm with server values
+				this.followersCount = status.followers;
+				this.isFollowing = status.following;
+				this.metrics[2] = { value: String(status.followers), label: 'Seguidores' };
+				this.isTogglingFollow = false;
+				this.cdr.detectChanges();
+			},
+			error: () => {
+				// Rollback on failure
+				this.isFollowing = wasFollowing;
+				this.followersCount += wasFollowing ? 1 : -1;
+				this.metrics[2] = { value: String(this.followersCount), label: 'Seguidores' };
+				this.isTogglingFollow = false;
+				this.cdr.detectChanges();
+			}
 		});
 	}
 

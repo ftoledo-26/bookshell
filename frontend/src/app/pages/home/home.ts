@@ -13,6 +13,7 @@ import { UsuarioService } from '../../services/Usuario.service';
 import { catchError, forkJoin, of, timeout } from 'rxjs';
 import { Router } from '@angular/router';
 import { getRecommendedBooks } from '../../utils/algoBook';
+import { CommentsFeedComponent, HomeComment } from '../../components/comments-feed/comments-feed';
 
 type ReviewsTab = 'para-ti' | 'seguidos';
 
@@ -45,7 +46,7 @@ type FeaturedReview = {
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, CommentsFeedComponent],
   templateUrl: './home.html',
   styleUrls: ['./home.css'],
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -98,6 +99,17 @@ export class Home implements OnInit {
 
   get displayedReviews(): FeaturedReview[] {
     return this.activeReviewsTab === 'seguidos' ? this.followingReviews : this.reviews;
+  }
+
+  get reviewsAsHomeComments(): HomeComment[] {
+    return this.displayedReviews.map(r => ({
+      id: r.id,
+      contenido: r.content,
+      likes: r.likes,
+      username: r.username,
+      movieTitle: r.titulo,
+      createdAt: r.year
+    }));
   }
 
   private loadFollowingReviews(): void {

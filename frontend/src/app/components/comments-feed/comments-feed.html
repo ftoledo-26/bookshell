@@ -1,7 +1,14 @@
 <section class="comments-feed">
   <p class="empty" *ngIf="comments.length === 0">Todavia no hay comentarios.</p>
 
-  <article class="comment-card" *ngFor="let comment of comments; trackBy: trackByCommentId">
+  <article
+    class="comment-card"
+    *ngFor="let comment of comments; trackBy: trackByCommentId"
+    role="button"
+    tabindex="0"
+    (click)="commentClick.emit(comment.id)"
+    (keydown.enter)="commentClick.emit(comment.id)"
+  >
     <header class="comment-head">
       <div class="author">
         <img [src]="comment.avatarUrl || '/avatar-default.webp'" [alt]="comment.username" />

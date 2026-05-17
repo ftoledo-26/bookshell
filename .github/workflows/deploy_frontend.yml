@@ -51,6 +51,7 @@ jobs:
           command_timeout: 30m
           script: |
             set -e
+            BACKEND_IP="${{ vars.BACKEND_PRIVATE_IP }}"
 
             # ── Instalar Node.js / git / Apache si no estan (instancia nueva) ─
             NODE_VER=$(node -v 2>/dev/null | cut -dv -f2 | cut -d. -f1 || echo "0")
@@ -65,6 +66,9 @@ jobs:
               sudo systemctl enable apache2
             fi
 
+            # ── Limpiar node_modules anteriores para liberar espacio ─────
+            sudo rm -rf /var/www/front/node_modules /var/www/front/frontend/node_modules
+
             # ── Clonar o actualizar repo ──────────────────────────────────
             if [ ! -d "/var/www/front/.git" ]; then
               echo "==> Clonando repositorio..."
@@ -77,9 +81,9 @@ jobs:
               sudo git reset --hard origin/Front
             fi
 
-            # ── Build Angular (el proyecto esta en frontend/) ─────────────
+            # ── Build Angular ─────────────────────────────────────────────
             cd /var/www/front/frontend
-            sudo npm ci
+            sudo npm install
             sudo npm run build -- --configuration production
 
             # ── Copiar build al DocumentRoot ──────────────────────────────
@@ -87,7 +91,7 @@ jobs:
             DIST_DIR=$(sudo find /var/www/front/frontend/dist -name "index.html" -exec dirname {} \; | head -1)
             sudo cp -r "$DIST_DIR"/* /var/www/html/
 
-            # ── .htaccess para Angular routing (evita 404 al recargar) ────
+            # ── .htaccess para Angular routing ────────────────────────────
             {
               echo 'Options -MultiViews'
               echo 'RewriteEngine On'
@@ -96,27 +100,27 @@ jobs:
               echo 'RewriteCond %{REQUEST_URI} !^/api'
               echo 'RewriteCond %{REQUEST_URI} !^/admin'
               echo 'RewriteCond %{REQUEST_URI} !^/filament'
+              echo 'RewriteCond %{REQUEST_URI} !^/js/filament'
+              echo 'RewriteCond %{REQUEST_URI} !^/css/filament'
+              echo 'RewriteCond %{REQUEST_URI} !^/livewire'
               echo 'RewriteCond %{REQUEST_URI} !^/swagger'
               echo 'RewriteCond %{REQUEST_URI} !^/storage'
               echo 'RewriteCond %{REQUEST_URI} !^/fotos'
+              echo 'RewriteCond %{REQUEST_URI} !^/libros'
               echo 'RewriteCond %{REQUEST_FILENAME} !-f'
               echo 'RewriteCond %{REQUEST_FILENAME} !-d'
               echo 'RewriteRule . /index.html [L]'
             } | sudo tee /var/www/html/.htaccess > /dev/null
 
-            # ── Asegurar modulos proxy activos ────────────────────────────
+            # ── Asegurar modulos Apache ───────────────────────────────────
             sudo a2enmod proxy proxy_http rewrite
 
-            # ── Corregir puerto proxy en vhost HTTP ───────────────────────
-            sudo sed -i "s|:8000/api|:80/api|g" /etc/apache2/sites-available/000-default.conf
-            # Asegurar AllowOverride All en vhost HTTP
+            # ── Vhost HTTP: AllowOverride All ─────────────────────────────
             sudo sed -i "s|AllowOverride None|AllowOverride All|g" /etc/apache2/sites-available/000-default.conf
 
-            # ── Asegurar ProxyPass /swagger en vhost HTTP ─────────────────
-            if ! sudo grep -q "ProxyPass.*/swagger" /etc/apache2/sites-available/000-default.conf; then
-              BACKEND_IP="${{ vars.BACKEND_PRIVATE_IP }}"
-              sudo sed -i "s|</VirtualHost>|    ProxyPass        /swagger http://${BACKEND_IP}:80/swagger\n    ProxyPassReverse /swagger http://${BACKEND_IP}:80/swagger\n</VirtualHost>|" /etc/apache2/sites-available/000-default.conf
-            fi
+            # ── Eliminar regla ModSecurity conflictiva si existe ─────────
+            # id:9002001 colisiona con REQUEST-903.9002-WORDPRESS-EXCLUSION-RULES.conf
+            sudo rm -f /etc/modsecurity/99-rest-methods.conf
 
             # ── HTTPS con certbot ─────────────────────────────────────────
             if [ ! -d "/etc/letsencrypt/live/bookshell.duckdns.org" ]; then
@@ -133,61 +137,64 @@ jobs:
               sudo certbot renew --quiet
             fi
 
-            # ── Asegurar ProxyPass y AllowOverride en vhost SSL ───────────
+            # ── Reescribir vhost SSL completo (todos los ProxyPass de una vez) ─
             SSL_VHOST="/etc/apache2/sites-available/000-default-le-ssl.conf"
             if [ -f "$SSL_VHOST" ]; then
-              sudo sed -i "s|:8000/api|:80/api|g" "$SSL_VHOST"
-              # AllowOverride: reemplazar cualquier valor, o añadir si no existe
-              if sudo grep -q "AllowOverride" "$SSL_VHOST"; then
-                sudo sed -i "s|AllowOverride.*|AllowOverride All|g" "$SSL_VHOST"
-              else
-                sudo sed -i "s|</Directory>|    AllowOverride All\n</Directory>|" "$SSL_VHOST"
-              fi
-              BACKEND_IP="${{ vars.BACKEND_PRIVATE_IP }}"
-              if ! sudo grep -q "ProxyPass /api" "$SSL_VHOST"; then
-                echo "==> Aniadiendo ProxyPass /api al vhost SSL..."
-                sudo sed -i "s|</VirtualHost>|    ProxyPreserveHost On\n    ProxyPass        /api http://${BACKEND_IP}:80/api\n    ProxyPassReverse /api http://${BACKEND_IP}:80/api\n</VirtualHost>|" "$SSL_VHOST"
-              fi
-              if ! sudo grep -q "ProxyPass /filament" "$SSL_VHOST"; then
-                echo "==> Aniadiendo ProxyPass /filament al vhost SSL..."
-                sudo sed -i "s|</VirtualHost>|    ProxyPass        /filament http://${BACKEND_IP}:80/filament\n    ProxyPassReverse /filament http://${BACKEND_IP}:80/filament\n</VirtualHost>|" "$SSL_VHOST"
-              fi
-              if ! sudo grep -q "ProxyPass /storage" "$SSL_VHOST"; then
-                echo "==> Aniadiendo ProxyPass /storage al vhost SSL..."
-                sudo sed -i "s|</VirtualHost>|    ProxyPass        /storage http://${BACKEND_IP}:80/storage\n    ProxyPassReverse /storage http://${BACKEND_IP}:80/storage\n</VirtualHost>|" "$SSL_VHOST"
-              fi
-              if ! sudo grep -q "ProxyPass /js/filament" "$SSL_VHOST"; then
-                echo "==> Aniadiendo ProxyPass /js/filament al vhost SSL..."
-                sudo sed -i "s|</VirtualHost>|    ProxyPass        /js/filament http://${BACKEND_IP}:80/js/filament\n    ProxyPassReverse /js/filament http://${BACKEND_IP}:80/js/filament\n</VirtualHost>|" "$SSL_VHOST"
-              fi
-              if ! sudo grep -q "ProxyPass /css/filament" "$SSL_VHOST"; then
-                echo "==> Aniadiendo ProxyPass /css/filament al vhost SSL..."
-                sudo sed -i "s|</VirtualHost>|    ProxyPass        /css/filament http://${BACKEND_IP}:80/css/filament\n    ProxyPassReverse /css/filament http://${BACKEND_IP}:80/css/filament\n</VirtualHost>|" "$SSL_VHOST"
-              fi
-              if ! sudo grep -q "ProxyPass /livewire" "$SSL_VHOST"; then
-                echo "==> Aniadiendo ProxyPass /livewire al vhost SSL..."
-                sudo sed -i "s|</VirtualHost>|    ProxyPass        /livewire http://${BACKEND_IP}:80/livewire\n    ProxyPassReverse /livewire http://${BACKEND_IP}:80/livewire\n</VirtualHost>|" "$SSL_VHOST"
-              fi
-              if ! sudo grep -q "ProxyPass /fotos" "$SSL_VHOST"; then
-                echo "==> Aniadiendo ProxyPass /fotos al vhost SSL..."
-                sudo sed -i "s|</VirtualHost>|    ProxyPass        /fotos http://${BACKEND_IP}:80/fotos\n    ProxyPassReverse /fotos http://${BACKEND_IP}:80/fotos\n</VirtualHost>|" "$SSL_VHOST"
-              fi
-              if ! sudo grep -q "ProxyPass /libros" "$SSL_VHOST"; then
-                echo "==> Aniadiendo ProxyPass /libros al vhost SSL..."
-                sudo sed -i "s|</VirtualHost>|    ProxyPass        /libros http://${BACKEND_IP}:80/libros\n    ProxyPassReverse /libros http://${BACKEND_IP}:80/libros\n</VirtualHost>|" "$SSL_VHOST"
-              fi
-              if ! sudo grep -q "ProxyPass /swagger" "$SSL_VHOST"; then
-                echo "==> Aniadiendo ProxyPass /swagger al vhost SSL..."
-                sudo sed -i "s|</VirtualHost>|    ProxyPass        /swagger http://${BACKEND_IP}:80/swagger\n    ProxyPassReverse /swagger http://${BACKEND_IP}:80/swagger\n</VirtualHost>|" "$SSL_VHOST"
-              fi
+              echo "==> Reescribiendo vhost SSL con todos los ProxyPass..."
+              sudo tee "$SSL_VHOST" > /dev/null << APACHEEOF
+            <IfModule mod_ssl.c>
+            <VirtualHost *:443>
+                ServerAdmin webmaster@localhost
+                DocumentRoot /var/www/html
+
+                <Directory /var/www/html>
+                    AllowOverride All
+                    Require all granted
+                </Directory>
+
+                ProxyPreserveHost On
+                ProxyPass        /api          http://${BACKEND_IP}:80/api
+                ProxyPassReverse /api          http://${BACKEND_IP}:80/api
+                ProxyPass        /filament     http://${BACKEND_IP}:80/filament
+                ProxyPassReverse /filament     http://${BACKEND_IP}:80/filament
+                ProxyPass        /js/filament  http://${BACKEND_IP}:80/js/filament
+                ProxyPassReverse /js/filament  http://${BACKEND_IP}:80/js/filament
+                ProxyPass        /css/filament http://${BACKEND_IP}:80/css/filament
+                ProxyPassReverse /css/filament http://${BACKEND_IP}:80/css/filament
+                ProxyPass        /livewire     http://${BACKEND_IP}:80/livewire
+                ProxyPassReverse /livewire     http://${BACKEND_IP}:80/livewire
+                ProxyPass        /storage      http://${BACKEND_IP}:80/storage
+                ProxyPassReverse /storage      http://${BACKEND_IP}:80/storage
+                ProxyPass        /fotos        http://${BACKEND_IP}:80/fotos
+                ProxyPassReverse /fotos        http://${BACKEND_IP}:80/fotos
+                ProxyPass        /libros       http://${BACKEND_IP}:80/libros
+                ProxyPassReverse /libros       http://${BACKEND_IP}:80/libros
+                ProxyPass        /swagger      http://${BACKEND_IP}:80/swagger
+                ProxyPassReverse /swagger      http://${BACKEND_IP}:80/swagger
+
+                SSLCertificateFile    /etc/letsencrypt/live/bookshell.duckdns.org/fullchain.pem
+                SSLCertificateKeyFile /etc/letsencrypt/live/bookshell.duckdns.org/privkey.pem
+                Include /etc/letsencrypt/options-ssl-apache.conf
+            </VirtualHost>
+            </IfModule>
+            APACHEEOF
+              sudo a2ensite 000-default-le-ssl.conf 2>/dev/null || true
             fi
 
             # ── ModSecurity: permitir metodos REST (PUT, DELETE, PATCH) ─────
             if sudo a2query -m security2 2>/dev/null | grep -q enabled; then
               echo "==> Configurando ModSecurity para permitir metodos REST..."
+<<<<<<< HEAD
+              printf "SecAction \"id:1000001,phase:1,nolog,pass,t:none,setvar:'tx.allowed_methods=GET HEAD POST OPTIONS PUT DELETE PATCH'\"\n" \
+                | sudo tee /etc/modsecurity/99-rest-methods.conf > /dev/null
+            fi
+
+            sudo apache2ctl configtest
+=======
               printf '%s\n' 'SecAction "id:9002001,phase:1,nolog,pass,t:none,setvar:'"'"'tx.allowed_methods=GET HEAD POST OPTIONS PUT DELETE PATCH'"'"'"' \
                 | sudo tee /etc/modsecurity/99-rest-methods.conf > /dev/null
             fi
 
+>>>>>>> origin/main
             sudo systemctl reload apache2
             echo "Frontend desplegado — $(date)"

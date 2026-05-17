@@ -101,7 +101,7 @@ def ensure_writable(img_dir: Path) -> bool:
 
 def download_cover(url: str, dest: Path) -> bool:
     try:
-        r = requests.get(url, timeout=15)
+        r = requests.get(url, timeout=(5, 15))
         if r.status_code != 200 or len(r.content) < 600:
             return False
         if PIL_AVAILABLE:

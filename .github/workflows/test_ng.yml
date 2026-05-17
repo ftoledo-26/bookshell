@@ -14,5 +14,5 @@ jobs:
           node-version: '20'
       - run: npm ci
         working-directory: frontend
-      - run: npx ng test --watch=false
+      - run: npx ng test --watch=false --browsers=ChromeHeadless
         working-directory: frontend

@@ -122,7 +122,7 @@ def fetch_ol(query: str, limit: int = 100, offset: int = 0) -> list:
         "language": "spa",
         "limit":    min(limit, 100),
         "offset":   offset,
-        "fields":   "title,author_name,publisher,first_publish_year,cover_i",
+        "fields":   "title,author_name,publisher,first_publish_year,cover_i,first_sentence",
     }
     try:
         r = requests.get(OL_SEARCH, params=params, timeout=25)
@@ -210,6 +210,10 @@ def main():
                     autor    = ", ".join((doc.get("author_name") or [])[:2]) or "Desconocido"
                     anio     = str(doc.get("first_publish_year") or "")
                     cover_id = doc.get("cover_i")
+                    fs       = doc.get("first_sentence") or ""
+                    if isinstance(fs, dict):
+                        fs = fs.get("value", "")
+                    descripcion = str(fs).strip()[:1000]
 
                     # ── Portada ───────────────────────────────────────────────
                     foto_path = None
@@ -236,12 +240,12 @@ def main():
                         if has_anio:
                             cur.execute(
                                 "INSERT INTO libros (titulo, autor, anio_publicacion, genero, descripcion, foto, created_at, updated_at) VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())",
-                                (titulo, autor, anio, genero, "", foto_path),
+                                (titulo, autor, anio, genero, descripcion, foto_path),
                             )
                         else:
                             cur.execute(
                                 "INSERT INTO libros (titulo, autor, genero, descripcion, foto, created_at, updated_at) VALUES (%s, %s, %s, %s, %s, NOW(), NOW())",
-                                (titulo, autor, genero, "", foto_path),
+                                (titulo, autor, genero, descripcion, foto_path),
                             )
                         conn.commit()
                         existing.add(titulo.lower())

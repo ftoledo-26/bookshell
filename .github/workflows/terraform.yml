@@ -6,6 +6,9 @@ name: Terraform CI/CD
 #   AWS_SECRET_ACCESS_KEY  — Clave secreta AWS  (AWS Academy: "aws_secret_access_key")
 #   AWS_SESSION_TOKEN      — Token de sesion    (AWS Academy: "aws_session_token", obligatorio)
 #   TF_VAR_DB_PASSWORD     — Contrasena de la base de datos RDS
+#
+# Variables de repositorio (se actualizan automaticamente tras cada apply):
+#   BASTION_EIP, FRONTEND_EIP, FRONTEND_PRIVATE_IP, BACKEND_PRIVATE_IP, RDS_ENDPOINT
 
 on:
   workflow_dispatch:
@@ -20,6 +23,7 @@ jobs:
 
     env:
       TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
+      GH_TOKEN: ${{ secrets.GH_PAT }}
 
     steps:
       - name: Checkout codigo
@@ -50,6 +54,15 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -auto-approve tfplan
 
+      - name: Actualizar variables de infraestructura en GitHub
+        run: |
+          gh variable set BASTION_EIP         --body "$(terraform output -raw bastion_eip)"
+          gh variable set FRONTEND_EIP        --body "$(terraform output -raw frontend_eip)"
+          gh variable set FRONTEND_PRIVATE_IP --body "$(terraform output -raw frontend_private_ip)"
+          gh variable set BACKEND_PRIVATE_IP  --body "$(terraform output -raw backend_private_ip)"
+          gh variable set RDS_ENDPOINT        --body "$(terraform output -raw rds_endpoint)"
+          echo "Variables de infraestructura actualizadas automaticamente."
+
       - name: Mostrar outputs de infraestructura
         run: |
           echo "## Infraestructura desplegada" >> $GITHUB_STEP_SUMMARY
@@ -63,4 +76,4 @@ jobs:
           echo "| RDS Endpoint | $(terraform output -raw rds_endpoint) |" >> $GITHUB_STEP_SUMMARY
           echo "| ALB DNS | $(terraform output -raw alb_dns) |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Actualiza los secrets BASTION_EIP, BACKEND_PRIVATE_IP y FRONTEND_PRIVATE_IP con estos valores." >> $GITHUB_STEP_SUMMARY
+          echo "Variables BASTION_EIP, FRONTEND_EIP, FRONTEND_PRIVATE_IP, BACKEND_PRIVATE_IP y RDS_ENDPOINT actualizadas automaticamente." >> $GITHUB_STEP_SUMMARY

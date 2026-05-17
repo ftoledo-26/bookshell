@@ -1,0 +1,88 @@
+<?php
+
+namespace App\Filament\Resources;
+
+use App\Filament\Resources\LibroResource\Pages;
+use App\Models\Libro;
+use Filament\Forms;
+use Filament\Forms\Form;
+use Filament\Resources\Resource;
+use Filament\Tables;
+use Filament\Tables\Table;
+
+class LibroResource extends Resource
+{
+    protected static ?string $model = Libro::class;
+
+    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+
+    public static function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Forms\Components\TextInput::make('titulo')
+                    ->required()
+                    ->maxLength(255),
+                Forms\Components\TextInput::make('autor')
+                    ->required()
+                    ->maxLength(255),
+                Forms\Components\TextInput::make('genero')
+                    ->required()
+                    ->maxLength(255),
+                Forms\Components\Textarea::make('descripcion')
+                    ->required()
+                    ->columnSpanFull(),
+                Forms\Components\FileUpload::make('portada')
+                    ->image()
+                    ->default('default.png'),
+            ]);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->columns([
+                Tables\Columns\TextColumn::make('titulo')
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('autor')
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('genero')
+                    ->searchable(),
+                Tables\Columns\ImageColumn::make('portada'),
+                Tables\Columns\TextColumn::make('created_at')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('updated_at')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+            ])
+            ->filters([
+                //
+            ])
+            ->actions([
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\DeleteBulkAction::make(),
+                ]),
+            ]);
+    }
+
+    public static function getRelations(): array
+    {
+        return [];
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => Pages\ListLibros::route('/'),
+            'create' => Pages\CreateLibro::route('/create'),
+            'edit' => Pages\EditLibro::route('/{record}/edit'),
+        ];
+    }
+}

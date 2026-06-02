@@ -117,5 +117,6 @@ cat > /etc/modsecurity/99-rest-methods.conf << 'MODSEC'
 SecAction "id:9002001,phase:1,nolog,pass,t:none,setvar:'tx.allowed_methods=GET HEAD POST OPTIONS PUT DELETE PATCH'"
 MODSEC
 a2enmod security2
+apache2ctl configtest
 systemctl reload apache2
 echo "[frontend.sh] Instalacion completada. Dominio: ${domain}, Backend: ${backend_ip}"

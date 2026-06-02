@@ -152,39 +152,39 @@ jobs:
                 sudo sed -i "s|</Directory>|    AllowOverride All\n</Directory>|" "$SSL_VHOST"
               fi
               BACKEND_IP="${{ vars.BACKEND_PRIVATE_IP }}"
-              if ! sudo grep -q "ProxyPass /api" "$SSL_VHOST"; then
+              if ! sudo grep -qE "ProxyPass[[:space:]]+/api[[:space:]]+http://${BACKEND_IP}:80/api" "$SSL_VHOST"; then
                 echo "==> Aniadiendo ProxyPass /api al vhost SSL..."
                 sudo sed -i "s|</VirtualHost>|    ProxyPreserveHost On\n    ProxyPass        /api http://${BACKEND_IP}:80/api\n    ProxyPassReverse /api http://${BACKEND_IP}:80/api\n</VirtualHost>|" "$SSL_VHOST"
               fi
-              if ! sudo grep -q "ProxyPass /filament" "$SSL_VHOST"; then
+              if ! sudo grep -qE "ProxyPass[[:space:]]+/filament[[:space:]]+http://${BACKEND_IP}:80/filament" "$SSL_VHOST"; then
                 echo "==> Aniadiendo ProxyPass /filament al vhost SSL..."
                 sudo sed -i "s|</VirtualHost>|    ProxyPass        /filament http://${BACKEND_IP}:80/filament\n    ProxyPassReverse /filament http://${BACKEND_IP}:80/filament\n</VirtualHost>|" "$SSL_VHOST"
               fi
-              if ! sudo grep -q "ProxyPass /storage" "$SSL_VHOST"; then
+              if ! sudo grep -qE "ProxyPass[[:space:]]+/storage[[:space:]]+http://${BACKEND_IP}:80/storage" "$SSL_VHOST"; then
                 echo "==> Aniadiendo ProxyPass /storage al vhost SSL..."
                 sudo sed -i "s|</VirtualHost>|    ProxyPass        /storage http://${BACKEND_IP}:80/storage\n    ProxyPassReverse /storage http://${BACKEND_IP}:80/storage\n</VirtualHost>|" "$SSL_VHOST"
               fi
-              if ! sudo grep -q "ProxyPass /js/filament" "$SSL_VHOST"; then
+              if ! sudo grep -qE "ProxyPass[[:space:]]+/js/filament[[:space:]]+http://${BACKEND_IP}:80/js/filament" "$SSL_VHOST"; then
                 echo "==> Aniadiendo ProxyPass /js/filament al vhost SSL..."
                 sudo sed -i "s|</VirtualHost>|    ProxyPass        /js/filament http://${BACKEND_IP}:80/js/filament\n    ProxyPassReverse /js/filament http://${BACKEND_IP}:80/js/filament\n</VirtualHost>|" "$SSL_VHOST"
               fi
-              if ! sudo grep -q "ProxyPass /css/filament" "$SSL_VHOST"; then
+              if ! sudo grep -qE "ProxyPass[[:space:]]+/css/filament[[:space:]]+http://${BACKEND_IP}:80/css/filament" "$SSL_VHOST"; then
                 echo "==> Aniadiendo ProxyPass /css/filament al vhost SSL..."
                 sudo sed -i "s|</VirtualHost>|    ProxyPass        /css/filament http://${BACKEND_IP}:80/css/filament\n    ProxyPassReverse /css/filament http://${BACKEND_IP}:80/css/filament\n</VirtualHost>|" "$SSL_VHOST"
               fi
-              if ! sudo grep -q "ProxyPass /livewire" "$SSL_VHOST"; then
+              if ! sudo grep -qE "ProxyPass[[:space:]]+/livewire[[:space:]]+http://${BACKEND_IP}:80/livewire" "$SSL_VHOST"; then
                 echo "==> Aniadiendo ProxyPass /livewire al vhost SSL..."
                 sudo sed -i "s|</VirtualHost>|    ProxyPass        /livewire http://${BACKEND_IP}:80/livewire\n    ProxyPassReverse /livewire http://${BACKEND_IP}:80/livewire\n</VirtualHost>|" "$SSL_VHOST"
               fi
-              if ! sudo grep -q "ProxyPass /fotos" "$SSL_VHOST"; then
+              if ! sudo grep -qE "ProxyPass[[:space:]]+/fotos[[:space:]]+http://${BACKEND_IP}:80/fotos" "$SSL_VHOST"; then
                 echo "==> Aniadiendo ProxyPass /fotos al vhost SSL..."
                 sudo sed -i "s|</VirtualHost>|    ProxyPass        /fotos http://${BACKEND_IP}:80/fotos\n    ProxyPassReverse /fotos http://${BACKEND_IP}:80/fotos\n</VirtualHost>|" "$SSL_VHOST"
               fi
-              if ! sudo grep -q "ProxyPass /libros" "$SSL_VHOST"; then
+              if ! sudo grep -qE "ProxyPass[[:space:]]+/libros[[:space:]]+http://${BACKEND_IP}:80/libros" "$SSL_VHOST"; then
                 echo "==> Aniadiendo ProxyPass /libros al vhost SSL..."
                 sudo sed -i "s|</VirtualHost>|    ProxyPass        /libros http://${BACKEND_IP}:80/libros\n    ProxyPassReverse /libros http://${BACKEND_IP}:80/libros\n</VirtualHost>|" "$SSL_VHOST"
               fi
-              if ! sudo grep -q "ProxyPass /swagger" "$SSL_VHOST"; then
+              if ! sudo grep -qE "ProxyPass[[:space:]]+/swagger[[:space:]]+http://${BACKEND_IP}:80/swagger" "$SSL_VHOST"; then
                 echo "==> Aniadiendo ProxyPass /swagger al vhost SSL..."
                 sudo sed -i "s|</VirtualHost>|    ProxyPass        /swagger http://${BACKEND_IP}:80/swagger\n    ProxyPassReverse /swagger http://${BACKEND_IP}:80/swagger\n</VirtualHost>|" "$SSL_VHOST"
               fi
@@ -197,5 +197,6 @@ jobs:
                 | sudo tee /etc/modsecurity/99-rest-methods.conf > /dev/null
             fi
 
+            sudo apache2ctl configtest
             sudo systemctl reload apache2
             echo "Frontend desplegado — $(date)"

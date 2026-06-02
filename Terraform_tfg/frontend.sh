@@ -99,6 +99,9 @@ systemctl enable apache2
 #     -m admin@${domain} --redirect
 # ---------------------------------------------------------------
 
+# Limpiar la regla ModSecurity temporal antes de certbot
+rm -f /etc/modsecurity/99-rest-methods.conf
+
 # HTTPS con Let's Encrypt (requiere que DuckDNS ya apunte al frontend_eip)
 certbot --apache -d ${domain} \
   --non-interactive --agree-tos \

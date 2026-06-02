@@ -16,6 +16,7 @@ on:
       - 'composer.json'
       - 'routes/**'
       - 'app/**'
+      - 'database/**'
       - '.apache/**'
       - 'scripts/**'
       - '.github/workflows/deploy_backend.yml'

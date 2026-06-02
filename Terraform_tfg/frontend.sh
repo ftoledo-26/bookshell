@@ -114,7 +114,7 @@ fi
 sed -i "s|SecRuleEngine DetectionOnly|SecRuleEngine On|" /etc/modsecurity/modsecurity.conf
 # Permitir metodos REST: PUT, DELETE, PATCH (necesarios para la API Laravel)
 cat > /etc/modsecurity/99-rest-methods.conf << 'MODSEC'
-SecAction "id:9002001,phase:1,nolog,pass,t:none,setvar:'tx.allowed_methods=GET HEAD POST OPTIONS PUT DELETE PATCH'"
+SecAction "id:1000001,phase:1,nolog,pass,t:none,setvar:'tx.allowed_methods=GET HEAD POST OPTIONS PUT DELETE PATCH'"
 MODSEC
 a2enmod security2
 apache2ctl configtest

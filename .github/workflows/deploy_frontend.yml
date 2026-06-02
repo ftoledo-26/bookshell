@@ -120,17 +120,25 @@ jobs:
 
             # ── HTTPS con certbot ─────────────────────────────────────────
             if [ ! -d "/etc/letsencrypt/live/bookshell.duckdns.org" ]; then
-              echo "==> Solicitando certificado HTTPS..."
-              sudo certbot --apache \
-                -d bookshell.duckdns.org \
-                --non-interactive \
-                --agree-tos \
-                -m ${{ secrets.CERTBOT_EMAIL }} \
-                --redirect
-              echo "HTTPS activado"
+              RESOLVED_IP=$(getent ahostsv4 bookshell.duckdns.org | awk 'NR==1 {print $1}')
+              if [ "$RESOLVED_IP" = "${{ vars.FRONTEND_EIP }}" ]; then
+                echo "==> Solicitando certificado HTTPS..."
+                if sudo certbot --apache \
+                  -d bookshell.duckdns.org \
+                  --non-interactive \
+                  --agree-tos \
+                  -m ${{ secrets.CERTBOT_EMAIL }} \
+                  --redirect; then
+                  echo "HTTPS activado"
+                else
+                  echo "::warning::Certbot fallo aunque el DNS ya resuelve a la EIP del frontend"
+                fi
+              else
+                echo "::warning::DuckDNS aun no resuelve a la EIP del frontend; se omite certbot por ahora"
+              fi
             else
               echo "==> Renovando certificado si es necesario..."
-              sudo certbot renew --quiet
+              sudo certbot renew --quiet || echo "::warning::No se pudo renovar el certificado HTTPS"
             fi
 
             # ── Asegurar ProxyPass y AllowOverride en vhost SSL ───────────
